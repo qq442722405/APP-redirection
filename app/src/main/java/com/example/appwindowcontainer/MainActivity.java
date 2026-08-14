@@ -84,6 +84,28 @@ public class MainActivity extends AppCompatActivity {
         return e;
     }
 
+    EditText textField(String label,String value){
+        EditText e=new EditText(this);
+        e.setHint(label);
+        e.setText(value);
+        e.setTextColor(Color.WHITE);
+        e.setHintTextColor(Color.GRAY);
+        e.setSingleLine(true);
+        e.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
+        return e;
+    }
+
+    LinearLayout labeledField(String label, EditText input){
+        LinearLayout row=new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        TextView l=text(label,14);
+        l.setGravity(Gravity.CENTER_VERTICAL);
+        row.addView(l,new LinearLayout.LayoutParams(dp(105),dp(54)));
+        row.addView(input,new LinearLayout.LayoutParams(0,dp(54),1));
+        return row;
+    }
+
     int number(EditText e,int fallback){
         try{return Integer.parseInt(e.getText().toString().trim());}
         catch(Exception ex){return fallback;}
@@ -176,18 +198,7 @@ public class MainActivity extends AppCompatActivity {
         root.setBackgroundColor(Color.BLACK);
         root.setPadding(dp(12),dp(topBlank),dp(12),dp(bottomBlank));
 
-        // 顶部
-        LinearLayout header=new LinearLayout(this);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-
-        TextView title=text("APP 窗口容器",20);
-        title.setTypeface(null,1);
-
-        header.addView(
-                title,
-                new LinearLayout.LayoutParams(0,dp(50),1)
-        );
-
+        // 顶部只保留车机真实分辨率信息，不再显示“APP 窗口容器”标题。
         android.view.Display display=getWindowManager().getDefaultDisplay();
         android.graphics.Point realSize=new android.graphics.Point();
         display.getRealSize(realSize);
@@ -195,15 +206,8 @@ public class MainActivity extends AppCompatActivity {
                 "车机实际显示： "+realSize.x+" × "+realSize.y+" px",
                 12
         );
-        displayInfo.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
-        header.addView(
-                displayInfo,
-                new LinearLayout.LayoutParams(
-                        dp(260),dp(50)
-                )
-        );
-
-        root.addView(header);
+        displayInfo.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        root.addView(displayInfo,new LinearLayout.LayoutParams(-1,dp(30)));
 
         // 预设
         TextView pt=text("窗口预设",17);
@@ -224,43 +228,25 @@ public class MainActivity extends AppCompatActivity {
 
         root.addView(
                 presetScroll,
-                new LinearLayout.LayoutParams(-1,dp(82))
+                new LinearLayout.LayoutParams(-1,dp(128))
         );
 
         // APP区域标题
-        LinearLayout appTitle=new LinearLayout(this);
-        appTitle.setGravity(Gravity.CENTER_VERTICAL);
-
         TextView at=text("已添加 APP",17);
         at.setTypeface(null,1);
-
-        appTitle.addView(
-                at,
-                new LinearLayout.LayoutParams(0,dp(42),1)
-        );
-
-        Button add=button("＋ 添加 APP");
-        add.setOnClickListener(v->chooseApp());
-
-        appTitle.addView(
-                add,
-                new LinearLayout.LayoutParams(dp(120),dp(42))
-        );
-
-        root.addView(appTitle);
+        root.addView(at,new LinearLayout.LayoutParams(-1,dp(38)));
 
         // APP小方格
         ScrollView appScroll=new ScrollView(this);
-
         appGrid=new LinearLayout(this);
         appGrid.setOrientation(LinearLayout.HORIZONTAL);
-
         appScroll.addView(appGrid);
+        root.addView(appScroll,new LinearLayout.LayoutParams(-1,0,1));
 
-        root.addView(
-                appScroll,
-                new LinearLayout.LayoutParams(-1,0,1)
-        );
+        // 添加 APP 按钮放在已添加 APP 下方，与“新建预设”同样的布局逻辑。
+        Button addApp=button("＋ 添加 APP");
+        addApp.setOnClickListener(v->chooseApp());
+        root.addView(addApp,new LinearLayout.LayoutParams(-1,dp(52)));
 
         info=text("",14);
         info.setTextColor(Color.WHITE);
@@ -331,7 +317,7 @@ public class MainActivity extends AppCompatActivity {
                     b,
                     new LinearLayout.LayoutParams(
                             dp(190),
-                            dp(58)
+                            dp(70)
                     )
             );
         }
@@ -342,8 +328,8 @@ public class MainActivity extends AppCompatActivity {
         presetRow.addView(
                 add,
                 new LinearLayout.LayoutParams(
-                        dp(100),
-                        dp(58)
+                        dp(190),
+                        dp(70)
                 )
         );
     }
@@ -403,12 +389,15 @@ public class MainActivity extends AppCompatActivity {
             card.setOnClickListener(v->{
                 selectedPackage=item.pkg;
                 selectedName=item.name;
+                long now=System.currentTimeMillis();
+                Object last=v.getTag();
+                v.setTag(now);
                 refreshApps();
-
-                info.setText(
-                        "已选择： "+item.name+
-                        "    → 点击窗口预设启动"
-                );
+                if(last instanceof Long && now-(Long)last < 350){
+                    launchAppDirect(item.pkg,item.name);
+                }else{
+                    info.setText("已选择： "+item.name+"    → 双击直接启动，或点击窗口预设启动");
+                }
             });
 
             card.setOnLongClickListener(v->{
@@ -428,7 +417,7 @@ public class MainActivity extends AppCompatActivity {
         if(apps.isEmpty()){
 
             TextView empty=text(
-                    "点击右上角“＋ 添加 APP”",
+                    "点击下方“＋ 添加 APP”",
                     15
             );
 
@@ -699,8 +688,8 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout box=new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
 
-        EditText name=field(
-                "预设名称",
+        EditText name=textField(
+                "预设名称（支持中文）",
                 old.name
         );
 
@@ -729,12 +718,12 @@ public class MainActivity extends AppCompatActivity {
                 String.valueOf(old.dpi)
         );
 
-        box.addView(name);
-        box.addView(x);
-        box.addView(y);
-        box.addView(width);
-        box.addView(height);
-        box.addView(dpi);
+        box.addView(labeledField("预设名称",name));
+        box.addView(labeledField("X 左上位置",x));
+        box.addView(labeledField("Y 上下位置",y));
+        box.addView(labeledField("窗口宽度",width));
+        box.addView(labeledField("窗口高度",height));
+        box.addView(labeledField("APP DPI",dpi));
 
         android.graphics.Point rs=new android.graphics.Point();
         getWindowManager().getDefaultDisplay().getRealSize(rs);
@@ -800,6 +789,20 @@ public class MainActivity extends AppCompatActivity {
                     refresh();
                 })
                 .show();
+    }
+
+    void launchAppDirect(String pkg,String name){
+        Intent intent=getPackageManager().getLaunchIntentForPackage(pkg);
+        if(intent==null){
+            Toast.makeText(this,"无法启动 APP",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        info.setText("直接启动："+name);
+        try{
+            startActivity(intent);
+        }catch(Exception e){
+            info.setText("启动失败："+e.getMessage());
+        }
     }
 
     void launchApp(Preset p){
