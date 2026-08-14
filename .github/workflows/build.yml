@@ -1,4 +1,4 @@
-name: 构建 APP窗口容器 2032x960 DPI版
+name: 构建 APP窗口容器 车机原生分辨率版
 
 on:
   workflow_dispatch:
