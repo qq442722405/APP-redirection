@@ -4,8 +4,8 @@
         android:shortcutId="reselect"
         android:enabled="true"
         android:icon="@drawable/ic_launcher"
-        android:shortcutShortLabel="重新选择目标 APP"
-        android:shortcutLongLabel="重新选择目标 APP">
+        android:shortcutShortLabel="@string/reselect"
+        android:shortcutLongLabel="@string/reselect">
         <intent
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.example.carappjump"
