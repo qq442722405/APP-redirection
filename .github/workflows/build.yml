@@ -1,4 +1,4 @@
-name: 构建 APP窗口容器 车机原生分辨率_全屏框选版
+name: 构建 APP窗口容器 权限增强_全屏框选版
 
 on:
   workflow_dispatch:
@@ -43,11 +43,11 @@ jobs:
       - name: 准备 APK
         run: |
           mkdir -p output
-          cp app/build/outputs/apk/debug/app-debug.apk "output/APP窗口容器_车机原生分辨率版.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "output/APP窗口容器_权限增强版.apk"
 
       - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
-          name: APP窗口容器_车机原生分辨率版
-          path: output/APP窗口容器_车机原生分辨率版.apk
+          name: APP窗口容器_权限增强版
+          path: output/APP窗口容器_权限增强版.apk
           if-no-files-found: error
