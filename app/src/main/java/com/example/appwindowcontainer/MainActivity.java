@@ -196,26 +196,34 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.BLACK);
+
+        // 容器本身固定避让车机上下区域：
+        // 顶部 80 px、底部 120 px。这里的留白不再提供设置项。
         root.setPadding(dp(12),dp(topBlank),dp(12),dp(bottomBlank));
 
-        // 顶部只保留车机真实分辨率信息，不再显示“APP 窗口容器”标题。
-        android.view.Display display=getWindowManager().getDefaultDisplay();
-        android.graphics.Point realSize=new android.graphics.Point();
-        display.getRealSize(realSize);
-        TextView displayInfo=text(
-                "车机实际显示： "+realSize.x+" × "+realSize.y+" px",
-                12
-        );
-        displayInfo.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
-        root.addView(displayInfo,new LinearLayout.LayoutParams(-1,dp(30)));
+        // 窗口预设标题 + 右侧“+”按钮
+        LinearLayout presetHeader=new LinearLayout(this);
+        presetHeader.setOrientation(LinearLayout.HORIZONTAL);
+        presetHeader.setGravity(Gravity.CENTER_VERTICAL);
 
-        // 预设
         TextView pt=text("窗口预设",17);
         pt.setTypeface(null,1);
+        presetHeader.addView(
+                pt,
+                new LinearLayout.LayoutParams(0,dp(44),1)
+        );
+
+        TextView addPreset=plusButton();
+        addPreset.setContentDescription("新建窗口预设");
+        addPreset.setOnClickListener(v->editPreset(-1));
+        presetHeader.addView(
+                addPreset,
+                new LinearLayout.LayoutParams(dp(52),dp(44))
+        );
 
         root.addView(
-                pt,
-                new LinearLayout.LayoutParams(-1,dp(34))
+                presetHeader,
+                new LinearLayout.LayoutParams(-1,dp(44))
         );
 
         ScrollView presetScroll=new ScrollView(this);
@@ -223,30 +231,48 @@ public class MainActivity extends AppCompatActivity {
 
         presetRow=new LinearLayout(this);
         presetRow.setOrientation(LinearLayout.HORIZONTAL);
-
         presetScroll.addView(presetRow);
 
         root.addView(
                 presetScroll,
-                new LinearLayout.LayoutParams(-1,dp(128))
+                new LinearLayout.LayoutParams(-1,dp(150))
         );
 
-        // APP区域标题
+        // 已添加 APP 标题 + 右侧“+”按钮
+        LinearLayout appHeader=new LinearLayout(this);
+        appHeader.setOrientation(LinearLayout.HORIZONTAL);
+        appHeader.setGravity(Gravity.CENTER_VERTICAL);
+
         TextView at=text("已添加 APP",17);
         at.setTypeface(null,1);
-        root.addView(at,new LinearLayout.LayoutParams(-1,dp(38)));
+        appHeader.addView(
+                at,
+                new LinearLayout.LayoutParams(0,dp(44),1)
+        );
 
-        // APP小方格
+        TextView addApp=plusButton();
+        addApp.setContentDescription("添加 APP");
+        addApp.setOnClickListener(v->chooseApp());
+        appHeader.addView(
+                addApp,
+                new LinearLayout.LayoutParams(dp(52),dp(44))
+        );
+
+        root.addView(
+                appHeader,
+                new LinearLayout.LayoutParams(-1,dp(44))
+        );
+
+        // APP 小方格
         ScrollView appScroll=new ScrollView(this);
         appGrid=new LinearLayout(this);
         appGrid.setOrientation(LinearLayout.HORIZONTAL);
         appScroll.addView(appGrid);
-        root.addView(appScroll,new LinearLayout.LayoutParams(-1,0,1));
 
-        // 添加 APP 按钮放在已添加 APP 下方，与“新建预设”同样的布局逻辑。
-        Button addApp=button("＋ 添加 APP");
-        addApp.setOnClickListener(v->chooseApp());
-        root.addView(addApp,new LinearLayout.LayoutParams(-1,dp(52)));
+        root.addView(
+                appScroll,
+                new LinearLayout.LayoutParams(-1,0,1)
+        );
 
         info=text("",14);
         info.setTextColor(Color.WHITE);
@@ -258,8 +284,15 @@ public class MainActivity extends AppCompatActivity {
         );
 
         setContentView(root);
-
         refresh();
+    }
+
+    TextView plusButton(){
+        TextView b=text("+",28);
+        b.setGravity(Gravity.CENTER);
+        b.setTextColor(Color.WHITE);
+        b.setBackgroundResource(R.drawable.button);
+        return b;
     }
 
     void refresh(){
@@ -287,12 +320,20 @@ public class MainActivity extends AppCompatActivity {
             final int index=i;
             Preset p=presets.get(i);
 
+            // 保存的预设固定三行：
+            // 第一行：名称
+            // 第二行：位置 + 分辨率
+            // 第三行：DPI
             Button b=button(
                     p.name+
                     "\n"+
-                    p.x+","+p.y+"   "+p.w+" × "+p.h+
-                    "   DPI "+p.dpi
+                    "位置 "+p.x+" , "+p.y+
+                    "   "+p.w+" × "+p.h+
+                    "\n"+
+                    "DPI "+p.dpi
             );
+            b.setGravity(Gravity.CENTER);
+            b.setTextSize(12);
 
             b.setOnClickListener(v->{
 
@@ -316,22 +357,11 @@ public class MainActivity extends AppCompatActivity {
             presetRow.addView(
                     b,
                     new LinearLayout.LayoutParams(
-                            dp(190),
-                            dp(70)
+                            dp(220),
+                            dp(100)
                     )
             );
         }
-
-        Button add=button("＋ 新建预设");
-        add.setOnClickListener(v->editPreset(-1));
-
-        presetRow.addView(
-                add,
-                new LinearLayout.LayoutParams(
-                        dp(190),
-                        dp(70)
-                )
-        );
     }
 
     void refreshApps(){
@@ -728,9 +758,8 @@ public class MainActivity extends AppCompatActivity {
         android.graphics.Point rs=new android.graphics.Point();
         getWindowManager().getDefaultDisplay().getRealSize(rs);
         TextView hint=text(
-                "车机实际显示： "+rs.x+" × "+rs.y+" px\n"+
                 "容器固定上下留白：上 80 px / 下 120 px\n"+
-                "X/Y 为 APP 窗口左上角位置。",
+                "X / Y 为 APP 窗口左上角位置。",
                 12
         );
 
