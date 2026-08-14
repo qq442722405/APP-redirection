@@ -29,20 +29,18 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: 清理旧源码并检查源码
+      - name: 检查工程结构
         shell: bash
         run: |
-          rm -rf app/src/main/java/com/example/carappjump
-          echo "=== Java 源文件 ==="
+          if find app/src/main/java -type f -path '*com/example/carappjump/*' | grep -q .; then
+            echo "检测到旧版 carappjump 源码，构建前删除"
+            rm -rf app/src/main/java/com/example/carappjump
+          fi
+          echo "=== 当前 Java 源文件 ==="
           find app/src/main/java -type f -name '*.java' -print
-          echo "=== Manifest ==="
-          sed -n '1,240p' app/src/main/AndroidManifest.xml
-
-      - name: 编译 Java
-        run: gradle :app:compileDebugJavaWithJavac --no-daemon --stacktrace --info
 
       - name: 构建 Debug APK
-        run: gradle clean assembleDebug --no-daemon --stacktrace --info
+        run: gradle clean :app:assembleDebug --no-daemon --stacktrace
 
       - name: 准备 APK
         run: |
