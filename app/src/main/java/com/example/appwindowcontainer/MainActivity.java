@@ -83,8 +83,34 @@ public class MainActivity extends AppCompatActivity {
         EditText e=new EditText(this);
         e.setHint(label); e.setText(value); e.setTextColor(Color.WHITE);
         e.setHintTextColor(Color.GRAY); e.setSingleLine(true);
-        e.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        e.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_SIGNED);
         return e;
+    }
+
+    // 数字输入框右侧快速调整按钮：每次 +10 / -10。
+    LinearLayout labeledNumberField(String label, EditText input){
+        LinearLayout row=new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        TextView l=text(label,14);
+        row.addView(l,new LinearLayout.LayoutParams(dp(115),dp(54)));
+        row.addView(input,new LinearLayout.LayoutParams(0,dp(54),1));
+        Button plus=button("+10");
+        Button minus=button("-10");
+        plus.setTextSize(12); minus.setTextSize(12);
+        plus.setMinWidth(0); minus.setMinWidth(0);
+        plus.setPadding(0,0,0,0); minus.setPadding(0,0,0,0);
+        plus.setOnClickListener(v->adjustNumber(input,10));
+        minus.setOnClickListener(v->adjustNumber(input,-10));
+        row.addView(plus,new LinearLayout.LayoutParams(dp(54),dp(44)));
+        row.addView(minus,new LinearLayout.LayoutParams(dp(54),dp(44)));
+        return row;
+    }
+
+    void adjustNumber(EditText input,int delta){
+        int value=number(input,0)+delta;
+        input.setText(String.valueOf(value));
+        input.setSelection(input.length());
     }
 
     EditText textField(String label,String value){
@@ -318,8 +344,7 @@ public class MainActivity extends AppCompatActivity {
         presetRow.removeAllViews();
         for(int i=0;i<presets.size();i++){
             final int index=i; Preset p=presets.get(i);
-            String displayText=p.displayId>=0?"屏幕 "+p.displayId:"主屏";
-            Button b=button(p.name+"\n"+displayText+" 位置 "+p.x+" , "+p.y+"   "+p.w+" × "+p.h+"\nDPI "+p.dpi);
+            Button b=button(p.name+"\n位置 "+p.x+" , "+p.y+"   "+p.w+" × "+p.h+"\nDPI "+p.dpi);
             b.setGravity(Gravity.CENTER); b.setTextSize(12);
             b.setOnClickListener(v->{
                 if(selectedPackage==null){
@@ -427,9 +452,18 @@ public class MainActivity extends AppCompatActivity {
         }).show();
     }
 
-    // 新建预设：先进入全屏手动框选模式；编辑已有预设仍可直接修改数字。
+    // 新建/编辑预设统一使用手动输入。
+    // 三区域车机部分设备只暴露一个超宽 Display（例如 6480×960），
+    // 因此不再依赖 Presentation/多 Display 全屏框选。
     void editPreset(int index){
-        if(index<0){startSelectionMode();return;}
+        if(index<0){
+            android.graphics.Point rs=getRealScreenSize();
+            Preset old=new Preset("",0,TOP_BLANK,Math.min(2160,rs.x),
+                    Math.max(1,rs.y-TOP_BLANK-BOTTOM_BLANK),
+                    getResources().getDisplayMetrics().densityDpi,-1);
+            showPresetEditor(-1,old);
+            return;
+        }
         Preset old=presets.get(index);
         showPresetEditor(index,old);
     }
@@ -442,208 +476,54 @@ public class MainActivity extends AppCompatActivity {
         EditText width=numberField("窗口宽度",String.valueOf(old.w));
         EditText height=numberField("窗口高度",String.valueOf(old.h));
         EditText dpi=numberField("APP DPI",String.valueOf(old.dpi));
-        EditText displayId=numberField("Display ID",String.valueOf(old.displayId));
+
         box.addView(labeledField("预设名称",name));
-        box.addView(labeledField("X 左上位置",x));
-        box.addView(labeledField("Y 上下位置",y));
-        box.addView(labeledField("窗口宽度",width));
-        box.addView(labeledField("窗口高度",height));
-        box.addView(labeledField("APP DPI",dpi));
-        box.addView(labeledField("Display ID",displayId));
-        TextView hint=text("位置和尺寸来自车机真实屏幕坐标；新建预设可直接全屏手指框选。",12);
+        box.addView(labeledNumberField("X 左上位置",x));
+        box.addView(labeledNumberField("Y 上下位置",y));
+        box.addView(labeledNumberField("窗口宽度",width));
+        box.addView(labeledNumberField("窗口高度",height));
+        box.addView(labeledNumberField("APP DPI",dpi));
+
+        android.graphics.Point rs=getRealScreenSize();
+        TextView hint=text("车机当前实际屏幕："+rs.x+" × "+rs.y+"\n三区域直接按整块屏幕坐标输入，例如左区 X=0，中区 X=2160，右区 X=4320。\n+10 / -10 可快速微调。",12);
+        hint.setPadding(dp(115),dp(4),dp(4),dp(4));
         box.addView(hint);
-        new AlertDialog.Builder(this).setTitle("编辑窗口预设").setView(box).setNegativeButton("取消",null)
-                .setPositiveButton("保存",(d,w)->{
-                    String n=name.getText().toString().trim(); if(n.isEmpty()){Toast.makeText(this,"请输入预设名称",Toast.LENGTH_SHORT).show();return;}
-                    android.graphics.Point rs=getRealScreenSize();
-                    Preset p=new Preset(n,Math.max(0,number(x,0)),Math.max(0,number(y,TOP_BLANK)),Math.max(1,number(width,rs.x)),Math.max(1,number(height,Math.max(1,rs.y-TOP_BLANK-BOTTOM_BLANK))),Math.max(1,number(dpi,getResources().getDisplayMetrics().densityDpi)),number(displayId,old.displayId));
-                    presets.set(index,p);savePresets();refresh();
-                }).show();
-    }
 
-    // 屏幕诊断 + 全 Display 框选：优先使用 Android DisplayManager 枚举出的真实 Display。
-    void startSelectionMode(){
-        android.hardware.display.DisplayManager dm=(android.hardware.display.DisplayManager)getSystemService(DISPLAY_SERVICE);
-        android.view.Display[] displays=dm==null?new android.view.Display[0]:dm.getDisplays();
-        if(displays.length>1){
-            selectionPresentations.clear();
-            for(android.view.Display display:displays){
-                try{
-                    SelectionPresentation pres=new SelectionPresentation(this,display);
-                    pres.show();
-                    selectionPresentations.add(pres);
-                }catch(Exception e){
-                    // 某些车机不允许 Presentation 创建在特殊 Display 上，继续尝试其他屏幕。
-                }
-            }
-            if(!selectionPresentations.isEmpty()){
-                Toast.makeText(this,"已覆盖全部 Android Display，请在目标屏幕上框选",Toast.LENGTH_LONG).show();
-                return;
-            }
-        }
-
-        // 单 Display 或车机禁止 Presentation 时，退回当前 Activity 的全屏框选。
-        final Dialog dialog=new Dialog(this,android.R.style.Theme_Black_NoTitleBar_Fullscreen);
-        final SelectionView view=new SelectionView(this,dialog,getDisplay());
-        dialog.setContentView(view); dialog.setCancelable(false);
-        Window win=dialog.getWindow();
-        if(win!=null){
-            win.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            win.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
-            win.setDimAmount(0f);
-        }
+        AlertDialog dialog=new AlertDialog.Builder(this)
+                .setTitle(index<0?"新建窗口预设":"编辑窗口预设")
+                .setView(box).setNegativeButton("取消",null).create();
+        dialog.setButton(AlertDialog.BUTTON_POSITIVE,"保存",(d,w)->{
+            String n=name.getText().toString().trim();
+            if(n.isEmpty()){Toast.makeText(this,"请输入预设名称",Toast.LENGTH_SHORT).show();return;}
+            Preset p=new Preset(n,
+                    Math.max(0,number(x,old.x)),
+                    Math.max(0,number(y,old.y)),
+                    Math.max(1,number(width,old.w)),
+                    Math.max(1,number(height,old.h)),
+                    Math.max(1,number(dpi,old.dpi)),
+                    -1);
+            if(index<0) presets.add(p); else presets.set(index,p);
+            savePresets(); refresh();
+        });
         dialog.show();
-        if(win!=null){
-            win.setLayout(WindowManager.LayoutParams.MATCH_PARENT,WindowManager.LayoutParams.MATCH_PARENT);
-            win.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
-        }
     }
 
-    int getDisplayIdSafe(){
-        try{android.view.Display d=getDisplay(); return d==null?-1:d.getDisplayId();}catch(Exception e){return -1;}
-    }
-
-    android.graphics.Point getRealScreenSize(){
-        android.graphics.Point p=new android.graphics.Point();
-        try{
-            android.view.Display d=getDisplay();
-            if(d!=null)d.getRealSize(p);
-        }catch(Exception ignored){}
-        if(p.x<=0||p.y<=0){
-            p.x=getResources().getDisplayMetrics().widthPixels;
-            p.y=getResources().getDisplayMetrics().heightPixels;
-        }
-        return p;
-    }
-
-    android.graphics.Point getRealScreenSize(android.view.Display display){
-        android.graphics.Point p=new android.graphics.Point();
-        try{display.getRealSize(p);}catch(Exception ignored){}
-        if(p.x<=0||p.y<=0){p.x=1;p.y=1;}
-        return p;
-    }
-
-    void finishSelectionOverlays(){
-        for(android.app.Presentation p:new ArrayList<>(selectionPresentations)){
-            try{p.dismiss();}catch(Exception ignored){}
-        }
-        selectionPresentations.clear();
-    }
-
-    class SelectionPresentation extends android.app.Presentation {
-        SelectionPresentation(Context outer,android.view.Display display){super(outer,display);}
-        @Override protected void onCreate(Bundle b){
-            super.onCreate(b);
-            getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
-            getWindow().setDimAmount(0f);
-            android.view.Display selectionDisplay = null;
-            try {
-                if (getWindow() != null && getWindow().getDecorView() != null) {
-                    selectionDisplay = getWindow().getDecorView().getDisplay();
-                }
-            } catch (Exception ignored) {}
-            if (selectionDisplay == null) {
-                selectionDisplay = getWindow().getWindowManager().getDefaultDisplay();
-            }
-            SelectionView v=new SelectionView(MainActivity.this,this,selectionDisplay);
-            setContentView(v);
-            Window w=getWindow();
-            if(w!=null)w.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
-        }
-    }
-
-    class SelectionView extends View {
-        Paint fill=new Paint(Paint.ANTI_ALIAS_FLAG),stroke=new Paint(Paint.ANTI_ALIAS_FLAG),txt=new Paint(Paint.ANTI_ALIAS_FLAG);
-        Object owner; float sx=-1,sy=-1,ex=-1,ey=-1; boolean drawing=false;
-        android.view.Display display; android.graphics.Point real;
-        SelectionView(Context c,Object owner,android.view.Display d){super(c);this.owner=owner;this.display=d;this.real=getRealScreenSize(d);
-            setBackgroundColor(Color.TRANSPARENT); fill.setColor(0x66000000); stroke.setColor(Color.WHITE); stroke.setStyle(Paint.Style.STROKE); stroke.setStrokeWidth(dp(3));
-            txt.setColor(Color.WHITE); txt.setTextSize(dp(16)); txt.setTypeface(Typeface.DEFAULT_BOLD);
-        }
-        float rx(float x){return x*real.x/Math.max(1,getWidth());}
-        float ry(float y){return y*real.y/Math.max(1,getHeight());}
-        float vx(float x){return x*getWidth()/Math.max(1,real.x);}
-        float vy(float y){return y*getHeight()/Math.max(1,real.y);}
-        protected void onDraw(Canvas c){
-            super.onDraw(c); c.drawRect(0,0,getWidth(),getHeight(),fill);
-            Paint guide=new Paint(Paint.ANTI_ALIAS_FLAG); guide.setColor(0xAA00FF66); guide.setStyle(Paint.Style.FILL);
-            c.drawRect(0,vy(TOP_BLANK),getWidth(),vy(TOP_BLANK)+dp(2),guide);
-            c.drawRect(0,vy(Math.max(TOP_BLANK,real.y-BOTTOM_BLANK))-dp(2),getWidth(),vy(Math.max(TOP_BLANK,real.y-BOTTOM_BLANK)),guide);
-            Paint header=new Paint(Paint.ANTI_ALIAS_FLAG); header.setColor(Color.WHITE); header.setTextSize(dp(15)); header.setTypeface(Typeface.DEFAULT_BOLD);
-            String hd="Display "+(display==null?-1:display.getDisplayId())+"   "+real.x+" × "+real.y;
-            c.drawText(hd,dp(18),dp(26),header);
-            if(drawing){
-                float l=Math.min(vx(sx),vx(ex)),r=Math.max(vx(sx),vx(ex)); float t=Math.min(vy(sy),vy(ey)),bb=Math.max(vy(sy),vy(ey));
-                Paint clear=new Paint(Paint.ANTI_ALIAS_FLAG); clear.setColor(0x2200FF66); c.drawRect(l,t,r,bb,clear); c.drawRect(l,t,r,bb,stroke);
-                int ix=Math.round(Math.min(sx,ex)), iy=Math.round(Math.min(sy,ey)), iw=Math.round(Math.abs(ex-sx)), ih=Math.round(Math.abs(ey-sy));
-                String s="X "+ix+"   Y "+iy+"   W "+iw+"   H "+ih; float tw=txt.measureText(s); c.drawText(s,Math.max(dp(10),(getWidth()-tw)/2f),dp(52),txt);
-            }else{
-                String s="手指拖动框选 APP 显示区域"; float tw=txt.measureText(s); c.drawText(s,(getWidth()-tw)/2f,dp(52),txt);
-                txt.setTextSize(dp(13)); c.drawText("上方 80 px / 下方 120 px 为容器避让区",dp(18),vy(Math.max(TOP_BLANK,real.y-BOTTOM_BLANK))-dp(14),txt); txt.setTextSize(dp(16));
-            }
-            Paint small=new Paint(Paint.ANTI_ALIAS_FLAG); small.setColor(Color.WHITE); small.setTextSize(dp(13)); c.drawText("松开手指后自动进入预设保存",dp(18),getHeight()-dp(24),small);
-        }
-        public boolean onTouchEvent(MotionEvent e){
-            float x=rx(e.getX()),y=ry(e.getY());
-            if(e.getAction()==MotionEvent.ACTION_DOWN){sx=ex=x;sy=ey=y;drawing=true;invalidate();return true;}
-            if(e.getAction()==MotionEvent.ACTION_MOVE){ex=x;ey=y;invalidate();return true;}
-            if(e.getAction()==MotionEvent.ACTION_UP){
-                ex=x;ey=y; int left=Math.round(Math.min(sx,ex)),top=Math.round(Math.min(sy,ey)); int w=Math.round(Math.abs(ex-sx)),h=Math.round(Math.abs(ey-sy));
-                if(w<20||h<20){Toast.makeText(MainActivity.this,"框选区域太小，请重新框选",Toast.LENGTH_SHORT).show();drawing=false;invalidate();return true;}
-                int did=display==null?-1:display.getDisplayId();
-                finishSelectionOverlays();
-                if(owner instanceof Dialog){try{((Dialog)owner).dismiss();}catch(Exception ignored){}}
-                if(owner instanceof SelectionPresentation){try{((SelectionPresentation)owner).dismiss();}catch(Exception ignored){}}
-                final Preset p=new Preset("",left,top,w,h,getResources().getDisplayMetrics().densityDpi,did);
-                new Handler().postDelayed(()->showNewPresetEditor(p),180); return true;
-            }
-            return true;
-        }
-    }
-
+    // 三区域车机按一个超宽 Display 处理，不再创建 Presentation。
     void showScreenDiagnostics(){
-        android.hardware.display.DisplayManager dm=(android.hardware.display.DisplayManager)getSystemService(DISPLAY_SERVICE);
-        android.view.Display[] ds=dm==null?new android.view.Display[0]:dm.getDisplays();
-        StringBuilder s=new StringBuilder();
-        s.append("Android Display 数量：").append(ds.length).append("\n\n");
-        for(android.view.Display d:ds){
-            android.graphics.Point p=getRealScreenSize(d);
-            android.util.DisplayMetrics m=new android.util.DisplayMetrics(); d.getRealMetrics(m);
-            s.append("Display ID: ").append(d.getDisplayId()).append("\n");
-            s.append("真实分辨率: ").append(p.x).append(" × ").append(p.y).append("\n");
-            s.append("densityDpi: ").append(m.densityDpi).append("  density: ").append(m.density).append("\n");
-            s.append("rotation: ").append(d.getRotation()).append("\n");
-            s.append("flags: ").append(d.getFlags()).append("\n\n");
-        }
-        s.append("\n框选时会在每个 Android Display 上分别创建触摸层。\n如果这里显示 3 个 2160×960 Display，就说明车机是三 Display 结构；如果只有 1 个 6480×960，则是单 Display 超宽屏。");
-        new AlertDialog.Builder(this).setTitle("屏幕 / Display 诊断").setMessage(s.toString()).setPositiveButton("开始全屏框选",(d,w)->startSelectionMode()).setNegativeButton("关闭",null).show();
-    }
-
-    void showNewPresetEditor(Preset old){
-        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
-        EditText name=textField("预设名称（支持中文）","");
-        EditText x=numberField("X 左上位置",String.valueOf(old.x));
-        EditText y=numberField("Y 上下位置",String.valueOf(old.y));
-        EditText width=numberField("窗口宽度",String.valueOf(old.w));
-        EditText height=numberField("窗口高度",String.valueOf(old.h));
-        EditText dpi=numberField("APP DPI",String.valueOf(old.dpi));
-        EditText displayId=numberField("Display ID",String.valueOf(old.displayId));
-        box.addView(labeledField("预设名称",name));
-        box.addView(labeledField("X 左上位置",x));
-        box.addView(labeledField("Y 上下位置",y));
-        box.addView(labeledField("窗口宽度",width));
-        box.addView(labeledField("窗口高度",height));
-        box.addView(labeledField("APP DPI",dpi));
-        box.addView(labeledField("Display ID",displayId));
-        TextView hint=text("已从实际 Display 自动获取位置、分辨率和 Display ID，可在这里微调。",12); box.addView(hint);
-        new AlertDialog.Builder(this).setTitle("新建窗口预设").setView(box).setNegativeButton("取消",null)
-                .setPositiveButton("保存",(d,w)->{
-                    String n=name.getText().toString().trim();
-                    if(n.isEmpty()){Toast.makeText(this,"请输入预设名称",Toast.LENGTH_SHORT).show();return;}
-                    Preset p=new Preset(n,Math.max(0,number(x,old.x)),Math.max(0,number(y,old.y)),Math.max(1,number(width,old.w)),Math.max(1,number(height,old.h)),Math.max(1,number(dpi,old.dpi)),number(displayId,old.displayId));
-                    presets.add(p);savePresets();refresh();
-                }).show();
+        android.view.Display d=getWindow().getWindowManager().getDefaultDisplay();
+        android.graphics.Point p=getRealScreenSize(d);
+        android.util.DisplayMetrics m=new android.util.DisplayMetrics(); d.getRealMetrics(m);
+        String s="当前车机 Display\n\n"+
+                "Display ID: "+d.getDisplayId()+"\n"+
+                "真实分辨率: "+p.x+" × "+p.y+"\n"+
+                "densityDpi: "+m.densityDpi+"\n"+
+                "density: "+m.density+"\n"+
+                "rotation: "+d.getRotation()+"\n\n"+
+                "三区域按整块超宽屏坐标处理：\n"+
+                "左区约 X=0\n中区约 X=2160\n右区约 X=4320";
+        new AlertDialog.Builder(this).setTitle("屏幕诊断")
+                .setMessage(s).setPositiveButton("新建预设",(x,w)->editPreset(-1))
+                .setNegativeButton("关闭",null).show();
     }
 
     void launchAppDirect(String pkg,String name){
@@ -675,11 +555,8 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        android.view.Display targetDisplay=getDisplay();
-        if(p.displayId>=0){
-            android.hardware.display.DisplayManager dm=(android.hardware.display.DisplayManager)getSystemService(DISPLAY_SERVICE);
-            if(dm!=null)for(android.view.Display d:dm.getDisplays())if(d.getDisplayId()==p.displayId){targetDisplay=d;break;}
-        }
+        // 三区域车机按一个超宽 Display 处理，窗口位置使用整块屏幕的绝对坐标。
+        android.view.Display targetDisplay=getWindow().getWindowManager().getDefaultDisplay();
         android.graphics.Point real=getRealScreenSize(targetDisplay);
         int left=Math.max(0,Math.min(p.x,real.x-1));
         int top=Math.max(0,Math.min(p.y,real.y-1));
@@ -709,7 +586,7 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra("com.example.appwindowcontainer.target_dpi",p.dpi);
         intent.putExtra("com.example.appwindowcontainer.target_display_id",targetDisplay==null?-1:targetDisplay.getDisplayId());
 
-        info.setText("启动："+selectedName+"\n"+p.name+"  Display "+(targetDisplay==null?-1:targetDisplay.getDisplayId())+"  X "+left+"  Y "+top+"  "+(right-left)+" × "+(bottom-top)+"  DPI "+p.dpi);
+        info.setText("启动："+selectedName+"\n"+p.name+"  X "+left+"  Y "+top+"  "+(right-left)+" × "+(bottom-top)+"  DPI "+p.dpi);
 
         try{
             startActivity(intent,options.toBundle());
