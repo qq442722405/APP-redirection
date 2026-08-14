@@ -770,17 +770,20 @@ public class MainActivity extends AppCompatActivity {
                         return;
                     }
 
+                    android.graphics.Point saveRs=new android.graphics.Point();
+                    getWindowManager().getDefaultDisplay().getRealSize(saveRs);
+
                     Preset p=new Preset(
                             n,
-                            number(x,0),
-                            number(y,0),
+                            Math.max(0, number(x,0)),
+                            Math.max(0, number(y,topBlank)),
                             Math.max(
                                     1,
-                                    number(width,AREA_WIDTH)
+                                    number(width,saveRs.x)
                             ),
                             Math.max(
                                     1,
-                                    number(height,AREA_HEIGHT)
+                                    number(height,Math.max(1,saveRs.y-topBlank-bottomBlank))
                             ),
                             Math.max(
                                     1,
