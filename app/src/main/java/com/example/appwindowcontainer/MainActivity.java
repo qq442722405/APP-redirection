@@ -18,17 +18,12 @@ public class MainActivity extends AppCompatActivity {
     static final String APPS="apps";
     static final String PRESETS="presets";
 
-    // 车机每个区域固定为 2032 × 960
-    static final int AREA_WIDTH = 2032;
-    static final int AREA_HEIGHT = 960;
-
     SharedPreferences prefs;
     LinearLayout presetRow, appGrid;
     TextView info;
     String selectedPackage = null;
     String selectedName = null;
 
-    int containerDpi = 160;
     int topBlank = 80;
     int bottomBlank = 120;
 
@@ -103,9 +98,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void loadData(){
-        topBlank=prefs.getInt("topBlank",80);
-        bottomBlank=prefs.getInt("bottomBlank",120);
-        containerDpi=prefs.getInt("containerDpi",160);
+        topBlank=80;
+        bottomBlank=120;
 
         try{
             JSONArray a=new JSONArray(prefs.getString(APPS,"[]"));
@@ -180,7 +174,7 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.BLACK);
-        root.setPadding(dp(12),dp(6),dp(12),dp(6));
+        root.setPadding(dp(12),dp(topBlank),dp(12),dp(bottomBlank));
 
         // 顶部
         LinearLayout header=new LinearLayout(this);
@@ -194,12 +188,19 @@ public class MainActivity extends AppCompatActivity {
                 new LinearLayout.LayoutParams(0,dp(50),1)
         );
 
-        Button settings=button("⚙ 设置");
-        settings.setOnClickListener(v->showSettings());
-
+        android.view.Display display=getWindowManager().getDefaultDisplay();
+        android.graphics.Point realSize=new android.graphics.Point();
+        display.getRealSize(realSize);
+        TextView displayInfo=text(
+                "车机实际显示： "+realSize.x+" × "+realSize.y+" px",
+                12
+        );
+        displayInfo.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
         header.addView(
-                settings,
-                new LinearLayout.LayoutParams(dp(90),dp(46))
+                displayInfo,
+                new LinearLayout.LayoutParams(
+                        dp(260),dp(50)
+                )
         );
 
         root.addView(header);
@@ -303,7 +304,7 @@ public class MainActivity extends AppCompatActivity {
             Button b=button(
                     p.name+
                     "\n"+
-                    p.w+" × "+p.h+
+                    p.x+","+p.y+"   "+p.w+" × "+p.h+
                     "   DPI "+p.dpi
             );
 
@@ -453,12 +454,18 @@ public class MainActivity extends AppCompatActivity {
 
     void closeApp(String pkg){
         try{
-            android.app.ActivityManager am=(android.app.ActivityManager)getSystemService(ACTIVITY_SERVICE);
+            android.app.ActivityManager am=
+                    (android.app.ActivityManager)getSystemService(ACTIVITY_SERVICE);
             am.killBackgroundProcesses(pkg);
-            Toast.makeText(this,"已请求关闭："+selectedOrName(pkg),Toast.LENGTH_SHORT).show();
-        }catch(Exception e){
-            Toast.makeText(this,"无法直接关闭："+e.getMessage(),Toast.LENGTH_SHORT).show();
+        }catch(Exception ignored){
+            // 普通 Android 应用没有强制停止其它前台应用的系统权限。
+            // 不再弹出“关闭失败”，避免误导用户。
         }
+        Toast.makeText(
+                this,
+                "已发送关闭请求："+selectedOrName(pkg),
+                Toast.LENGTH_SHORT
+        ).show();
     }
 
     String selectedOrName(String pkg){
@@ -644,91 +651,6 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
     }
 
-    void showSettings(){
-
-        LinearLayout box=new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-
-        EditText dpi=field(
-                "容器 DPI",
-                String.valueOf(containerDpi)
-        );
-
-        EditText top=field(
-                "容器顶部空白 px",
-                String.valueOf(topBlank)
-        );
-
-        EditText bottom=field(
-                "容器底部空白 px",
-                String.valueOf(bottomBlank)
-        );
-
-        box.addView(dpi);
-        box.addView(top);
-        box.addView(bottom);
-
-        android.util.DisplayMetrics dm=getResources().getDisplayMetrics();
-        android.view.Display display=getWindowManager().getDefaultDisplay();
-        android.graphics.Point realSize=new android.graphics.Point();
-        display.getRealSize(realSize);
-        TextView real=text(
-                "当前区域真实分辨率："+realSize.x+" × "+realSize.y+" px\n"+
-                "当前系统 Density："+dm.densityDpi+" DPI\n"+
-                "默认安全区：上 80 px / 下 120 px", 13);
-        real.setTextColor(Color.WHITE);
-        real.setPadding(dp(4),dp(8),dp(4),dp(4));
-        box.addView(real);
-        TextView hint=text(
-                "顶部/底部空白只控制本容器界面，用于避开车机状态栏和底部按钮。",12);
-
-        hint.setPadding(
-                dp(4),dp(8),dp(4),dp(4)
-        );
-
-        box.addView(hint);
-
-        new AlertDialog.Builder(this)
-                .setTitle("容器设置")
-                .setView(box)
-                .setNegativeButton("取消",null)
-                .setPositiveButton("保存",(d,w)->{
-
-                    containerDpi=Math.max(
-                            1,
-                            number(dpi,160)
-                    );
-
-                    topBlank=Math.max(
-                            0,
-                            number(top,0)
-                    );
-
-                    bottomBlank=Math.max(
-                            0,
-                            number(bottom,0)
-                    );
-
-                    prefs.edit()
-                            .putInt(
-                                    "containerDpi",
-                                    containerDpi
-                            )
-                            .putInt(
-                                    "topBlank",
-                                    topBlank
-                            )
-                            .putInt(
-                                    "bottomBlank",
-                                    bottomBlank
-                            )
-                            .apply();
-
-                    refresh();
-                })
-                .show();
-    }
-
     void presetMenu(int index){
 
         Preset p=presets.get(index);
@@ -746,15 +668,6 @@ public class MainActivity extends AppCompatActivity {
                                 editPreset(index);
                             }else{
 
-                                if(presets.size()<=1){
-                                    Toast.makeText(
-                                            this,
-                                            "至少保留一个预设",
-                                            Toast.LENGTH_SHORT
-                                    ).show();
-                                    return;
-                                }
-
                                 presets.remove(index);
                                 savePresets();
                                 refresh();
@@ -771,13 +684,15 @@ public class MainActivity extends AppCompatActivity {
         if(index>=0){
             old=presets.get(index);
         }else{
+            android.graphics.Point rs=new android.graphics.Point();
+            getWindowManager().getDefaultDisplay().getRealSize(rs);
             old=new Preset(
                     "",
                     0,
-                    0,
-                    AREA_WIDTH,
-                    AREA_HEIGHT,
-                    containerDpi
+                    topBlank,
+                    Math.max(1,rs.x),
+                    Math.max(1,rs.y-topBlank-bottomBlank),
+                    getResources().getDisplayMetrics().densityDpi
             );
         }
 
@@ -821,8 +736,11 @@ public class MainActivity extends AppCompatActivity {
         box.addView(height);
         box.addView(dpi);
 
+        android.graphics.Point rs=new android.graphics.Point();
+        getWindowManager().getDefaultDisplay().getRealSize(rs);
         TextView hint=text(
-                "默认单区域大小：2032 × 960\n"+
+                "车机实际显示： "+rs.x+" × "+rs.y+" px\n"+
+                "容器固定上下留白：上 80 px / 下 120 px\n"+
                 "X/Y 为 APP 窗口左上角位置。",
                 12
         );
@@ -866,7 +784,7 @@ public class MainActivity extends AppCompatActivity {
                             ),
                             Math.max(
                                     1,
-                                    number(dpi,containerDpi)
+                                    number(dpi,getResources().getDisplayMetrics().densityDpi)
                             )
                     );
 
@@ -901,16 +819,14 @@ public class MainActivity extends AppCompatActivity {
         ActivityOptions options=
                 ActivityOptions.makeBasic();
 
-        // launchBounds 使用屏幕坐标；用当前容器窗口可见区域顶部偏移修正车机状态栏造成的上下位移。
-        android.graphics.Rect visible=new android.graphics.Rect();
-        getWindow().getDecorView().getWindowVisibleDisplayFrame(visible);
-        int screenTop=visible.top;
+        // launchBounds 使用车机真实屏幕坐标。
+        // 容器自己的 80/120 留白只影响本容器 UI，不修改 APP 预设坐标。
         options.setLaunchBounds(
                 new android.graphics.Rect(
                         p.x,
-                        p.y-screenTop,
+                        p.y,
                         p.x+p.w,
-                        p.y+p.h-screenTop
+                        p.y+p.h
                 )
         );
 
