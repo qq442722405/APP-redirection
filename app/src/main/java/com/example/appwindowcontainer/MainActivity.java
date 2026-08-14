@@ -484,7 +484,7 @@ public class MainActivity extends AppCompatActivity {
 
         // 单 Display 或车机禁止 Presentation 时，退回当前 Activity 的全屏框选。
         final Dialog dialog=new Dialog(this,android.R.style.Theme_Black_NoTitleBar_Fullscreen);
-        final SelectionView view=new SelectionView(this,dialog,getDisplayIdSafe());
+        final SelectionView view=new SelectionView(this,dialog,getDisplay());
         dialog.setContentView(view); dialog.setCancelable(false);
         Window win=dialog.getWindow();
         if(win!=null){
@@ -557,15 +557,9 @@ public class MainActivity extends AppCompatActivity {
         Paint fill=new Paint(Paint.ANTI_ALIAS_FLAG),stroke=new Paint(Paint.ANTI_ALIAS_FLAG),txt=new Paint(Paint.ANTI_ALIAS_FLAG);
         Object owner; float sx=-1,sy=-1,ex=-1,ey=-1; boolean drawing=false;
         android.view.Display display; android.graphics.Point real;
-        SelectionView(Context c,Object owner,int displayId){this(c,owner,MainActivity.this.findDisplay(displayId));}
         SelectionView(Context c,Object owner,android.view.Display d){super(c);this.owner=owner;this.display=d;this.real=getRealScreenSize(d);
             setBackgroundColor(Color.TRANSPARENT); fill.setColor(0x66000000); stroke.setColor(Color.WHITE); stroke.setStyle(Paint.Style.STROKE); stroke.setStrokeWidth(dp(3));
             txt.setColor(Color.WHITE); txt.setTextSize(dp(16)); txt.setTypeface(Typeface.DEFAULT_BOLD);
-        }
-        android.view.Display findDisplay(int id){
-            android.hardware.display.DisplayManager dm=(android.hardware.display.DisplayManager)getSystemService(DISPLAY_SERVICE);
-            if(dm!=null)for(android.view.Display d:dm.getDisplays())if(d.getDisplayId()==id)return d;
-            return getDisplay();
         }
         float rx(float x){return x*real.x/Math.max(1,getWidth());}
         float ry(float y){return y*real.y/Math.max(1,getHeight());}
