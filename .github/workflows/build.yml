@@ -38,7 +38,7 @@ jobs:
           find app/src/main/java -type f -name '*.java' -print
 
       - name: 编译 APK
-        run: gradle clean assembleDebug --no-daemon --stacktrace
+        run: gradle clean assembleDebug --no-daemon --stacktrace --info
 
       - name: 准备 APK
         run: |
