@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="reselect"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutShortLabel="重新选择目标 APP"
+        android:shortcutLongLabel="重新选择目标 APP">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.example.carappjump"
+            android:targetClass="com.example.carappjump.MainActivity"
+            android:data="carappjump://reselect" />
+    </shortcut>
+</shortcuts>

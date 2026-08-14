@@ -1,0 +1,8 @@
+<resources>
+    <!-- 修改这里即可改变车机桌面显示的伪装 APP 名称 -->
+    <string name="app_name">应用跳转器</string>
+    <string name="selector_title">选择目标 APP</string>
+    <string name="search_hint">搜索已安装的 APP</string>
+    <string name="reselect">重新选择目标 APP</string>
+    <string name="no_apps">没有找到可启动的 APP</string>
+</resources>
