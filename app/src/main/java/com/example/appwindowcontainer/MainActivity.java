@@ -30,8 +30,6 @@ public class MainActivity extends AppCompatActivity {
     String selectedPackage=null;
     String selectedName=null;
 
-    final ArrayList<android.app.Presentation> selectionPresentations=new ArrayList<>();
-
     // 容器本身固定避让车机原生区域
     static final int TOP_BLANK=80;
     static final int BOTTOM_BLANK=120;
@@ -55,6 +53,34 @@ public class MainActivity extends AppCompatActivity {
 
     int dp(int v){
         return (int)(v*getResources().getDisplayMetrics().density+.5f);
+    }
+
+    /**
+     * 获取车机当前 Activity 所在物理 Display 的真实像素尺寸。
+     * 不使用 resources.getDisplayMetrics()，避免车机状态栏/导航栏和 density
+     * 导致的尺寸偏差。
+     */
+    android.graphics.Point getRealScreenSize(){
+        return getRealScreenSize(getWindow().getWindowManager().getDefaultDisplay());
+    }
+
+    android.graphics.Point getRealScreenSize(android.view.Display display){
+        android.graphics.Point out = new android.graphics.Point();
+        if(display == null){
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            out.x = dm.widthPixels;
+            out.y = dm.heightPixels;
+            return out;
+        }
+        try{
+            display.getRealSize(out);
+        }catch(Exception e){
+            android.util.DisplayMetrics dm = new android.util.DisplayMetrics();
+            display.getMetrics(dm);
+            out.x = dm.widthPixels;
+            out.y = dm.heightPixels;
+        }
+        return out;
     }
 
     TextView text(String s,float size){
