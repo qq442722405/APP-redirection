@@ -565,13 +565,69 @@ public class MainActivity extends AppCompatActivity {
         try{startActivity(intent);}catch(Exception e){info.setText("启动失败："+e.getMessage());}
     }
 
+    /**
+     * 按预设启动目标 APP。
+     *
+     * 重要：ActivityOptions.setLaunchBounds() 是 Android 公共 API，只有当车机的
+     * WindowManager/Launcher 允许目标 Activity 使用可调整大小/多窗口时才会真正
+     * 控制目标窗口。某些车机把导航、地图、视频等 APP 标记为强制全屏/特殊窗口，
+     * 这种情况下目标 APP 可以被系统重新布局，普通第三方 APK 无法用 Java API
+     * 强制改变它的窗口边界。
+     */
     void launchApp(Preset p){
-        Intent intent=getPackageManager().getLaunchIntentForPackage(selectedPackage);
-        if(intent==null){Toast.makeText(this,"无法启动 APP",Toast.LENGTH_SHORT).show();return;}
+        if(selectedPackage==null){
+            Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        PackageManager pm=getPackageManager();
+        Intent intent=pm.getLaunchIntentForPackage(selectedPackage);
+        if(intent==null){
+            Toast.makeText(this,"无法启动 APP",Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        android.graphics.Point real=getRealScreenSize();
+        int left=Math.max(0,Math.min(p.x,real.x-1));
+        int top=Math.max(0,Math.min(p.y,real.y-1));
+        int right=Math.max(left+1,Math.min(p.x+p.w,real.x));
+        int bottom=Math.max(top+1,Math.min(p.y+p.h,real.y));
+        android.graphics.Rect bounds=new android.graphics.Rect(left,top,right,bottom);
+
         ActivityOptions options=ActivityOptions.makeBasic();
-        options.setLaunchBounds(new android.graphics.Rect(p.x,p.y,p.x+p.w,p.y+p.h));
-        info.setText("启动："+selectedName+"\n预设："+p.name+"   "+p.w+" × "+p.h+"   DPI "+p.dpi);
-        try{startActivity(intent,options.toBundle());}
-        catch(Exception e){info.setText("启动失败："+e.getMessage());try{startActivity(intent);}catch(Exception ignored){}}
+        options.setLaunchBounds(bounds);
+
+        // 同一物理屏幕上明确指定当前 Display，避免车机多 Display/虚拟 Display
+        // 环境下 Launcher 把 Activity 放到默认 Display。
+        if(Build.VERSION.SDK_INT>=26){
+            try{
+                android.view.Display display=getDisplay();
+                if(display!=null) options.setLaunchDisplayId(display.getDisplayId());
+            }catch(Exception ignored){}
+        }
+
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+        intent.putExtra("com.example.appwindowcontainer.target_x",left);
+        intent.putExtra("com.example.appwindowcontainer.target_y",top);
+        intent.putExtra("com.example.appwindowcontainer.target_w",right-left);
+        intent.putExtra("com.example.appwindowcontainer.target_h",bottom-top);
+        intent.putExtra("com.example.appwindowcontainer.target_dpi",p.dpi);
+
+        info.setText("启动："+selectedName+"\n"+p.name+"  X "+left+"  Y "+top+"  "+(right-left)+" × "+(bottom-top)+"  DPI "+p.dpi);
+
+        try{
+            startActivity(intent,options.toBundle());
+            // 给车机 Launcher 一点时间完成 Activity 切换。这里不再尝试使用
+            // 非公开 API 强制修改别的 APP，避免在 Android 12 上崩溃。
+            new Handler().postDelayed(()->{
+                Toast.makeText(MainActivity.this,
+                        "已按预设请求窗口："+(right-left)+" × "+(bottom-top),
+                        Toast.LENGTH_SHORT).show();
+            },350);
+        }catch(Exception e){
+            info.setText("启动失败："+e.getMessage());
+            try{startActivity(intent);}
+            catch(Exception ignored){Toast.makeText(this,"APP 启动失败",Toast.LENGTH_SHORT).show();}
+        }
     }
 }
