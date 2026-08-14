@@ -1,4 +1,4 @@
-name: 构建 APP窗口容器 权限增强_全屏框选版
+name: 构建 APP窗口容器 三区域诊断增强版
 
 on:
   workflow_dispatch:
@@ -10,44 +10,49 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: Java 17
-        uses: actions/setup-java@v4
+      - name: 设置 Java 17
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Android SDK
+      - name: 设置 Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: 安装 SDK
+      - name: 安装 Android SDK
         run: |
           yes | sdkmanager --licenses || true
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Gradle 8.7
+      - name: 设置 Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      # 防止旧版本工程残留的 com.example.carappjump/MainActivity.java
-      # 与当前 namespace=com.example.appwindowcontainer 冲突。
-      - name: 清理旧版 Java 源码
+      - name: 清理旧源码并检查源码
+        shell: bash
         run: |
           rm -rf app/src/main/java/com/example/carappjump
-          echo "当前 Java 源文件："
+          echo "=== Java 源文件 ==="
           find app/src/main/java -type f -name '*.java' -print
+          echo "=== Manifest ==="
+          sed -n '1,240p' app/src/main/AndroidManifest.xml
 
-      - name: 编译 APK
+      - name: 编译 Java
+        run: gradle :app:compileDebugJavaWithJavac --no-daemon --stacktrace --info
+
+      - name: 构建 Debug APK
         run: gradle clean assembleDebug --no-daemon --stacktrace --info
 
       - name: 准备 APK
         run: |
           mkdir -p output
-          cp app/build/outputs/apk/debug/app-debug.apk "output/APP窗口容器_权限增强版.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "output/APP窗口容器_三区域诊断增强版.apk"
+          ls -lh output/
 
       - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
-          name: APP窗口容器_权限增强版
-          path: output/APP窗口容器_权限增强版.apk
+          name: APP窗口容器_三区域诊断增强版
+          path: output/APP窗口容器_三区域诊断增强版.apk
           if-no-files-found: error
