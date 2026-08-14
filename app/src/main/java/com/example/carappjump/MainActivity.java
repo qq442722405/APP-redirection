@@ -70,8 +70,10 @@ public class MainActivity extends Activity {
             PackageManager pm = getPackageManager();
             Intent launch = pm.getLaunchIntentForPackage(packageName);
             if (launch == null) return false;
-            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
             startActivity(launch);
+            // 启动目标 APP 后立即结束本启动器，避免车机再次打开时出现白屏。
+            finishAndRemoveTask();
             return true;
         } catch (Exception ignored) {
             return false;
@@ -132,7 +134,7 @@ public class MainActivity extends Activity {
                     prefs.edit().remove(KEY_PACKAGE).apply();
                     Toast.makeText(this, "无法启动该 APP，请重新选择", Toast.LENGTH_LONG).show();
                 } else {
-                    finish();
+                    // tryLaunch() 成功时已经关闭自身，这里无需再次 finish。
                 }
             }, 120);
         });
