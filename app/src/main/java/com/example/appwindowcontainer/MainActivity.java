@@ -548,7 +548,7 @@ public class MainActivity extends AppCompatActivity {
         Paint fill=new Paint(Paint.ANTI_ALIAS_FLAG),stroke=new Paint(Paint.ANTI_ALIAS_FLAG),txt=new Paint(Paint.ANTI_ALIAS_FLAG);
         Object owner; float sx=-1,sy=-1,ex=-1,ey=-1; boolean drawing=false;
         android.view.Display display; android.graphics.Point real;
-        SelectionView(Context c,Object owner,int displayId){this(c,owner,findDisplay(displayId));}
+        SelectionView(Context c,Object owner,int displayId){this(c,owner,MainActivity.this.findDisplay(displayId));}
         SelectionView(Context c,Object owner,android.view.Display d){super(c);this.owner=owner;this.display=d;this.real=getRealScreenSize(d);
             setBackgroundColor(Color.TRANSPARENT); fill.setColor(0x66000000); stroke.setColor(Color.WHITE); stroke.setStyle(Paint.Style.STROKE); stroke.setStrokeWidth(dp(3));
             txt.setColor(Color.WHITE); txt.setTextSize(dp(16)); txt.setTypeface(Typeface.DEFAULT_BOLD);
@@ -606,7 +606,7 @@ public class MainActivity extends AppCompatActivity {
         s.append("Android Display 数量：").append(ds.length).append("\n\n");
         for(android.view.Display d:ds){
             android.graphics.Point p=getRealScreenSize(d);
-            android.view.DisplayMetrics m=new android.view.DisplayMetrics(); d.getRealMetrics(m);
+            android.util.DisplayMetrics m=new android.util.DisplayMetrics(); d.getRealMetrics(m);
             s.append("Display ID: ").append(d.getDisplayId()).append("\n");
             s.append("真实分辨率: ").append(p.x).append(" × ").append(p.y).append("\n");
             s.append("densityDpi: ").append(m.densityDpi).append("  density: ").append(m.density).append("\n");
