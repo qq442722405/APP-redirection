@@ -7,6 +7,10 @@ import android.content.pm.*;
 import android.graphics.*;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
+import android.os.Build;
+import android.os.Environment;
+import android.provider.Settings;
+import android.net.Uri;
 import android.os.Handler;
 import android.view.*;
 import android.widget.*;
@@ -108,6 +112,78 @@ public class MainActivity extends AppCompatActivity {
         prefs=getSharedPreferences(PREF,0);
         loadData();
         buildUI();
+        requestRuntimePermissions();
+    }
+
+    static final int REQ_RUNTIME_PERMS = 19041;
+
+    /**
+     * 只申请本 APK 在 Android 12/13+ 上真正可以由用户授予的运行时权限。
+     * 特殊权限不强行跳转，避免启动 APP 时被连续带离主界面；下面的 helper
+     * 可以在需要时打开对应系统授权页。Manifest 已提前声明这些权限，便于
+     * 在 ADB 仍可用时由系统/ADB 进行预授权。
+     */
+    void requestRuntimePermissions(){
+        ArrayList<String> req=new ArrayList<>();
+        if(Build.VERSION.SDK_INT>=33){
+            if(checkSelfPermission("android.permission.POST_NOTIFICATIONS")!=PackageManager.PERMISSION_GRANTED)
+                req.add("android.permission.POST_NOTIFICATIONS");
+            // 媒体权限仅用于用户主动选择/读取媒体；不在 Android 12 上请求。
+            if(checkSelfPermission("android.permission.READ_MEDIA_IMAGES")!=PackageManager.PERMISSION_GRANTED)
+                req.add("android.permission.READ_MEDIA_IMAGES");
+            if(checkSelfPermission("android.permission.READ_MEDIA_VIDEO")!=PackageManager.PERMISSION_GRANTED)
+                req.add("android.permission.READ_MEDIA_VIDEO");
+            if(checkSelfPermission("android.permission.READ_MEDIA_AUDIO")!=PackageManager.PERMISSION_GRANTED)
+                req.add("android.permission.READ_MEDIA_AUDIO");
+        }else if(Build.VERSION.SDK_INT>=23){
+            if(checkSelfPermission("android.permission.READ_EXTERNAL_STORAGE")!=PackageManager.PERMISSION_GRANTED)
+                req.add("android.permission.READ_EXTERNAL_STORAGE");
+            if(checkSelfPermission("android.permission.WRITE_EXTERNAL_STORAGE")!=PackageManager.PERMISSION_GRANTED)
+                req.add("android.permission.WRITE_EXTERNAL_STORAGE");
+        }
+        if(!req.isEmpty()) requestPermissions(req.toArray(new String[0]),REQ_RUNTIME_PERMS);
+    }
+
+    boolean hasOverlayPermission(){
+        return Build.VERSION.SDK_INT<23 || Settings.canDrawOverlays(this);
+    }
+
+    boolean hasAllFilesPermission(){
+        return Build.VERSION.SDK_INT<30 || Environment.isExternalStorageManager();
+    }
+
+    boolean hasUsageAccess(){
+        try{
+            android.app.AppOpsManager ops=(android.app.AppOpsManager)getSystemService(APP_OPS_SERVICE);
+            int mode=ops.unsafeCheckOpNoThrow("android:get_usage_stats",android.os.Process.myUid(),getPackageName());
+            return mode==android.app.AppOpsManager.MODE_ALLOWED;
+        }catch(Exception e){ return false; }
+    }
+
+    void openOverlaySettings(){
+        try{ startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:"+getPackageName()))); }
+        catch(Exception e){ startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)); }
+    }
+
+    void openAllFilesSettings(){
+        if(Build.VERSION.SDK_INT>=30){
+            try{ startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:"+getPackageName()))); }
+            catch(Exception e){ startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)); }
+        }
+    }
+
+    void openUsageSettings(){
+        try{ startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)); }catch(Exception ignored){}
+    }
+
+    void requestBatteryOptimization(){
+        try{
+            android.os.PowerManager pm=(android.os.PowerManager)getSystemService(POWER_SERVICE);
+            if(Build.VERSION.SDK_INT>=23 && !pm.isIgnoringBatteryOptimizations(getPackageName())){
+                Intent i=new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                i.setData(Uri.parse("package:"+getPackageName())); startActivity(i);
+            }
+        }catch(Exception ignored){}
     }
 
     void loadData(){
@@ -203,8 +279,29 @@ public class MainActivity extends AppCompatActivity {
         info.setTextColor(Color.WHITE);
         info.setPadding(dp(10),dp(8),dp(10),dp(8));
         root.addView(info,new LinearLayout.LayoutParams(-1,dp(68)));
+        // 长按底部状态区可打开特殊权限准备页；主界面不增加设置按钮。
+        info.setOnLongClickListener(v->{showPermissionPreparation();return true;});
         setContentView(root);
         refresh();
+    }
+
+    void showPermissionPreparation(){
+        String overlay=hasOverlayPermission()?"✓":"未授权";
+        String storage=hasAllFilesPermission()?"✓":"未授权";
+        String usage=hasUsageAccess()?"✓":"未授权";
+        StringBuilder msg=new StringBuilder();
+        msg.append("悬浮窗：").append(overlay).append("\n");
+        msg.append("完整文件访问：").append(storage).append("\n");
+        msg.append("使用情况访问：").append(usage).append("\n");
+        msg.append("\n普通权限会在首次启动时自动申请。\n");
+        msg.append("特殊权限需要系统授权，Manifest 已提前声明。\n");
+        new AlertDialog.Builder(this).setTitle("权限准备")
+            .setItems(new String[]{"授权悬浮窗","授权完整文件访问","授权使用情况访问","忽略电池优化"},(d,w)->{
+                if(w==0) openOverlaySettings();
+                else if(w==1) openAllFilesSettings();
+                else if(w==2) openUsageSettings();
+                else requestBatteryOptimization();
+            }).setMessage(msg.toString()).setNegativeButton("关闭",null).show();
     }
 
     void refresh(){
