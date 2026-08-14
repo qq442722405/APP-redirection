@@ -689,9 +689,12 @@ public class MainActivity extends AppCompatActivity {
 
         // 同一物理屏幕上明确指定当前 Display，避免车机多 Display/虚拟 Display
         // 环境下 Launcher 把 Activity 放到默认 Display。
-        if(Build.VERSION.SDK_INT>=26){
+        if(Build.VERSION.SDK_INT>=26 && targetDisplay!=null){
+            // 通过反射调用 Android 8.0+ 的 setLaunchDisplayId，避免部分车机 SDK
+            // 或定制编译环境缺少该公开方法声明时导致编译失败。
             try{
-                if(targetDisplay!=null) options.setLaunchDisplayId(targetDisplay.getDisplayId());
+                java.lang.reflect.Method m=ActivityOptions.class.getMethod("setLaunchDisplayId",int.class);
+                m.invoke(options,targetDisplay.getDisplayId());
             }catch(Exception ignored){}
         }
 
