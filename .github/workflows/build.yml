@@ -29,6 +29,14 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      # 防止旧版本工程残留的 com.example.carappjump/MainActivity.java
+      # 与当前 namespace=com.example.appwindowcontainer 冲突。
+      - name: 清理旧版 Java 源码
+        run: |
+          rm -rf app/src/main/java/com/example/carappjump
+          echo "当前 Java 源文件："
+          find app/src/main/java -type f -name '*.java' -print
+
       - name: 编译 APK
         run: gradle clean assembleDebug --no-daemon --stacktrace
 
