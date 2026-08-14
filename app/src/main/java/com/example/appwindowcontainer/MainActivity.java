@@ -537,7 +537,16 @@ public class MainActivity extends AppCompatActivity {
             getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
             getWindow().setDimAmount(0f);
-            SelectionView v=new SelectionView(MainActivity.this,this,getDisplay());
+            android.view.Display selectionDisplay = null;
+            try {
+                if (getWindow() != null && getWindow().getDecorView() != null) {
+                    selectionDisplay = getWindow().getDecorView().getDisplay();
+                }
+            } catch (Exception ignored) {}
+            if (selectionDisplay == null) {
+                selectionDisplay = getWindow().getWindowManager().getDefaultDisplay();
+            }
+            SelectionView v=new SelectionView(MainActivity.this,this,selectionDisplay);
             setContentView(v);
             Window w=getWindow();
             if(w!=null)w.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
