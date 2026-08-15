@@ -561,7 +561,6 @@ public class MainActivity extends AppCompatActivity {
     // 因此不再依赖 Presentation/多 Display 全屏框选。
     void editPreset(int index){
         if(index<0){
-            android.graphics.Point rs=getRealScreenSize();
             Preset old=new Preset("",0,0,0,0,-1,1);
             showPresetEditor(-1,old);
             return;
@@ -577,6 +576,12 @@ public class MainActivity extends AppCompatActivity {
         EditText y=numberField("上间距",String.valueOf(old.y));
         EditText width=numberField("窗口宽度",String.valueOf(old.w));
         EditText height=numberField("窗口高度",String.valueOf(old.h));
+        // 使用 final 数组保存模式，避免 Lambda 捕获会被修改的局部状态。
+        final int[] selectedMode = {old.mode};
+        final int oldX = old.x;
+        final int oldY = old.y;
+        final int oldW = old.w;
+        final int oldH = old.h;
 
         box.addView(labeledField("预设名称",name));
         box.addView(labeledNumberField("左间距",x));
@@ -590,9 +595,6 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout modeRow=new LinearLayout(this);
         modeRow.setOrientation(LinearLayout.HORIZONTAL);
         modeRow.setPadding(dp(115),0,dp(4),dp(4));
-        // 不直接修改 old，避免后面的保存 Lambda 因 old 不再是 effectively final
-        // 而触发 Java 编译错误。
-        final int[] selectedMode={old.mode};
         Button[] modeButtons=new Button[6];
         for(int m=1;m<=6;m++){
             final int mm=m;
@@ -619,10 +621,10 @@ public class MainActivity extends AppCompatActivity {
             String n=name.getText().toString().trim();
             if(n.isEmpty()){Toast.makeText(this,"请输入预设名称",Toast.LENGTH_SHORT).show();return;}
             Preset p=new Preset(n,
-                    Math.max(0,number(x,old.x)),
-                    Math.max(0,number(y,old.y)),
-                    Math.max(1,number(width,old.w)),
-                    Math.max(1,number(height,old.h)),
+                    Math.max(0,number(x,oldX)),
+                    Math.max(0,number(y,oldY)),
+                    Math.max(1,number(width,oldW)),
+                    Math.max(1,number(height,oldH)),
                     -1,selectedMode[0]);
             if(index<0) presets.add(p); else presets.set(index,p);
             savePresets(); refresh();
