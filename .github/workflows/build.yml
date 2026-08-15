@@ -1,4 +1,4 @@
-name: 构建 APP窗口容器 窗口模式_手动保存修复版
+name: 构建 APP窗口容器 窗口模式_自动启动编译修复版
 
 on:
   workflow_dispatch:
@@ -53,13 +53,13 @@ jobs:
           mkdir -p output
           APK=$(find app/build/outputs/apk -type f -name "*.apk" | head -n 1)
           test -n "$APK"
-          cp "$APK" "output/APP窗口容器_窗口模式_手动保存修复版.apk"
+          cp "$APK" "output/APP窗口容器_窗口模式_自动启动编译修复版.apk"
           ls -lh output/
 
       - name: 上传 APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: APP窗口容器_窗口模式_手动保存修复版
-          path: output/APP窗口容器_窗口模式_手动保存修复版.apk
+          name: APP窗口容器_窗口模式_自动启动编译修复版
+          path: output/APP窗口容器_窗口模式_自动启动编译修复版.apk
           if-no-files-found: error
