@@ -1,4 +1,4 @@
-name: 构建 APP窗口容器 窗口模式_自动启动编译修复版
+name: 构建 APP窗口容器 三区域诊断增强版
 
 on:
   workflow_dispatch:
@@ -24,10 +24,10 @@ jobs:
           yes | sdkmanager --licenses || true
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: 设置 Gradle 8.9
+      - name: 设置 Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.7'
 
       - name: 检查工程结构
         shell: bash
@@ -40,26 +40,17 @@ jobs:
           find app/src/main/java -type f -name '*.java' -print
 
       - name: 构建 Debug APK
-        run: gradle clean :app:assembleDebug --no-daemon --stacktrace --info --console=plain
-
-      - name: 检查构建输出
-        if: always()
-        run: |
-          echo "=== APK 输出 ==="
-          find app/build/outputs -type f -name "*.apk" -print 2>/dev/null || true
+        run: gradle clean :app:assembleDebug --no-daemon --stacktrace
 
       - name: 准备 APK
         run: |
           mkdir -p output
-          APK=$(find app/build/outputs/apk -type f -name "*.apk" | head -n 1)
-          test -n "$APK"
-          cp "$APK" "output/APP窗口容器_窗口模式_自动启动编译修复版.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "output/APP窗口容器_三区域诊断增强版.apk"
           ls -lh output/
 
       - name: 上传 APK
-        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: APP窗口容器_窗口模式_自动启动编译修复版
-          path: output/APP窗口容器_窗口模式_自动启动编译修复版.apk
+          name: APP窗口容器_三区域诊断增强版
+          path: output/APP窗口容器_三区域诊断增强版.apk
           if-no-files-found: error
