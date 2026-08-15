@@ -123,17 +123,18 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout row=new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        TextView l=text(label,14);
+        TextView l=text(label,18);
         l.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
-        row.addView(l,new LinearLayout.LayoutParams(dp(115),dp(54)));
-        row.addView(input,new LinearLayout.LayoutParams(0,dp(54),1));
+        row.addView(l,new LinearLayout.LayoutParams(dp(115),dp(62)));
+        input.setTextSize(18);
+        row.addView(input,new LinearLayout.LayoutParams(0,dp(62),1));
 
         String[] captions={"+100","-100","+10","-10","重置0"};
         int[] deltas={100,-100,10,-10,0};
         for(int i=0;i<captions.length;i++){
             final int delta=deltas[i];
             Button b=button(captions[i]);
-            b.setTextSize(11);
+            b.setTextSize(13);
             b.setMinWidth(0);
             b.setMinHeight(0);
             b.setPadding(0,0,0,0);
@@ -142,7 +143,7 @@ public class MainActivity extends AppCompatActivity {
                 else adjustNumber(input,delta);
                 input.setSelection(input.length());
             });
-            row.addView(b,new LinearLayout.LayoutParams(dp(58),dp(44)));
+            row.addView(b,new LinearLayout.LayoutParams(dp(58),dp(50)));
         }
         return row;
     }
@@ -165,9 +166,10 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout row=new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        TextView l=text(label,14);
-        row.addView(l,new LinearLayout.LayoutParams(dp(115),dp(54)));
-        row.addView(input,new LinearLayout.LayoutParams(0,dp(54),1));
+        TextView l=text(label,18);
+        row.addView(l,new LinearLayout.LayoutParams(dp(115),dp(62)));
+        input.setTextSize(18);
+        row.addView(input,new LinearLayout.LayoutParams(0,dp(62),1));
         return row;
     }
 
@@ -503,9 +505,60 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // 长按菜单不再使用 AlertDialog。部分车机对独立 Dialog Window 的触摸坐标
+    // 映射存在偏移，因此统一使用当前 Activity 内的覆盖层，保证按钮位置与触控区域一致。
+    void showLongPressMenu(String title, String[] items, android.view.View.OnClickListener[] listeners){
+        final FrameLayout overlay=new FrameLayout(this);
+        overlay.setBackgroundColor(0x66000000);
+        overlay.setClickable(true);
+        overlay.setFocusable(true);
+
+        LinearLayout card=new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(24),dp(18),dp(24),dp(18));
+        card.setBackgroundResource(R.drawable.card);
+
+        TextView titleView=text(title,22);
+        titleView.setTypeface(null,1);
+        titleView.setGravity(Gravity.CENTER);
+        card.addView(titleView,new LinearLayout.LayoutParams(dp(360),dp(58)));
+
+        for(int i=0;i<items.length;i++){
+            final int pos=i;
+            Button b=button(items[i]);
+            b.setTextSize(18);
+            b.setMinHeight(0);
+            b.setPadding(dp(8),0,dp(8),0);
+            LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(dp(320),dp(58));
+            bp.topMargin=dp(8);
+            card.addView(b,bp);
+            b.setOnClickListener(v->{
+                if(listeners[pos]!=null) listeners[pos].onClick(v);
+                screenRoot.removeView(overlay);
+            });
+        }
+
+        Button cancel=button("取消");
+        cancel.setTextSize(18);
+        LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(dp(320),dp(58));
+        cp.topMargin=dp(10);
+        card.addView(cancel,cp);
+        cancel.setOnClickListener(v->screenRoot.removeView(overlay));
+
+        FrameLayout.LayoutParams fp=new FrameLayout.LayoutParams(dp(400),-2,Gravity.CENTER);
+        overlay.addView(card,fp);
+        screenRoot.addView(overlay,new FrameLayout.LayoutParams(-1,-1));
+        overlay.bringToFront();
+        card.bringToFront();
+    }
+
     void appLongMenu(AppItem item){
-        new AlertDialog.Builder(this).setTitle(item.name)
-                .setItems(new String[]{"关闭 APP","删除快捷方式"},(d,w)->{if(w==0)closeApp(item.pkg);else deleteApp(item);}).show();
+        showLongPressMenu(item.name,
+                new String[]{"关闭 APP","删除快捷方式"},
+                new android.view.View.OnClickListener[]{
+                        v->closeApp(item.pkg),
+                        v->deleteApp(item)
+                });
     }
 
     void closeApp(String pkg){
@@ -651,9 +704,12 @@ public class MainActivity extends AppCompatActivity {
 
     void presetMenu(int index){
         Preset p=presets.get(index);
-        new AlertDialog.Builder(this).setTitle(p.name).setItems(new String[]{"编辑预设","删除预设"},(d,w)->{
-            if(w==0)editPreset(index);else{presets.remove(index);savePresets();refresh();}
-        }).show();
+        showLongPressMenu(p.name,
+                new String[]{"编辑预设","删除预设"},
+                new android.view.View.OnClickListener[]{
+                        v->editPreset(index),
+                        v->{presets.remove(index);savePresets();refresh();}
+                });
     }
 
     // 新建/编辑预设统一使用手动输入。
@@ -697,7 +753,7 @@ public class MainActivity extends AppCompatActivity {
         cp.topMargin=dp(45);
         cp.bottomMargin=dp(45);
 
-        TextView title=text(index<0?"新建窗口预设":"编辑窗口预设",20);
+        TextView title=text(index<0?"新建窗口预设":"编辑窗口预设",26);
         title.setTypeface(null,1);
         title.setGravity(Gravity.CENTER);
         card.addView(title,new LinearLayout.LayoutParams(-1,dp(48)));
@@ -739,12 +795,14 @@ public class MainActivity extends AppCompatActivity {
 
         Button cancel=button("取消");
         Button save=button("完成");
+        cancel.setTextSize(17);
+        save.setTextSize(17);
 
-        actions.addView(cancel,new LinearLayout.LayoutParams(dp(120),dp(48)));
-        LinearLayout.LayoutParams saveLp=new LinearLayout.LayoutParams(dp(120),dp(48));
+        actions.addView(cancel,new LinearLayout.LayoutParams(dp(140),dp(58)));
+        LinearLayout.LayoutParams saveLp=new LinearLayout.LayoutParams(dp(140),dp(58));
         saveLp.leftMargin=dp(12);
         actions.addView(save,saveLp);
-        card.addView(actions,new LinearLayout.LayoutParams(-1,dp(58)));
+        card.addView(actions,new LinearLayout.LayoutParams(-1,dp(68)));
 
         // 编辑时先复制，点击“完成”才写回；新建时点击“完成”才加入列表。
         final Preset working=new Preset(
