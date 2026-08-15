@@ -1,4 +1,4 @@
-name: 构建 APP窗口容器 窗口模式_自动保存版
+name: 构建 APP窗口容器 窗口模式_手动保存修复版
 
 on:
   workflow_dispatch:
@@ -24,7 +24,7 @@ jobs:
           yes | sdkmanager --licenses || true
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: 设置 Gradle 8.7
+      - name: 设置 Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
@@ -51,13 +51,13 @@ jobs:
       - name: 准备 APK
         run: |
           mkdir -p output
-          cp app/build/outputs/apk/debug/app-debug.apk "output/APP窗口容器_窗口模式_自动保存版.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "output/APP窗口容器_窗口模式_手动保存修复版.apk"
           ls -lh output/
 
       - name: 上传 APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: APP窗口容器_触控修复_间距快速调整版
-          path: output/APP窗口容器_窗口模式_自动保存版.apk
+          name: APP窗口容器_窗口模式_手动保存修复版
+          path: output/APP窗口容器_窗口模式_手动保存修复版.apk
           if-no-files-found: error
