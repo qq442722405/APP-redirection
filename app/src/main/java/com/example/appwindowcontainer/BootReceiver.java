@@ -15,14 +15,15 @@ public class BootReceiver extends BroadcastReceiver {
             JSONArray arr=new JSONArray(p.getString("auto_start_items","[]"));
             if(arr.length()==0)return;
             int interval=Math.max(1,p.getInt("auto_start_interval",1));
+            int bootDelay=Math.max(0,p.getInt("boot_delay_sec",5));
             PendingResult result=goAsync();
             Handler h=new Handler(Looper.getMainLooper());
             for(int i=0;i<arr.length();i++){
                 final JSONObject item=arr.getJSONObject(i);
-                final long delay=(long)i*interval*1000L;
+                final long delay=((long)bootDelay+(long)i*interval)*1000L;
                 h.postDelayed(()->launchOne(context,p,item),delay);
             }
-            h.postDelayed(result::finish,(long)arr.length()*interval*1000L+3000L);
+            h.postDelayed(result::finish,((long)bootDelay+(long)arr.length()*interval)*1000L+3000L);
         }catch(Exception ignored){}
     }
     void launchOne(Context context,SharedPreferences p,JSONObject item){
