@@ -29,15 +29,20 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: 检查工程结构
+      - name: 清理旧版资源并检查工程
         shell: bash
         run: |
-          if find app/src/main/java -type f -path '*com/example/carappjump/*' | grep -q .; then
-            echo "检测到旧版 carappjump 源码，构建前删除"
-            rm -rf app/src/main/java/com/example/carappjump
+          # 旧提交曾经存在 shortcuts.xml，可能引用不存在的 string/reselect。
+          # 当前版本不使用该资源，构建前主动删除，避免 AAPT 读取旧文件。
+          find app/src/main/res -type f -name 'shortcuts.xml' -print -delete || true
+          if [ -f app/src/main/res/xml/accessibility_service_config.xml ]; then
+            echo '=== accessibility_service_config.xml ==='
+            cat app/src/main/res/xml/accessibility_service_config.xml
           fi
-          echo "=== 当前 Java 源文件 ==="
+          echo '=== Java source ==='
           find app/src/main/java -type f -name '*.java' -print
+          echo '=== XML resources ==='
+          find app/src/main/res -type f -name '*.xml' -print
 
       - name: 构建 Debug APK
         run: gradle clean :app:assembleDebug --no-daemon --stacktrace
