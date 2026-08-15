@@ -3,13 +3,12 @@
     <shortcut
         android:shortcutId="reselect"
         android:enabled="true"
-        android:icon="@drawable/ic_launcher"
+        android:icon="@drawable/app_icon"
         android:shortcutShortLabel="@string/reselect"
         android:shortcutLongLabel="@string/reselect">
         <intent
-            android:action="android.intent.action.VIEW"
-            android:targetPackage="com.example.carappjump"
-            android:targetClass="com.example.carappjump.MainActivity"
-            android:data="carappjump://reselect" />
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="com.example.appwindowcontainer"
+            android:targetClass="com.example.appwindowcontainer.MainActivity" />
     </shortcut>
 </shortcuts>
