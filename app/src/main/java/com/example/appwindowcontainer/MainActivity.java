@@ -32,6 +32,7 @@ public class MainActivity extends AppCompatActivity {
     String selectedPackage=null;
     String selectedName=null;
     int selectedWindowMode=1;
+    boolean autoStartEnabled=false;
     ArrayList<Button> modeButtons=new ArrayList<>();
     HashMap<String,Long> appClickTimes=new HashMap<>();
 
@@ -186,9 +187,14 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         prefs=getSharedPreferences(PREF,0);
         selectedWindowMode=prefs.getInt("window_mode",1);
+        autoStartEnabled=prefs.getBoolean("auto_start_enabled",false);
         loadData();
         buildUI();
         requestRuntimePermissions();
+        // 打开“APP窗口容器”后，如果主界面的自动启动开关已打开，自动执行已保存任务。
+        if(autoStartEnabled && !autoStarts.isEmpty()){
+            new Handler().postDelayed(()->executeAutoStarts(),1000);
+        }
     }
 
     static final int REQ_RUNTIME_PERMS = 19041;
@@ -340,6 +346,20 @@ public class MainActivity extends AppCompatActivity {
         presetHeader.addView(addPreset,new LinearLayout.LayoutParams(dp(52),dp(44)));
         TextView pt=text("窗口预设",17); pt.setTypeface(null,1);
         presetHeader.addView(pt,new LinearLayout.LayoutParams(0,dp(44),1));
+
+        // 主界面自动启动总开关：打开后，进入 APP窗口容器时自动执行“APP自动启动”里已保存的任务。
+        Button autoStartToggle=button(autoStartEnabled?"启动：开":"启动：关");
+        autoStartToggle.setTextSize(13);
+        autoStartToggle.setOnClickListener(v->{
+            autoStartEnabled=!autoStartEnabled;
+            prefs.edit().putBoolean("auto_start_enabled",autoStartEnabled).apply();
+            autoStartToggle.setText(autoStartEnabled?"启动：开":"启动：关");
+            autoStartToggle.setBackgroundResource(autoStartEnabled?R.drawable.card_selected:R.drawable.button);
+            Toast.makeText(this,autoStartEnabled?"已开启：进入容器后自动启动设置好的任务":"已关闭：进入容器后不自动启动任务",Toast.LENGTH_SHORT).show();
+        });
+        autoStartToggle.setBackgroundResource(autoStartEnabled?R.drawable.card_selected:R.drawable.button);
+        presetHeader.addView(autoStartToggle,new LinearLayout.LayoutParams(dp(82),dp(44)));
+
         Button autoStart=button("自动启动"); autoStart.setTextSize(14); autoStart.setOnClickListener(v->showAutoStartEditor());
         presetHeader.addView(autoStart,new LinearLayout.LayoutParams(dp(110),dp(44)));
         root.addView(presetHeader,new LinearLayout.LayoutParams(-1,dp(44)));
@@ -857,21 +877,77 @@ public class MainActivity extends AppCompatActivity {
         final FrameLayout overlay=new FrameLayout(this); overlay.setBackgroundColor(0xEE000000); overlay.setClickable(true); overlay.setFocusable(true);
         LinearLayout card=new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setPadding(dp(22),dp(16),dp(22),dp(16)); card.setBackgroundResource(R.drawable.card);
         TextView title=text("APP自动启动",24); title.setTypeface(null,1); title.setGravity(Gravity.CENTER); card.addView(title,new LinearLayout.LayoutParams(-1,dp(48)));
-        LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); ScrollView scroll=new ScrollView(this); scroll.addView(list); card.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+
+        // 编辑窗口使用草稿列表；只有点击“保存”才写入持久化配置。
+        final ArrayList<AutoStartItem> draft=new ArrayList<>();
+        for(AutoStartItem x:autoStarts) draft.add(new AutoStartItem(x.pkg,x.name,x.presetName));
+
+        LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL);
+        ScrollView scroll=new ScrollView(this); scroll.addView(list); card.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         final Runnable[] render = new Runnable[1];
-        render[0] = () -> { list.removeAllViews(); if(autoStarts.isEmpty()){ TextView e=text("还没有设置自动启动项目\n点击“添加”设置 APP 和可选预设",16); e.setGravity(Gravity.CENTER); list.addView(e,new LinearLayout.LayoutParams(-1,dp(100))); } for(int i=0;i<autoStarts.size();i++){ final int idx=i; AutoStartItem item=autoStarts.get(i); LinearLayout row=new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL); TextView t=text((i+1)+". "+item.name+"\n"+(item.presetName==null||item.presetName.isEmpty()?"不使用预设":"预设："+item.presetName),15); t.setGravity(Gravity.CENTER_VERTICAL); row.addView(t,new LinearLayout.LayoutParams(0,dp(64),1)); Button del=button("删除"); del.setTextSize(15); row.addView(del,new LinearLayout.LayoutParams(dp(82),dp(54))); del.setOnClickListener(v->{autoStarts.remove(idx);saveAutoStarts();render[0].run();}); list.addView(row,new LinearLayout.LayoutParams(-1,dp(72))); } };
-        LinearLayout actions=new LinearLayout(this); actions.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL); Button add=button("添加"),start=button("启动"),close=button("关闭"); add.setTextSize(16);start.setTextSize(16);close.setTextSize(16); actions.addView(add,new LinearLayout.LayoutParams(dp(100),dp(58))); actions.addView(start,new LinearLayout.LayoutParams(dp(100),dp(58))); actions.addView(close,new LinearLayout.LayoutParams(dp(100),dp(58))); card.addView(actions,new LinearLayout.LayoutParams(-1,dp(68)));
-        add.setOnClickListener(v->showAutoStartItemEditor(render[0])); start.setOnClickListener(v->executeAutoStarts()); close.setOnClickListener(v->screenRoot.removeView(overlay));
-        FrameLayout.LayoutParams fp=new FrameLayout.LayoutParams(dp(620),dp(600),Gravity.CENTER); overlay.addView(card,fp); screenRoot.addView(overlay,new FrameLayout.LayoutParams(-1,-1)); overlay.bringToFront(); card.bringToFront(); render[0].run();
+        render[0] = () -> {
+            list.removeAllViews();
+            if(draft.isEmpty()){
+                TextView e=text("还没有设置自动启动项目\n点击“添加”设置 APP 和可选预设",16); e.setGravity(Gravity.CENTER);
+                list.addView(e,new LinearLayout.LayoutParams(-1,dp(100)));
+            }
+            for(int i=0;i<draft.size();i++){
+                final int idx=i; AutoStartItem item=draft.get(i);
+                LinearLayout row=new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL);
+                TextView t=text((i+1)+". "+item.name+"\n"+(item.presetName==null||item.presetName.isEmpty()?"不使用预设":"预设："+item.presetName),15);
+                t.setGravity(Gravity.CENTER_VERTICAL); row.addView(t,new LinearLayout.LayoutParams(0,dp(64),1));
+                Button del=button("删除"); del.setTextSize(15); row.addView(del,new LinearLayout.LayoutParams(dp(82),dp(54)));
+                del.setOnClickListener(v->{draft.remove(idx);render[0].run();});
+                list.addView(row,new LinearLayout.LayoutParams(-1,dp(72)));
+            }
+        };
+
+        LinearLayout actions=new LinearLayout(this); actions.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        Button add=button("添加"),save=button("保存"),close=button("关闭");
+        add.setTextSize(16); save.setTextSize(16); close.setTextSize(16);
+        actions.addView(add,new LinearLayout.LayoutParams(dp(100),dp(58)));
+        actions.addView(save,new LinearLayout.LayoutParams(dp(100),dp(58)));
+        actions.addView(close,new LinearLayout.LayoutParams(dp(100),dp(58)));
+        card.addView(actions,new LinearLayout.LayoutParams(-1,dp(68)));
+
+        add.setOnClickListener(v->showAutoStartItemEditor(item->{
+            // 添加窗口中的“确定”只加入当前草稿，不立即保存。
+            render[0].run();
+        },draft));
+        save.setOnClickListener(v->{
+            autoStarts.clear();
+            for(AutoStartItem x:draft) autoStarts.add(new AutoStartItem(x.pkg,x.name,x.presetName));
+            saveAutoStarts();
+            screenRoot.removeView(overlay);
+            Toast.makeText(this,"自动启动设置已保存",Toast.LENGTH_SHORT).show();
+        });
+        close.setOnClickListener(v->screenRoot.removeView(overlay));
+
+        FrameLayout.LayoutParams fp=new FrameLayout.LayoutParams(dp(620),dp(600),Gravity.CENTER);
+        overlay.addView(card,fp); screenRoot.addView(overlay,new FrameLayout.LayoutParams(-1,-1));
+        overlay.bringToFront(); card.bringToFront(); render[0].run();
     }
 
-    void showAutoStartItemEditor(Runnable refreshList){
-        ArrayList<AppItem> available=new ArrayList<>(apps); if(available.isEmpty()){Toast.makeText(this,"请先添加 APP",Toast.LENGTH_SHORT).show();return;}
+    void showAutoStartItemEditor(Runnable refreshList, ArrayList<AutoStartItem> draft){
+        ArrayList<AppItem> available=new ArrayList<>(apps);
+        if(available.isEmpty()){Toast.makeText(this,"请先添加 APP",Toast.LENGTH_SHORT).show();return;}
         LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(18),dp(10),dp(18),dp(8));
-        Spinner appSpinner=new Spinner(this); ArrayList<String> names=new ArrayList<>(); for(AppItem a:available) names.add(a.name); appSpinner.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,names)); box.addView(appSpinner,new LinearLayout.LayoutParams(-1,dp(58)));
-        Spinner presetSpinner=new Spinner(this); ArrayList<String> pnames=new ArrayList<>(); pnames.add("不使用预设"); for(Preset p:presets)pnames.add(p.name); presetSpinner.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,pnames)); box.addView(presetSpinner,new LinearLayout.LayoutParams(-1,dp(58)));
-        TextView note=text("不选预设 = 仅启动 APP，不限制窗口位置和大小。\n多个项目按顺序启动，每个项目间隔 1 秒。",14); box.addView(note,new LinearLayout.LayoutParams(-1,dp(70)));
-        new AlertDialog.Builder(this).setTitle("添加自动启动项目").setView(box).setNegativeButton("取消",null).setPositiveButton("确定",(d,w)->{int pos=appSpinner.getSelectedItemPosition();AppItem a=available.get(pos);String pn=presetSpinner.getSelectedItemPosition()==0?"":pnames.get(presetSpinner.getSelectedItemPosition());autoStarts.add(new AutoStartItem(a.pkg,a.name,pn));saveAutoStarts();if(refreshList!=null)refreshList.run();}).show();
+        Spinner appSpinner=new Spinner(this);
+        ArrayList<String> names=new ArrayList<>(); for(AppItem a:available) names.add(a.name);
+        appSpinner.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,names));
+        box.addView(appSpinner,new LinearLayout.LayoutParams(-1,dp(58)));
+        Spinner presetSpinner=new Spinner(this);
+        ArrayList<String> pnames=new ArrayList<>(); pnames.add("不使用预设"); for(Preset p:presets)pnames.add(p.name);
+        presetSpinner.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,pnames));
+        box.addView(presetSpinner,new LinearLayout.LayoutParams(-1,dp(58)));
+        TextView note=text("不选预设 = 仅启动 APP，不限制窗口位置和大小。\n多个项目按顺序启动，每个项目间隔 1 秒。",14);
+        box.addView(note,new LinearLayout.LayoutParams(-1,dp(70)));
+        new AlertDialog.Builder(this).setTitle("添加自动启动项目").setView(box).setNegativeButton("取消",null).setPositiveButton("添加",(d,w)->{
+            int pos=appSpinner.getSelectedItemPosition(); AppItem a=available.get(pos);
+            String pn=presetSpinner.getSelectedItemPosition()==0?"":pnames.get(presetSpinner.getSelectedItemPosition());
+            draft.add(new AutoStartItem(a.pkg,a.name,pn));
+            if(refreshList!=null)refreshList.run();
+        }).show();
     }
 
     void executeAutoStarts(){
