@@ -590,6 +590,9 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout modeRow=new LinearLayout(this);
         modeRow.setOrientation(LinearLayout.HORIZONTAL);
         modeRow.setPadding(dp(115),0,dp(4),dp(4));
+        // 不直接修改 old，避免后面的保存 Lambda 因 old 不再是 effectively final
+        // 而触发 Java 编译错误。
+        final int[] selectedMode={old.mode};
         Button[] modeButtons=new Button[6];
         for(int m=1;m<=6;m++){
             final int mm=m;
@@ -598,7 +601,7 @@ public class MainActivity extends AppCompatActivity {
             modeButtons[m-1]=mb;
             if(old.mode==mm) mb.setBackgroundResource(R.drawable.card_selected);
             mb.setOnClickListener(v->{
-                old.mode=mm;
+                selectedMode[0]=mm;
                 for(Button q:modeButtons) q.setBackgroundResource(q==v?R.drawable.card_selected:R.drawable.button);
                 if(mm==6){
                     x.setText("0"); y.setText("0");
@@ -620,7 +623,7 @@ public class MainActivity extends AppCompatActivity {
                     Math.max(0,number(y,old.y)),
                     Math.max(1,number(width,old.w)),
                     Math.max(1,number(height,old.h)),
-                    -1,old.mode);
+                    -1,selectedMode[0]);
             if(index<0) presets.add(p); else presets.set(index,p);
             savePresets(); refresh();
         });
