@@ -790,7 +790,10 @@ public class MainActivity extends AppCompatActivity {
             switch(mode){
                 case 2:
                     // 模式2：窗口范围 + 当前显示屏
-                    setLaunchDisplayIdCompat(options, getWindow().getDisplay().getDisplayId());
+                    android.view.Display currentDisplay = getWindow().getDecorView().getDisplay();
+                    if(currentDisplay != null){
+                        setLaunchDisplayIdCompat(options, currentDisplay.getDisplayId());
+                    }
                     break;
                 case 3:
                     // 模式3：窗口范围 + Freeform（部分车机会忽略）
