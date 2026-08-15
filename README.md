@@ -1,19 +1,20 @@
 # APP窗口启动器
 
-本版本在上一版 AAPT 修复工程基础上继续修改：
+本工程为 Android 12+ 车机使用的 APP 窗口启动器。
 
-1. 添加 APP 分类仅保留「全部 / 系统 / 用户」，默认打开「用户」。
-2. 悬浮窗口支持横向/竖向切换。
-3. 悬浮窗口添加 APP 时只显示 APP 图标，不显示名称；长按图标可删除。
-4. 返回 / 首页 / 菜单改为「添加」后才显示，并使用图标按钮。
-5. 修复悬浮窗口点击「添加 APP」在部分车机上因 Service Context Dialog token 导致的闪退：改为 Overlay 类型 Dialog。
-6. 自动启动项目改为项目管理列表，可添加多个 APP，列表显示 APP 图标、名称、窗口预设，并支持删除。
-7. 自动启动任务间隔可设置，默认 1 秒。
-8. 设置增加「开机延迟」，默认 5 秒；开机完成后先等待设定时间，再按自动启动列表执行。
-9. 保留上一版窗口预设、全屏模式、坐标调整、记事本、屏幕信息等功能。
+## 本版修复与功能
+- 应用名称：APP窗口启动器
+- 新建窗口预设：左间距、上间距、窗口宽度、窗口高度新建时默认 0；支持 +100/-100/+10/-10/归零。
+- 启动模式按钮高亮；全屏模式使用整屏启动边界。
+- 添加 APP 分类：全部 / 系统 / 用户，默认进入“用户”。已删除“默认用户”分类。
+- 主界面右下显示真实屏幕分辨率、DPI、density。
+- 记事本与设置入口位于主界面右下角。
+- 悬浮窗支持横向/竖向、拖动。APP 只显示图标。
+- 悬浮窗“+”可分别添加/移除返回、首页、菜单图标按钮。
+- 悬浮窗 APP 选择使用 Overlay Dialog，避免部分车机点击添加 APP 闪退。
+- 自动启动支持多个 APP 任务，可逐项删除；可设置任务间隔。
+- 设置中支持开机延迟启动时间。
+- accessibility_service_config.xml 的 description 已改为 string 资源，避免 AAPT resource linking error。
 
-GitHub Actions：
-`.github/workflows/build.yml`
-
-构建命令：
-`gradle clean :app:assembleDebug --no-daemon --stacktrace`
+## GitHub Actions
+工作流：`.github/workflows/build.yml`，手动运行即可构建 Debug APK。

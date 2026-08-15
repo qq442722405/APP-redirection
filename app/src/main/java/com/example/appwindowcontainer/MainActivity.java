@@ -391,15 +391,17 @@ public class MainActivity extends AppCompatActivity {
         as.setOnCheckedChangeListener((v,checked)->prefs.edit().putBoolean("auto_start_enabled",checked).apply());
         autoRow.addView(as); box.addView(autoRow);
 
-        Button add=button("自动启动项目管理"); add.setOnClickListener(v->showAutoStartEditor());
+        Button add=button("添加自动启动项目"); add.setOnClickListener(v->showAutoStartEditor());
         box.addView(add,new LinearLayout.LayoutParams(-1,dp(50)));
+        LinearLayout bootRow=new LinearLayout(this); bootRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView bootLabel=text("开机延迟启动（秒）",15); bootRow.addView(bootLabel,new LinearLayout.LayoutParams(0,dp(52),1));
+        EditText bootDelay=numberField("0",String.valueOf(prefs.getInt("boot_delay_seconds",0))); bootRow.addView(bootDelay,new LinearLayout.LayoutParams(dp(100),dp(52)));
+        box.addView(bootRow,new LinearLayout.LayoutParams(-1,dp(54)));
+        bootDelay.setOnFocusChangeListener((v,has)->{ if(!has) prefs.edit().putInt("boot_delay_seconds",Math.max(0,number(bootDelay,0))).apply(); });
 
-        EditText bootDelay=numberField("开机后延迟启动（秒）",String.valueOf(prefs.getInt("boot_delay_sec",5)));
-        box.addView(labeledNumberField("开机延迟",bootDelay));
-        TextView delayHint=text("开机完成后等待设定时间，再按自动启动列表依次启动 APP。",11);
-        delayHint.setTextColor(Color.GRAY);
-        box.addView(delayHint,new LinearLayout.LayoutParams(-1,dp(28)));
-        bootDelay.setOnFocusChangeListener((v,has)->{if(!has){prefs.edit().putInt("boot_delay_sec",Math.max(0,number(bootDelay,5))).apply();}});
+        Button floatLayout=button("悬浮窗方向："+(prefs.getBoolean("floating_vertical",false)?"竖向":"横向"));
+        box.addView(floatLayout,new LinearLayout.LayoutParams(-1,dp(48)));
+        floatLayout.setOnClickListener(v->{ boolean vertical=!prefs.getBoolean("floating_vertical",false); prefs.edit().putBoolean("floating_vertical",vertical).apply(); floatLayout.setText("悬浮窗方向："+(vertical?"竖向":"横向")); if(prefs.getBoolean("floating_enabled",false)){ stopFloatingService(); new Handler().postDelayed(this::startFloatingService,200); }});
 
         Button perm=button("权限与诊断"); perm.setOnClickListener(v->showPermissionPreparation());
         box.addView(perm,new LinearLayout.LayoutParams(-1,dp(50)));
@@ -569,6 +571,7 @@ public class MainActivity extends AppCompatActivity {
     // 因此不再依赖 Presentation/多 Display 全屏框选。
     void editPreset(int index){
         if(index<0){
+            android.graphics.Point rs=getRealScreenSize();
             Preset old=new Preset("",0,0,0,0,-1,1);
             showPresetEditor(-1,old);
             return;
@@ -584,12 +587,6 @@ public class MainActivity extends AppCompatActivity {
         EditText y=numberField("上间距",String.valueOf(old.y));
         EditText width=numberField("窗口宽度",String.valueOf(old.w));
         EditText height=numberField("窗口高度",String.valueOf(old.h));
-        // 使用 final 数组保存模式，避免 Lambda 捕获会被修改的局部状态。
-        final int[] selectedMode = {old.mode};
-        final int oldX = old.x;
-        final int oldY = old.y;
-        final int oldW = old.w;
-        final int oldH = old.h;
 
         box.addView(labeledField("预设名称",name));
         box.addView(labeledNumberField("左间距",x));
@@ -611,7 +608,7 @@ public class MainActivity extends AppCompatActivity {
             modeButtons[m-1]=mb;
             if(old.mode==mm) mb.setBackgroundResource(R.drawable.card_selected);
             mb.setOnClickListener(v->{
-                selectedMode[0]=mm;
+                old.mode=mm;
                 for(Button q:modeButtons) q.setBackgroundResource(q==v?R.drawable.card_selected:R.drawable.button);
                 if(mm==6){
                     x.setText("0"); y.setText("0");
@@ -629,11 +626,11 @@ public class MainActivity extends AppCompatActivity {
             String n=name.getText().toString().trim();
             if(n.isEmpty()){Toast.makeText(this,"请输入预设名称",Toast.LENGTH_SHORT).show();return;}
             Preset p=new Preset(n,
-                    Math.max(0,number(x,oldX)),
-                    Math.max(0,number(y,oldY)),
-                    Math.max(1,number(width,oldW)),
-                    Math.max(1,number(height,oldH)),
-                    -1,selectedMode[0]);
+                    Math.max(0,number(x,old.x)),
+                    Math.max(0,number(y,old.y)),
+                    Math.max(0,number(width,old.w)),
+                    Math.max(0,number(height,old.h)),
+                    -1,old.mode);
             if(index<0) presets.add(p); else presets.set(index,p);
             savePresets(); refresh();
         });
@@ -674,127 +671,115 @@ public class MainActivity extends AppCompatActivity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(8),dp(4),dp(8),dp(4));
 
-        TextView title=text("已加入自动启动的 APP（支持多个任务）",14);
-        title.setTextColor(Color.WHITE);
-        box.addView(title,new LinearLayout.LayoutParams(-1,dp(34)));
+        TextView hint=text("自动启动任务（可添加多个）",14);
+        hint.setTextColor(Color.LTGRAY);
+        box.addView(hint,new LinearLayout.LayoutParams(-1,dp(34)));
 
+        LinearLayout listBox=new LinearLayout(this);
+        listBox.setOrientation(LinearLayout.VERTICAL);
         ScrollView scroll=new ScrollView(this);
-        LinearLayout list=new LinearLayout(this);
-        list.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(list);
-        box.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        scroll.addView(listBox);
+        box.addView(scroll,new LinearLayout.LayoutParams(-1,dp(220)));
 
-        EditText interval=numberField("任务之间启动间隔（秒）",String.valueOf(prefs.getInt("auto_start_interval",1)));
-        box.addView(labeledNumberField("启动间隔",interval));
+        EditText interval=numberField("启动间隔（秒）",String.valueOf(prefs.getInt("auto_start_interval",1)));
+        box.addView(labeledNumberField("任务间隔",interval));
 
-        Button add=button("＋ 添加自动启动 APP");
-        box.addView(add,new LinearLayout.LayoutParams(-1,dp(50)));
-
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("自动启动项目")
-                .setView(box).setNegativeButton("关闭",null).create();
-
-        Runnable refreshList=()->{
-            list.removeAllViews();
-            try{
-                JSONArray arr=new JSONArray(prefs.getString("auto_start_items","[]"));
-                if(arr.length()==0){
-                    TextView empty=text("暂无自动启动项目\n点击下面“＋ 添加自动启动 APP”添加",13);
-                    empty.setGravity(Gravity.CENTER); empty.setTextColor(Color.GRAY);
-                    list.addView(empty,new LinearLayout.LayoutParams(-1,dp(100)));
-                    return;
-                }
-                for(int i=0;i<arr.length();i++){
-                    JSONObject o=arr.getJSONObject(i);
-                    final int index=i;
-                    String pkg=o.optString("pkg","");
-                    String name=o.optString("name",pkg);
-                    int preset=o.optInt("preset",-1);
-                    LinearLayout row=new LinearLayout(this);
-                    row.setGravity(Gravity.CENTER_VERTICAL);
-                    row.setPadding(dp(8),dp(4),dp(4),dp(4));
-                    row.setBackgroundResource(R.drawable.card);
-                    ImageView icon=new ImageView(this);
-                    try{icon.setImageDrawable(getPackageManager().getApplicationIcon(pkg));}catch(Exception ignored){}
-                    row.addView(icon,new LinearLayout.LayoutParams(dp(46),dp(46)));
-                    LinearLayout texts=new LinearLayout(this); texts.setOrientation(LinearLayout.VERTICAL);
-                    TextView n=text((i+1)+". "+name,14);
-                    TextView sub=text(preset<0?"直接启动":"窗口预设："+(preset<presets.size()?presets.get(preset).name:"已删除预设"),10);
-                    sub.setTextColor(Color.GRAY);
-                    texts.addView(n,new LinearLayout.LayoutParams(-1,dp(28)));
-                    texts.addView(sub,new LinearLayout.LayoutParams(-1,dp(20)));
-                    row.addView(texts,new LinearLayout.LayoutParams(0,dp(56),1));
-                    Button del=button("删除"); del.setTextSize(11);
-                    del.setOnClickListener(v->{
-                        try{
-                            JSONArray a=new JSONArray(prefs.getString("auto_start_items","[]"));
-                            if(index>=0&&index<a.length()){
-                                JSONArray b=new JSONArray();
-                                for(int j=0;j<a.length();j++)if(j!=index)b.put(a.getJSONObject(j));
-                                prefs.edit().putString("auto_start_items",b.toString()).apply();
-                                refreshList.run();
-                            }
-                        }catch(Exception ignored){}
-                    });
-                    row.addView(del,new LinearLayout.LayoutParams(dp(62),dp(44)));
-                    list.addView(row,new LinearLayout.LayoutParams(-1,dp(62)));
-                }
-            }catch(Exception ignored){}
+        final JSONArray[] tasks={loadAutoTasks()};
+        Runnable refreshTasks=()->{
+            listBox.removeAllViews();
+            if(tasks[0].length()==0){
+                TextView empty=text("暂无自动启动项目，点击下面按钮添加",13);
+                empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER);
+                listBox.addView(empty,new LinearLayout.LayoutParams(-1,dp(70)));
+                return;
+            }
+            for(int i=0;i<tasks[0].length();i++){
+                final int index=i;
+                JSONObject o=tasks[0].optJSONObject(i);
+                if(o==null) continue;
+                String name=o.optString("name",o.optString("pkg","APP"));
+                int pi=o.optInt("preset",-1);
+                String presetName="直接启动";
+                if(pi>=0 && pi<presets.size()) presetName=presets.get(pi).name;
+                LinearLayout row=new LinearLayout(this);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(dp(8),dp(3),dp(4),dp(3));
+                ImageView icon=new ImageView(this);
+                try{icon.setImageDrawable(getPackageManager().getApplicationIcon(o.optString("pkg","")));}catch(Exception ignored){}
+                row.addView(icon,new LinearLayout.LayoutParams(dp(42),dp(42)));
+                TextView tv=text((index+1)+". "+name+"  ·  "+presetName,13);
+                row.addView(tv,new LinearLayout.LayoutParams(0,dp(50),1));
+                Button del=button("删除"); del.setTextSize(11);
+                row.addView(del,new LinearLayout.LayoutParams(dp(58),dp(42)));
+                del.setOnClickListener(v->{
+                    JSONArray next=new JSONArray();
+                    for(int j=0;j<tasks[0].length();j++) if(j!=index) next.put(tasks[0].optJSONObject(j));
+                    tasks[0]=next; refreshTasks.run();
+                });
+                listBox.addView(row,new LinearLayout.LayoutParams(-1,dp(54)));
+            }
         };
 
-        add.setOnClickListener(v->showAddAutoTaskDialog(refreshList));
-        refreshList.run();
-        dialog.setOnShowListener(v->{
-            Button close=dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
-            if(close!=null) close.setText("完成");
-        });
-        dialog.setOnDismissListener(v->{
-            int sec=Math.max(1,number(interval,1));
-            prefs.edit().putInt("auto_start_interval",sec).apply();
+        Button add=button("＋ 添加启动任务");
+        box.addView(add,new LinearLayout.LayoutParams(-1,dp(48)));
+        add.setOnClickListener(v->showAddAutoTaskDialog(tasks,refreshTasks));
+        refreshTasks.run();
+
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("自动启动项目")
+                .setView(box).setNegativeButton("关闭",null).setPositiveButton("保存",null).create();
+        dialog.setOnShowListener(x->{
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+                int sec=Math.max(1,number(interval,1));
+                prefs.edit().putString("auto_start_items",tasks[0].toString())
+                        .putInt("auto_start_interval",sec).putBoolean("auto_start_enabled",tasks[0].length()>0).apply();
+                Toast.makeText(this,"自动启动项目已保存",Toast.LENGTH_SHORT).show();
+                dialog.dismiss();
+            });
         });
         dialog.show();
     }
 
-    void showAddAutoTaskDialog(Runnable onSaved){
-        LinearLayout box=new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
+    JSONArray loadAutoTasks(){
+        try{return new JSONArray(prefs.getString("auto_start_items","[]"));}
+        catch(Exception e){return new JSONArray();}
+    }
+
+    void showAddAutoTaskDialog(JSONArray[] tasks,Runnable refresh){
+        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(8),dp(4),dp(8),dp(4));
         Button appPick=button("点击选择 APP");
         Button presetPick=button("直接启动（无窗口预设）");
-        box.addView(text("APP",13),new LinearLayout.LayoutParams(-1,dp(28)));
         box.addView(appPick,new LinearLayout.LayoutParams(-1,dp(52)));
-        box.addView(text("窗口预设",13),new LinearLayout.LayoutParams(-1,dp(28)));
         box.addView(presetPick,new LinearLayout.LayoutParams(-1,dp(52)));
-        final String[] chosenPkg={null}, chosenName={null};
-        final int[] chosenPreset={-1};
-
-        appPick.setOnClickListener(v->{
-            if(apps.isEmpty()){Toast.makeText(this,"请先在主页添加 APP",Toast.LENGTH_SHORT).show();return;}
-            String[] items=new String[apps.size()]; for(int i=0;i<apps.size();i++)items[i]=apps.get(i).name;
-            new AlertDialog.Builder(this).setTitle("选择自动启动 APP").setItems(items,(d,w)->{
-                AppItem a=apps.get(w); chosenPkg[0]=a.pkg; chosenName[0]=a.name; appPick.setText(a.name);
-            }).show();
-        });
+        final String[] pkg={null},name={null}; final int[] preset={-1};
+        appPick.setOnClickListener(v->showAppChoiceDialog((a)->{pkg[0]=a.pkg;name[0]=a.name;appPick.setText(a.name);}));
         presetPick.setOnClickListener(v->{
             String[] items=new String[presets.size()+1]; items[0]="直接启动（无窗口预设）";
-            for(int i=0;i<presets.size();i++)items[i+1]=presets.get(i).name;
-            new AlertDialog.Builder(this).setTitle("选择窗口预设").setItems(items,(d,w)->{
-                chosenPreset[0]=w-1; presetPick.setText(w==0?items[0]:items[w]);
-            }).show();
+            for(int i=0;i<presets.size();i++) items[i+1]=presets.get(i).name;
+            new AlertDialog.Builder(this).setTitle("选择窗口预设").setItems(items,(d,w)->{preset[0]=w-1;presetPick.setText(w==0?items[0]:items[w]);}).show();
         });
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("添加自动启动任务").setView(box)
-                .setNegativeButton("取消",null).setPositiveButton("添加",null).create();
-        dialog.setOnShowListener(v->{
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(x->{
-                if(chosenPkg[0]==null){Toast.makeText(this,"请选择 APP",Toast.LENGTH_SHORT).show();return;}
-                try{
-                    JSONArray arr=new JSONArray(prefs.getString("auto_start_items","[]"));
-                    JSONObject o=new JSONObject(); o.put("pkg",chosenPkg[0]); o.put("name",chosenName[0]); o.put("preset",chosenPreset[0]); arr.put(o);
-                    prefs.edit().putString("auto_start_items",arr.toString()).putBoolean("auto_start_enabled",true).apply();
-                    onSaved.run(); dialog.dismiss();
-                }catch(Exception e){Toast.makeText(this,"保存失败",Toast.LENGTH_SHORT).show();}
-            });
-        });
-        dialog.show();
+        new AlertDialog.Builder(this).setTitle("添加自动启动任务").setView(box)
+                .setNegativeButton("取消",null).setPositiveButton("添加",(d,w)->{
+                    if(pkg[0]==null){Toast.makeText(this,"请选择 APP",Toast.LENGTH_SHORT).show();return;}
+                    try{
+                        JSONObject o=new JSONObject(); o.put("pkg",pkg[0]); o.put("name",name[0]); o.put("preset",preset[0]);
+                        tasks[0].put(o); refresh.run();
+                    }catch(Exception ignored){}
+                }).show();
+    }
+
+    interface AppChoice { void onChoose(AppItem item); }
+
+    void showAppChoiceDialog(AppChoice callback){
+        PackageManager pm=getPackageManager();
+        ArrayList<AppItem> list=new ArrayList<>();
+        for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){
+            if(ai.packageName.equals(getPackageName()) || pm.getLaunchIntentForPackage(ai.packageName)==null) continue;
+            try{list.add(new AppItem(ai.packageName,pm.getApplicationLabel(ai).toString()));}catch(Exception ignored){}
+        }
+        Collections.sort(list,(a,b)->a.name.compareToIgnoreCase(b.name));
+        String[] names=new String[list.size()]; for(int i=0;i<list.size();i++) names[i]=list.get(i).name;
+        new AlertDialog.Builder(this).setTitle("选择 APP").setItems(names,(d,w)->callback.onChoose(list.get(w))).show();
     }
 
     void launchAppDirect(String pkg,String name){
@@ -829,20 +814,11 @@ public class MainActivity extends AppCompatActivity {
         // 三区域车机按一个超宽 Display 处理，窗口位置使用整块屏幕的绝对坐标。
         android.view.Display targetDisplay=getWindow().getWindowManager().getDefaultDisplay();
         android.graphics.Point real=getRealScreenSize(targetDisplay);
-        // 先复制预设参数到 final 局部变量，避免部分车机/Java 编译环境
-        // 在后续 lambda/Android Gradle Transform 阶段误判局部变量有效性。
-        final int presetX=p.x;
-        final int presetY=p.y;
-        final int presetW=p.w;
-        final int presetH=p.h;
-        final int presetMode=p.mode;
-        final String presetName=p.name;
-
-        int left=Math.max(0,Math.min(presetX,real.x-1));
-        int top=Math.max(0,Math.min(presetY,real.y-1));
-        int right=Math.max(left+1,Math.min(presetX+presetW,real.x));
-        int bottom=Math.max(top+1,Math.min(presetY+presetH,real.y));
-        if(presetMode==6){
+        int left=Math.max(0,Math.min(p.x,real.x-1));
+        int top=Math.max(0,Math.min(p.y,real.y-1));
+        int right=Math.max(left+1,Math.min(p.x+p.w,real.x));
+        int bottom=Math.max(top+1,Math.min(p.y+p.h,real.y));
+        if(p.mode==6){
             left=0; top=0; right=real.x; bottom=real.y;
             getWindow().getDecorView().setSystemUiVisibility(
                     View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
@@ -874,9 +850,9 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra("com.example.appwindowcontainer.target_w",right-left);
         intent.putExtra("com.example.appwindowcontainer.target_h",bottom-top);
                 intent.putExtra("com.example.appwindowcontainer.target_display_id",targetDisplay==null?-1:targetDisplay.getDisplayId());
-        intent.putExtra("com.example.appwindowcontainer.fullscreen",presetMode==6);
+        intent.putExtra("com.example.appwindowcontainer.fullscreen",p.mode==6);
 
-        info.setText("启动："+selectedName+"\n"+presetName+"  左间距 "+left+"  上间距 "+top+"  "+(right-left)+" × "+(bottom-top)+"  "+(presetMode==6?"全屏":"模式"+presetMode));
+        info.setText("启动："+selectedName+"\n"+p.name+"  左间距 "+left+"  上间距 "+top+"  "+(right-left)+" × "+(bottom-top)+"  "+(p.mode==6?"全屏":"模式"+p.mode));
 
         try{
             startActivity(intent,options.toBundle());
