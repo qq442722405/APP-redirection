@@ -31,6 +31,8 @@ public class MainActivity extends AppCompatActivity {
     String selectedPackage=null;
     String selectedName=null;
     int selectedWindowMode=1;
+    ArrayList<Button> modeButtons=new ArrayList<>();
+    HashMap<String,Long> appClickTimes=new HashMap<>();
 
     // 容器本身固定避让车机原生区域
     static final int TOP_BLANK=80;
@@ -323,33 +325,37 @@ public class MainActivity extends AppCompatActivity {
         presetHeader.addView(pt,new LinearLayout.LayoutParams(0,dp(44),1));
         root.addView(presetHeader,new LinearLayout.LayoutParams(-1,dp(44)));
 
-        // 窗口模式：先选择模式，再选择 APP，最后点击窗口预设。
-        LinearLayout modeRow=new LinearLayout(this);
-        modeRow.setOrientation(LinearLayout.HORIZONTAL);
-        modeRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView modeTitle=text("窗口模式",14);
-        modeRow.addView(modeTitle,new LinearLayout.LayoutParams(dp(82),dp(40)));
-        String[] modeNames={"模式1","模式2","模式3","模式4","模式5"};
-        for(int i=0;i<modeNames.length;i++){
-            final int mode=i+1;
-            Button mb=button(modeNames[i]);
-            mb.setTextSize(12);
-            mb.setOnClickListener(v->{
-                selectedWindowMode=mode;
-                prefs.edit().putInt("window_mode",mode).apply();
-                refresh();
-                Toast.makeText(this,"已选择 "+modeNames[mode-1],Toast.LENGTH_SHORT).show();
-            });
-            modeRow.addView(mb,new LinearLayout.LayoutParams(dp(86),dp(40)));
-        }
-        root.addView(modeRow,new LinearLayout.LayoutParams(-1,dp(42)));
-
         ScrollView presetScroll=new ScrollView(this);
         presetScroll.setHorizontalScrollBarEnabled(false);
         presetRow=new LinearLayout(this);
         presetRow.setOrientation(LinearLayout.HORIZONTAL);
         presetScroll.addView(presetRow);
         root.addView(presetScroll,new LinearLayout.LayoutParams(-1,dp(168)));
+
+        // 窗口模式放在窗口预设后面，不占用预设卡片空间。
+        // 当前模式会高亮，并保存为默认模式，下次启动直接使用。
+        LinearLayout modeRow=new LinearLayout(this);
+        modeRow.setOrientation(LinearLayout.HORIZONTAL);
+        modeRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView modeTitle=text("窗口模式",14);
+        modeRow.addView(modeTitle,new LinearLayout.LayoutParams(dp(82),dp(40)));
+        modeButtons.clear();
+        String[] modeNames={"模式1","模式2","模式3","模式4","模式5"};
+        for(int i=0;i<modeNames.length;i++){
+            final int mode=i+1;
+            Button mb=button(modeNames[i]);
+            mb.setTextSize(12);
+            modeButtons.add(mb);
+            mb.setOnClickListener(v->{
+                selectedWindowMode=mode;
+                prefs.edit().putInt("window_mode",mode).apply();
+                refreshModeButtons();
+                refreshPresets();
+                Toast.makeText(this,"已选择 "+modeNames[mode-1],Toast.LENGTH_SHORT).show();
+            });
+            modeRow.addView(mb,new LinearLayout.LayoutParams(0,dp(40),1));
+        }
+        root.addView(modeRow,new LinearLayout.LayoutParams(-1,dp(42)));
 
         LinearLayout appHeader=new LinearLayout(this);
         appHeader.setOrientation(LinearLayout.HORIZONTAL);
@@ -400,9 +406,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void refresh(){
-        refreshPresets(); refreshApps();
+        refreshPresets(); refreshModeButtons(); refreshApps();
         if(selectedPackage==null) info.setText("请选择 APP，然后点击窗口预设启动；双击 APP 可直接启动");
         else info.setText("已选择： "+selectedName+"    → 双击直接启动，或点击窗口预设启动");
+    }
+
+    void refreshModeButtons(){
+        for(int i=0;i<modeButtons.size();i++){
+            Button b=modeButtons.get(i);
+            b.setBackgroundResource((i+1)==selectedWindowMode ? R.drawable.card_selected : R.drawable.button);
+            b.setTextColor(Color.WHITE);
+        }
     }
 
     void refreshPresets(){
@@ -436,6 +450,7 @@ public class MainActivity extends AppCompatActivity {
             card.setGravity(Gravity.CENTER);
             card.setPadding(dp(5),dp(5),dp(5),dp(5));
             card.setBackgroundResource(item.pkg.equals(selectedPackage)?R.drawable.card_selected:R.drawable.card);
+            card.setTag(item.pkg);
 
             ImageView icon=new ImageView(this);
             try{
@@ -454,10 +469,11 @@ public class MainActivity extends AppCompatActivity {
                 selectedPackage=item.pkg;
                 selectedName=item.name;
                 long now=System.currentTimeMillis();
-                Object last=v.getTag();
-                v.setTag(now);
-                refreshApps();
-                if(last instanceof Long && now-(Long)last<350){
+                Long last=appClickTimes.get(item.pkg);
+                appClickTimes.put(item.pkg,now);
+                updateAppSelectionVisuals();
+                if(last!=null && now-last<500){
+                    appClickTimes.remove(item.pkg);
                     launchAppDirect(item.pkg,item.name);
                 }else{
                     info.setText("已选择："+item.name+"  → 双击直接启动，或点击窗口预设");
@@ -470,6 +486,18 @@ public class MainActivity extends AppCompatActivity {
             TextView empty=text("点击左侧“＋”添加 APP",15);
             empty.setGravity(Gravity.CENTER);
             appGrid.addView(empty,new LinearLayout.LayoutParams(dp(260),dp(90)));
+        }
+    }
+
+    void updateAppSelectionVisuals(){
+        for(int i=0;i<appGrid.getChildCount();i++){
+            View v=appGrid.getChildAt(i);
+            if(v instanceof LinearLayout){
+                Object tag=v.getTag();
+                if(tag instanceof String){
+                    v.setBackgroundResource(tag.equals(selectedPackage)?R.drawable.card_selected:R.drawable.card);
+                }
+            }
         }
     }
 
@@ -489,12 +517,13 @@ public class MainActivity extends AppCompatActivity {
     String selectedOrName(String pkg){for(AppItem a:apps)if(a.pkg.equals(pkg))return a.name;return pkg;}
 
     void deleteApp(AppItem item){
-        new AlertDialog.Builder(this).setTitle(item.name).setMessage("删除这个 APP 快捷方式？")
-                .setNegativeButton("取消",null).setPositiveButton("删除",(d,w)->{
-                    apps.remove(item);
-                    if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;}
-                    saveApps(); refresh();
-                }).show();
+        // 长按菜单中选择“删除快捷方式”后直接删除，不再弹二次确认。
+        apps.remove(item);
+        appClickTimes.remove(item.pkg);
+        if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;}
+        saveApps();
+        refresh();
+        Toast.makeText(this,"已删除快捷方式："+item.name,Toast.LENGTH_SHORT).show();
     }
 
     String appCategory(ApplicationInfo ai){
@@ -675,7 +704,7 @@ public class MainActivity extends AppCompatActivity {
          * 1. 所有数值默认 0；
          * 2. 不立即加入 presets；
          * 3. 不自动保存；
-         * 4. 点击“保存”后才真正写入配置。
+         * 4. 点击“完成”后才真正写入配置。
          *
          * 编辑预设：
          * 使用副本编辑，点击取消/关闭不会修改原来的预设。
@@ -706,7 +735,7 @@ public class MainActivity extends AppCompatActivity {
         actions.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
 
         Button cancel=button("取消");
-        Button save=button("保存");
+        Button save=button("完成");
 
         actions.addView(cancel,new LinearLayout.LayoutParams(dp(120),dp(48)));
         LinearLayout.LayoutParams saveLp=new LinearLayout.LayoutParams(dp(120),dp(48));
@@ -714,7 +743,7 @@ public class MainActivity extends AppCompatActivity {
         actions.addView(save,saveLp);
         card.addView(actions,new LinearLayout.LayoutParams(-1,dp(58)));
 
-        // 编辑时先复制，保存时再写回；新建时保存后才加入列表。
+        // 编辑时先复制，点击“完成”才写回；新建时点击“完成”才加入列表。
         final Preset working=new Preset(
                 index<0?"新建预设":old.name,
                 index<0?0:old.x,
