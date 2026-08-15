@@ -26,6 +26,7 @@ public class MainActivity extends AppCompatActivity {
 
     SharedPreferences prefs;
     LinearLayout presetRow, appGrid;
+    FrameLayout screenRoot;
     TextView info;
     String selectedPackage=null;
     String selectedName=null;
@@ -113,23 +114,33 @@ public class MainActivity extends AppCompatActivity {
         return e;
     }
 
-    // 数字输入框右侧快速调整按钮：每次 +10 / -10。
+    // 数字输入框右侧快速调整按钮：+100 / -100 / +10 / -10 / 重置0。
+    // 这些按钮只修改输入框的数值，不参与任何触控坐标纠正。
     LinearLayout labeledNumberField(String label, EditText input){
         LinearLayout row=new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         TextView l=text(label,14);
+        l.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
         row.addView(l,new LinearLayout.LayoutParams(dp(115),dp(54)));
         row.addView(input,new LinearLayout.LayoutParams(0,dp(54),1));
-        Button plus=button("+10");
-        Button minus=button("-10");
-        plus.setTextSize(12); minus.setTextSize(12);
-        plus.setMinWidth(0); minus.setMinWidth(0);
-        plus.setPadding(0,0,0,0); minus.setPadding(0,0,0,0);
-        plus.setOnClickListener(v->adjustNumber(input,10));
-        minus.setOnClickListener(v->adjustNumber(input,-10));
-        row.addView(plus,new LinearLayout.LayoutParams(dp(54),dp(44)));
-        row.addView(minus,new LinearLayout.LayoutParams(dp(54),dp(44)));
+
+        String[] captions={"+100","-100","+10","-10","重置0"};
+        int[] deltas={100,-100,10,-10,0};
+        for(int i=0;i<captions.length;i++){
+            final int delta=deltas[i];
+            Button b=button(captions[i]);
+            b.setTextSize(11);
+            b.setMinWidth(0);
+            b.setMinHeight(0);
+            b.setPadding(0,0,0,0);
+            b.setOnClickListener(v->{
+                if(delta==0) input.setText("0");
+                else adjustNumber(input,delta);
+                input.setSelection(input.length());
+            });
+            row.addView(b,new LinearLayout.LayoutParams(dp(58),dp(44)));
+        }
         return row;
     }
 
@@ -289,12 +300,16 @@ public class MainActivity extends AppCompatActivity {
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
 
+        // 主界面仍按车机实际显示区域避让：顶部80、底部120。
+        // 注意：这两个留白只用于布局，不参与触控坐标换算。
+        screenRoot=new FrameLayout(this);
+        screenRoot.setBackgroundColor(Color.BLACK);
+
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.BLACK);
         root.setPadding(dp(12),dp(TOP_BLANK),dp(12),dp(BOTTOM_BLANK));
 
-        // “+”统一放在最左边
         LinearLayout presetHeader=new LinearLayout(this);
         presetHeader.setOrientation(LinearLayout.HORIZONTAL);
         presetHeader.setGravity(Gravity.CENTER_VERTICAL);
@@ -304,7 +319,6 @@ public class MainActivity extends AppCompatActivity {
         presetHeader.addView(addPreset,new LinearLayout.LayoutParams(dp(52),dp(44)));
         TextView pt=text("窗口预设",17); pt.setTypeface(null,1);
         presetHeader.addView(pt,new LinearLayout.LayoutParams(0,dp(44),1));
-
         root.addView(presetHeader,new LinearLayout.LayoutParams(-1,dp(44)));
 
         ScrollView presetScroll=new ScrollView(this);
@@ -335,10 +349,11 @@ public class MainActivity extends AppCompatActivity {
         info.setTextColor(Color.WHITE);
         info.setPadding(dp(10),dp(8),dp(10),dp(8));
         root.addView(info,new LinearLayout.LayoutParams(-1,dp(68)));
-        // 长按底部状态区可打开特殊权限准备页；主界面不增加设置按钮。
         info.setOnLongClickListener(v->{showScreenDiagnostics();return true;});
         info.setOnClickListener(v->showPermissionPreparation());
-        setContentView(root);
+
+        screenRoot.addView(root,new FrameLayout.LayoutParams(-1,-1));
+        setContentView(screenRoot);
         refresh();
     }
 
@@ -602,31 +617,69 @@ public class MainActivity extends AppCompatActivity {
         showPresetEditor(index,old);
     }
 
+    /**
+     * 新建/编辑预设。
+     *
+     * 这里故意不再使用 AlertDialog：部分车机对独立 Dialog Window 的触摸坐标
+     * 映射存在偏移，而主 Activity 的普通按钮触控是正常的。编辑器现在直接
+     * 覆盖在主 Activity 的同一个 Window 内，因此不再做任何触控纠正/坐标补偿。
+     */
     void showPresetEditor(int index,Preset old){
-        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
+        final FrameLayout overlay=new FrameLayout(this);
+        overlay.setBackgroundColor(0xEE000000);
+        overlay.setClickable(true);
+        overlay.setFocusable(true);
+
+        LinearLayout card=new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(24),dp(16),dp(24),dp(16));
+        card.setBackgroundResource(R.drawable.card);
+
+        FrameLayout.LayoutParams cp=new FrameLayout.LayoutParams(
+                -1,-2,Gravity.TOP|Gravity.CENTER_HORIZONTAL);
+        cp.leftMargin=dp(80);
+        cp.rightMargin=dp(80);
+        cp.topMargin=dp(80);
+        cp.bottomMargin=dp(120);
+
+        TextView title=text(index<0?"新建窗口预设":"编辑窗口预设",20);
+        title.setTypeface(null,1);
+        title.setGravity(Gravity.CENTER);
+        card.addView(title,new LinearLayout.LayoutParams(-1,dp(48)));
+
         EditText name=textField("预设名称（支持中文）",old.name);
         EditText x=numberField("左边间距",String.valueOf(old.x));
         EditText y=numberField("上边间距",String.valueOf(old.y));
         EditText width=numberField("窗口宽度",String.valueOf(old.w));
         EditText height=numberField("窗口高度",String.valueOf(old.h));
 
-        box.addView(labeledField("预设名称",name));
-        box.addView(labeledNumberField("左边间距",x));
-        box.addView(labeledNumberField("上边间距",y));
-        box.addView(labeledNumberField("窗口宽度",width));
-        box.addView(labeledNumberField("窗口高度",height));
+        card.addView(labeledField("预设名称",name));
+        card.addView(labeledNumberField("左边间距",x));
+        card.addView(labeledNumberField("上边间距",y));
+        card.addView(labeledNumberField("窗口宽度",width));
+        card.addView(labeledNumberField("窗口高度",height));
 
         android.graphics.Point rs=getRealScreenSize();
-        TextView hint=text("车机当前实际屏幕："+rs.x+" × "+rs.y+"\n三区域直接按整块屏幕坐标输入，例如左区 X=0，中区 X=2160，右区 X=4320。\n+10 / -10 可快速微调。",12);
-        hint.setPadding(dp(115),dp(4),dp(4),dp(4));
-        box.addView(hint);
+        TextView hint=text("当前车机实际分辨率："+rs.x+" × "+rs.y+"\n"
+                +"左边间距、上边间距、窗口宽度、窗口高度均为实际像素。\n"
+                +"三区域可直接输入：左区 X=0，中区 X=2160，右区 X=4320。",12);
+        hint.setPadding(dp(115),dp(6),dp(6),dp(6));
+        card.addView(hint,new LinearLayout.LayoutParams(-1,dp(70)));
 
-        AlertDialog dialog=new AlertDialog.Builder(this)
-                .setTitle(index<0?"新建窗口预设":"编辑窗口预设")
-                .setView(box).setNegativeButton("取消",null).create();
-        dialog.setButton(AlertDialog.BUTTON_POSITIVE,"保存",(d,w)->{
+        LinearLayout actions=new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+
+        Button cancel=button("取消");
+        cancel.setOnClickListener(v->screenRoot.removeView(overlay));
+        Button save=button("保存");
+        save.setOnClickListener(v->{
             String n=name.getText().toString().trim();
-            if(n.isEmpty()){Toast.makeText(this,"请输入预设名称",Toast.LENGTH_SHORT).show();return;}
+            if(n.isEmpty()){
+                Toast.makeText(this,"请输入预设名称",Toast.LENGTH_SHORT).show();
+                name.requestFocus();
+                return;
+            }
             Preset p=new Preset(n,
                     Math.max(0,number(x,old.x)),
                     Math.max(0,number(y,old.y)),
@@ -634,101 +687,19 @@ public class MainActivity extends AppCompatActivity {
                     Math.max(1,number(height,old.h)),
                     -1);
             if(index<0) presets.add(p); else presets.set(index,p);
-            savePresets(); refresh();
+            savePresets();
+            screenRoot.removeView(overlay);
+            refresh();
         });
-        dialog.show();
-    }
+        actions.addView(cancel,new LinearLayout.LayoutParams(dp(120),dp(48)));
+        actions.addView(save,new LinearLayout.LayoutParams(dp(120),dp(48)));
+        card.addView(actions,new LinearLayout.LayoutParams(-1,dp(58)));
 
-    // 三区域车机按一个超宽 Display 处理，不再创建 Presentation。
-    void showScreenDiagnostics(){
-        android.view.Display d=getWindow().getWindowManager().getDefaultDisplay();
-        android.graphics.Point p=getRealScreenSize(d);
-        String s="当前车机 Display\n\n"+
-                "Display ID: "+d.getDisplayId()+"\n"+
-                "真实分辨率: "+p.x+" × "+p.y+"\n"+
-                "rotation: "+d.getRotation()+"\n\n"+
-                "三区域按整块超宽屏坐标处理：\n"+
-                "左区约 X=0\n中区约 X=2160\n右区约 X=4320";
-        new AlertDialog.Builder(this).setTitle("屏幕诊断")
-                .setMessage(s).setPositiveButton("新建预设",(x,w)->editPreset(-1))
-                .setNegativeButton("关闭",null).show();
+        overlay.addView(card,cp);
+        screenRoot.addView(overlay,new FrameLayout.LayoutParams(-1,-1));
+        overlay.bringToFront();
+        card.bringToFront();
+        name.requestFocus();
     }
 
 
-    void launchAppDirect(String pkg,String name){
-        Intent intent=getPackageManager().getLaunchIntentForPackage(pkg);
-        if(intent==null){Toast.makeText(this,"无法启动 APP",Toast.LENGTH_SHORT).show();return;}
-        info.setText("直接启动："+name);
-        try{startActivity(intent);}catch(Exception e){info.setText("启动失败："+e.getMessage());}
-    }
-
-    /**
-     * 按预设启动目标 APP。
-     *
-     * 重要：ActivityOptions.setLaunchBounds() 是 Android 公共 API，只有当车机的
-     * WindowManager/Launcher 允许目标 Activity 使用可调整大小/多窗口时才会真正
-     * 控制目标窗口。某些车机把导航、地图、视频等 APP 标记为强制全屏/特殊窗口，
-     * 这种情况下目标 APP 可以被系统重新布局，普通第三方 APK 无法用 Java API
-     * 强制改变它的窗口边界。
-     */
-    void launchApp(Preset p){
-        if(selectedPackage==null){
-            Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        PackageManager pm=getPackageManager();
-        Intent intent=pm.getLaunchIntentForPackage(selectedPackage);
-        if(intent==null){
-            Toast.makeText(this,"无法启动 APP",Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        // 三区域车机按一个超宽 Display 处理，窗口位置使用整块屏幕的绝对坐标。
-        android.view.Display targetDisplay=getWindow().getWindowManager().getDefaultDisplay();
-        android.graphics.Point real=getRealScreenSize(targetDisplay);
-        int left=Math.max(0,Math.min(p.x,real.x-1));
-        int top=Math.max(0,Math.min(p.y,real.y-1));
-        int right=Math.max(left+1,Math.min(p.x+p.w,real.x));
-        int bottom=Math.max(top+1,Math.min(p.y+p.h,real.y));
-        android.graphics.Rect bounds=new android.graphics.Rect(left,top,right,bottom);
-
-        ActivityOptions options=ActivityOptions.makeBasic();
-        options.setLaunchBounds(bounds);
-
-        // 同一物理屏幕上明确指定当前 Display，避免车机多 Display/虚拟 Display
-        // 环境下 Launcher 把 Activity 放到默认 Display。
-        if(Build.VERSION.SDK_INT>=26 && targetDisplay!=null){
-            // 通过反射调用 Android 8.0+ 的 setLaunchDisplayId，避免部分车机 SDK
-            // 或定制编译环境缺少该公开方法声明时导致编译失败。
-            try{
-                java.lang.reflect.Method m=ActivityOptions.class.getMethod("setLaunchDisplayId",int.class);
-                m.invoke(options,targetDisplay.getDisplayId());
-            }catch(Exception ignored){}
-        }
-
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-        intent.putExtra("com.example.appwindowcontainer.target_x",left);
-        intent.putExtra("com.example.appwindowcontainer.target_y",top);
-        intent.putExtra("com.example.appwindowcontainer.target_w",right-left);
-        intent.putExtra("com.example.appwindowcontainer.target_h",bottom-top);
-        intent.putExtra("com.example.appwindowcontainer.target_display_id",targetDisplay==null?-1:targetDisplay.getDisplayId());
-
-        info.setText("启动："+selectedName+"\n"+p.name+"  X "+left+"  Y "+top+"  "+(right-left)+" × "+(bottom-top));
-
-        try{
-            startActivity(intent,options.toBundle());
-            // 给车机 Launcher 一点时间完成 Activity 切换。这里不再尝试使用
-            // 非公开 API 强制修改别的 APP，避免在 Android 12 上崩溃。
-            new Handler().postDelayed(()->{
-                Toast.makeText(MainActivity.this,
-                        "已按预设请求窗口："+(right-left)+" × "+(bottom-top),
-                        Toast.LENGTH_SHORT).show();
-            },350);
-        }catch(Exception e){
-            info.setText("启动失败："+e.getMessage());
-            try{startActivity(intent);}
-            catch(Exception ignored){Toast.makeText(this,"APP 启动失败",Toast.LENGTH_SHORT).show();}
-        }
-    }
-}
