@@ -383,11 +383,13 @@ public class FloatingService extends Service {
                 state.setTextColor(0xFFB0BEC5); state.setGravity(Gravity.CENTER);
                 row.addView(state,new LinearLayout.LayoutParams(dp(60),dp(50)));
 
+                final String selectedPkg = ai.packageName;
+                final String selectedAppName = name;
                 row.setOnClickListener(v->{
                     try{
-                        if(!floatingPkgs.contains(ai.packageName)){
-                            floatingPkgs.add(ai.packageName);
-                            floatingNames.add(name);
+                        if(!floatingPkgs.contains(selectedPkg)){
+                            floatingPkgs.add(selectedPkg);
+                            floatingNames.add(selectedAppName);
                             saveFloatingApps();
                         }
                         closeOverlay();
