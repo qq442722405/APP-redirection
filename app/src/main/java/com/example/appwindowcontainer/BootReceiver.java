@@ -47,8 +47,6 @@ public class BootReceiver extends BroadcastReceiver {
                     launch.putExtra("com.example.appwindowcontainer.target_y", y);
                     launch.putExtra("com.example.appwindowcontainer.target_w", w);
                     launch.putExtra("com.example.appwindowcontainer.target_h", h);
-                    launch.putExtra("com.example.appwindowcontainer.target_dpi",
-                            pr.optInt("dpi", 160));
                     launch.putExtra("com.example.appwindowcontainer.fullscreen", mode == 6);
 
                     if (Build.VERSION.SDK_INT >= 24) {

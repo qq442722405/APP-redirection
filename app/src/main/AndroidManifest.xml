@@ -34,7 +34,7 @@
 
     <application
         android:allowBackup="true"
-        android:label="APP窗口容器"
+        android:label="APP窗口启动器"
         android:icon="@drawable/app_icon"
         android:roundIcon="@drawable/app_icon"
         android:theme="@style/AppTheme"

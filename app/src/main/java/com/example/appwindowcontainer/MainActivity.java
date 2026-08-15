@@ -45,11 +45,10 @@ public class MainActivity extends AppCompatActivity {
 
     static class Preset {
         String name;
-        int x,y,w,h,dpi,displayId,mode;
-        Preset(String n,int x,int y,int w,int h,int dpi){this(n,x,y,w,h,dpi,-1,1);}
-        Preset(String n,int x,int y,int w,int h,int dpi,int displayId){this(n,x,y,w,h,dpi,displayId,1);}
-        Preset(String n,int x,int y,int w,int h,int dpi,int displayId,int mode){
-            this.name=n; this.x=x; this.y=y; this.w=w; this.h=h; this.dpi=dpi; this.displayId=displayId; this.mode=mode;
+        int x,y,w,h,displayId,mode;
+        Preset(String n,int x,int y,int w,int h){this(n,x,y,w,h,-1,1);}
+        Preset(String n,int x,int y,int w,int h,int displayId,int mode){
+            this.name=n; this.x=x; this.y=y; this.w=w; this.h=h; this.displayId=displayId; this.mode=mode;
         }
     }
 
@@ -115,7 +114,7 @@ public class MainActivity extends AppCompatActivity {
         return e;
     }
 
-    // 数字输入框右侧快速调整按钮：每次 +10 / -10。
+    // 数字输入框右侧快速调整：+100 / -100 / +10 / -10 / 归零。
     LinearLayout labeledNumberField(String label, EditText input){
         LinearLayout row=new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -123,15 +122,15 @@ public class MainActivity extends AppCompatActivity {
         TextView l=text(label,14);
         row.addView(l,new LinearLayout.LayoutParams(dp(115),dp(54)));
         row.addView(input,new LinearLayout.LayoutParams(0,dp(54),1));
-        Button plus=button("+10");
-        Button minus=button("-10");
-        plus.setTextSize(12); minus.setTextSize(12);
-        plus.setMinWidth(0); minus.setMinWidth(0);
-        plus.setPadding(0,0,0,0); minus.setPadding(0,0,0,0);
-        plus.setOnClickListener(v->adjustNumber(input,10));
-        minus.setOnClickListener(v->adjustNumber(input,-10));
-        row.addView(plus,new LinearLayout.LayoutParams(dp(54),dp(44)));
-        row.addView(minus,new LinearLayout.LayoutParams(dp(54),dp(44)));
+        String[] labels={"+100","-100","+10","-10","归零"};
+        int[] deltas={100,-100,10,-10,0};
+        for(int i=0;i<labels.length;i++){
+            final int delta=deltas[i];
+            Button b=button(labels[i]);
+            b.setTextSize(10); b.setMinWidth(0); b.setPadding(0,0,0,0);
+            b.setOnClickListener(v->{ if(delta==0) input.setText("0"); else adjustNumber(input,delta); input.setSelection(input.length()); });
+            row.addView(b,new LinearLayout.LayoutParams(dp(50),dp(44)));
+        }
         return row;
     }
 
@@ -262,7 +261,7 @@ public class MainActivity extends AppCompatActivity {
                 JSONObject o=a.getJSONObject(i);
                 presets.add(new Preset(
                         o.getString("name"),o.getInt("x"),o.getInt("y"),
-                        o.getInt("w"),o.getInt("h"),o.optInt("dpi",160),o.optInt("displayId",-1),o.optInt("mode",1)
+                        o.getInt("w"),o.getInt("h"),o.optInt("displayId",-1),o.optInt("mode",1)
                 ));
             }
         }catch(Exception ignored){}
@@ -280,7 +279,7 @@ public class MainActivity extends AppCompatActivity {
             for(Preset p:presets){
                 JSONObject o=new JSONObject();
                 o.put("name",p.name); o.put("x",p.x); o.put("y",p.y);
-                o.put("w",p.w); o.put("h",p.h); o.put("dpi",p.dpi); o.put("displayId",p.displayId); o.put("mode",p.mode);
+                o.put("w",p.w); o.put("h",p.h); o.put("displayId",p.displayId); o.put("mode",p.mode);
                 a.put(o);
             }
         }catch(Exception ignored){}
@@ -332,42 +331,64 @@ public class MainActivity extends AppCompatActivity {
         appScroll.addView(appGrid);
         root.addView(appScroll,new LinearLayout.LayoutParams(-1,0,1));
 
-        // 启动控制：悬浮窗口开关放在自动启动开关左边。
-        LinearLayout switchRow=new LinearLayout(this);
-        switchRow.setOrientation(LinearLayout.HORIZONTAL);
-        switchRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView floatLabel=text("悬浮窗口",14);
-        Switch floatSwitch=new Switch(this);
-        floatSwitch.setChecked(prefs.getBoolean("floating_enabled",false));
-        floatSwitch.setOnCheckedChangeListener((v,checked)->{
-            prefs.edit().putBoolean("floating_enabled",checked).apply();
-            if(checked){
-                if(hasOverlayPermission()) startFloatingService();
-                else { floatSwitch.setChecked(false); openOverlaySettings(); }
-            }else stopFloatingService();
-        });
-        TextView autoLabel=text("自动启动",14);
-        Switch autoSwitch=new Switch(this);
-        autoSwitch.setChecked(prefs.getBoolean("auto_start_enabled",false));
-        autoSwitch.setOnCheckedChangeListener((v,checked)->prefs.edit().putBoolean("auto_start_enabled",checked).apply());
-        Button addAuto=button("添加自动启动项目");
-        addAuto.setTextSize(12); addAuto.setOnClickListener(v->showAutoStartEditor());
-        switchRow.addView(floatLabel,new LinearLayout.LayoutParams(dp(78),dp(48)));
-        switchRow.addView(floatSwitch,new LinearLayout.LayoutParams(dp(58),dp(48)));
-        switchRow.addView(autoLabel,new LinearLayout.LayoutParams(dp(70),dp(48)));
-        switchRow.addView(autoSwitch,new LinearLayout.LayoutParams(dp(58),dp(48)));
-        switchRow.addView(addAuto,new LinearLayout.LayoutParams(0,dp(44),1));
-        root.addView(switchRow,new LinearLayout.LayoutParams(-1,dp(50)));
+        // 底部：状态信息 + 当前屏幕分辨率/DPI + 设置图标。
+        LinearLayout footer=new LinearLayout(this);
+        footer.setOrientation(LinearLayout.HORIZONTAL);
+        footer.setGravity(Gravity.CENTER_VERTICAL);
+        info=text("",12);
+        info.setTextColor(Color.LTGRAY);
+        info.setPadding(dp(8),dp(4),dp(4),dp(4));
+        footer.addView(info,new LinearLayout.LayoutParams(0,dp(62),1));
 
-        info=text("",14);
-        info.setTextColor(Color.WHITE);
-        info.setPadding(dp(10),dp(8),dp(10),dp(8));
-        root.addView(info,new LinearLayout.LayoutParams(-1,dp(68)));
-        // 长按底部状态区可打开特殊权限准备页；主界面不增加设置按钮。
-        info.setOnLongClickListener(v->{showScreenDiagnostics();return true;});
-        info.setOnClickListener(v->showPermissionPreparation());
+        TextView screenInfo=text("",11);
+        screenInfo.setGravity(Gravity.CENTER);
+        screenInfo.setTextColor(Color.WHITE);
+        footer.addView(screenInfo,new LinearLayout.LayoutParams(dp(250),dp(62)));
+        updateScreenInfo(screenInfo);
+
+        TextView settings=plusButton();
+        settings.setText("⚙");
+        settings.setTextSize(24);
+        settings.setContentDescription("设置");
+        settings.setOnClickListener(v->showSettingsMenu());
+        footer.addView(settings,new LinearLayout.LayoutParams(dp(58),dp(58)));
+        root.addView(footer,new LinearLayout.LayoutParams(-1,dp(64)));
         setContentView(root);
         refresh();
+    }
+
+    void updateScreenInfo(TextView view){
+        android.util.DisplayMetrics dm=getResources().getDisplayMetrics();
+        android.graphics.Point rs=getRealScreenSize();
+        view.setText("屏幕 " + rs.x + " × " + rs.y + "\nDPI " + dm.densityDpi + "   density " + String.format(java.util.Locale.US,"%.2f",dm.density));
+    }
+
+    void showSettingsMenu(){
+        LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(24),dp(8),dp(24),dp(8));
+
+        LinearLayout floatRow=new LinearLayout(this); floatRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView fl=text("悬浮窗口",15); floatRow.addView(fl,new LinearLayout.LayoutParams(0,dp(52),1));
+        Switch fs=new Switch(this); fs.setChecked(prefs.getBoolean("floating_enabled",false));
+        fs.setOnCheckedChangeListener((v,checked)->{
+            prefs.edit().putBoolean("floating_enabled",checked).apply();
+            if(checked){ if(hasOverlayPermission()) startFloatingService(); else { fs.setChecked(false); openOverlaySettings(); } }
+            else stopFloatingService();
+        });
+        floatRow.addView(fs); box.addView(floatRow);
+
+        LinearLayout autoRow=new LinearLayout(this); autoRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView al=text("自动启动",15); autoRow.addView(al,new LinearLayout.LayoutParams(0,dp(52),1));
+        Switch as=new Switch(this); as.setChecked(prefs.getBoolean("auto_start_enabled",false));
+        as.setOnCheckedChangeListener((v,checked)->prefs.edit().putBoolean("auto_start_enabled",checked).apply());
+        autoRow.addView(as); box.addView(autoRow);
+
+        Button add=button("添加自动启动项目"); add.setOnClickListener(v->showAutoStartEditor());
+        box.addView(add,new LinearLayout.LayoutParams(-1,dp(50)));
+        Button perm=button("权限与诊断"); perm.setOnClickListener(v->showPermissionPreparation());
+        box.addView(perm,new LinearLayout.LayoutParams(-1,dp(50)));
+        new AlertDialog.Builder(this).setTitle("设置").setView(box).setNegativeButton("关闭",null).show();
     }
 
     void showPermissionPreparation(){
@@ -400,7 +421,7 @@ public class MainActivity extends AppCompatActivity {
         for(int i=0;i<presets.size();i++){
             final int index=i; Preset p=presets.get(i);
             String modeText=p.mode==6?"全屏模式":"模式"+p.mode;
-            Button b=button(p.name+"\n位置 "+p.x+" , "+p.y+"   "+p.w+" × "+p.h+"\nDPI "+p.dpi+"   "+modeText);
+            Button b=button(p.name+"\n左间距 "+p.x+"  上间距 "+p.y+"   "+p.w+" × "+p.h+"\n"+modeText);
             b.setGravity(Gravity.CENTER); b.setTextSize(12);
             b.setOnClickListener(v->{
                 if(selectedPackage==null){
@@ -515,8 +536,7 @@ public class MainActivity extends AppCompatActivity {
         if(index<0){
             android.graphics.Point rs=getRealScreenSize();
             Preset old=new Preset("",0,TOP_BLANK,Math.min(2160,rs.x),
-                    Math.max(1,rs.y-TOP_BLANK-BOTTOM_BLANK),
-                    getResources().getDisplayMetrics().densityDpi,-1);
+                    Math.max(1,rs.y-TOP_BLANK-BOTTOM_BLANK),-1,1);
             showPresetEditor(-1,old);
             return;
         }
@@ -527,18 +547,16 @@ public class MainActivity extends AppCompatActivity {
     void showPresetEditor(int index,Preset old){
         LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
         EditText name=textField("预设名称（支持中文）",old.name);
-        EditText x=numberField("X 左上位置",String.valueOf(old.x));
-        EditText y=numberField("Y 上下位置",String.valueOf(old.y));
+        EditText x=numberField("左间距",String.valueOf(old.x));
+        EditText y=numberField("上间距",String.valueOf(old.y));
         EditText width=numberField("窗口宽度",String.valueOf(old.w));
         EditText height=numberField("窗口高度",String.valueOf(old.h));
-        EditText dpi=numberField("APP DPI",String.valueOf(old.dpi));
 
         box.addView(labeledField("预设名称",name));
-        box.addView(labeledNumberField("X 左上位置",x));
-        box.addView(labeledNumberField("Y 上下位置",y));
+        box.addView(labeledNumberField("左间距",x));
+        box.addView(labeledNumberField("上间距",y));
         box.addView(labeledNumberField("窗口宽度",width));
         box.addView(labeledNumberField("窗口高度",height));
-        box.addView(labeledNumberField("APP DPI",dpi));
 
         TextView modeTitle=text("启动模式",14);
         modeTitle.setPadding(dp(115),dp(6),0,dp(2));
@@ -546,12 +564,16 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout modeRow=new LinearLayout(this);
         modeRow.setOrientation(LinearLayout.HORIZONTAL);
         modeRow.setPadding(dp(115),0,dp(4),dp(4));
+        Button[] modeButtons=new Button[6];
         for(int m=1;m<=6;m++){
             final int mm=m;
             Button mb=button(m==6?"全屏模式":"模式"+m);
             mb.setTextSize(11);
+            modeButtons[m-1]=mb;
+            if(old.mode==mm) mb.setBackgroundResource(R.drawable.card_selected);
             mb.setOnClickListener(v->{
                 old.mode=mm;
+                for(Button q:modeButtons) q.setBackgroundResource(q==v?R.drawable.card_selected:R.drawable.button);
                 if(mm==6){
                     x.setText("0"); y.setText("0");
                     android.graphics.Point rr=getRealScreenSize();
@@ -563,7 +585,7 @@ public class MainActivity extends AppCompatActivity {
         box.addView(modeRow,new LinearLayout.LayoutParams(-1,dp(48)));
 
         android.graphics.Point rs=getRealScreenSize();
-        TextView hint=text("车机当前实际屏幕："+rs.x+" × "+rs.y+"\n三区域直接按整块屏幕坐标输入，例如左区 X=0，中区 X=2160，右区 X=4320。\n+10 / -10 可快速微调。",12);
+        TextView hint=text("车机当前实际屏幕："+rs.x+" × "+rs.y+"\n三区域直接按整块屏幕坐标输入，例如左区左间距=0，中区左间距=2160，右区左间距=4320。\n每个数字输入框均提供 +100、-100、+10、-10、归零。",12);
         hint.setPadding(dp(115),dp(4),dp(4),dp(4));
         box.addView(hint);
 
@@ -578,7 +600,6 @@ public class MainActivity extends AppCompatActivity {
                     Math.max(0,number(y,old.y)),
                     Math.max(1,number(width,old.w)),
                     Math.max(1,number(height,old.h)),
-                    Math.max(1,number(dpi,old.dpi)),
                     -1,old.mode);
             if(index<0) presets.add(p); else presets.set(index,p);
             savePresets(); refresh();
@@ -747,11 +768,10 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra("com.example.appwindowcontainer.target_y",top);
         intent.putExtra("com.example.appwindowcontainer.target_w",right-left);
         intent.putExtra("com.example.appwindowcontainer.target_h",bottom-top);
-        intent.putExtra("com.example.appwindowcontainer.target_dpi",p.dpi);
-        intent.putExtra("com.example.appwindowcontainer.target_display_id",targetDisplay==null?-1:targetDisplay.getDisplayId());
+                intent.putExtra("com.example.appwindowcontainer.target_display_id",targetDisplay==null?-1:targetDisplay.getDisplayId());
         intent.putExtra("com.example.appwindowcontainer.fullscreen",p.mode==6);
 
-        info.setText("启动："+selectedName+"\n"+p.name+"  X "+left+"  Y "+top+"  "+(right-left)+" × "+(bottom-top)+"  DPI "+p.dpi);
+        info.setText("启动："+selectedName+"\n"+p.name+"  左间距 "+left+"  上间距 "+top+"  "+(right-left)+" × "+(bottom-top)+"  "+(p.mode==6?"全屏":"模式"+p.mode));
 
         try{
             startActivity(intent,options.toBundle());
