@@ -763,34 +763,34 @@ public class MainActivity extends AppCompatActivity {
             switch(mode){
                 case 1:
                     // 标准方案：直接使用 Android ActivityOptions 的 LaunchBounds。
-                    options.setLaunchBounds(bounds); break;
+                    setLaunchBounds(options,bounds); break;
                 case 2:
                     // 方案2：LaunchBounds + 明确指定当前 Display（Android 8+）。
-                    options.setLaunchBounds(bounds);
-                    if(Build.VERSION.SDK_INT>=26) options.setLaunchDisplayId(getWindow().getDisplay().getDisplayId());
+                    setLaunchBounds(options,bounds);
+                    setLaunchDisplayId(options,getWindow().getDisplay().getDisplayId());
                     break;
                 case 3:
                     // 方案3：尝试请求 Freeform，再设置 LaunchBounds。
-                    options.setLaunchBounds(bounds);
+                    setLaunchBounds(options,bounds);
                     setLaunchWindowingMode(options,5); // WINDOWING_MODE_FREEFORM
                     break;
                 case 4:
                     // 方案4：尝试 Multi-Window + LaunchBounds。
-                    options.setLaunchBounds(bounds);
+                    setLaunchBounds(options,bounds);
                     setLaunchWindowingMode(options,2); // WINDOWING_MODE_PINNED/MULTI_WINDOW 兼容尝试
                     break;
                 case 5:
                     // 方案5：先用 bounds 启动，随后短延时再次启动同一任务配置。
-                    options.setLaunchBounds(bounds);
+                    setLaunchBounds(options,bounds);
                     break;
-                default: options.setLaunchBounds(bounds); break;
+                default: setLaunchBounds(options,bounds); break;
             }
             Bundle b=options.toBundle();
             startActivity(intent,b);
             if(mode==5){
                 new Handler().postDelayed(()->{
                     try{
-                        ActivityOptions retry=ActivityOptions.makeBasic(); retry.setLaunchBounds(bounds);
+                        ActivityOptions retry=ActivityOptions.makeBasic(); setLaunchBounds(retry,bounds);
                         Intent retryIntent=getPackageManager().getLaunchIntentForPackage(pkg);
                         if(retryIntent!=null){ retryIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_REORDER_TO_FRONT); startActivity(retryIntent,retry.toBundle()); }
                     }catch(Exception ignored){}
@@ -801,6 +801,20 @@ public class MainActivity extends AppCompatActivity {
             try{ launchAppDirect(pkg,name); }catch(Exception ignored){}
             Toast.makeText(this,"模式"+mode+"限制失败，已尝试普通启动",Toast.LENGTH_SHORT).show();
         }
+    }
+
+    void setLaunchBounds(ActivityOptions options, android.graphics.Rect bounds){
+        try{
+            java.lang.reflect.Method m=ActivityOptions.class.getMethod("setLaunchBounds",android.graphics.Rect.class);
+            m.invoke(options,bounds);
+        }catch(Exception ignored){}
+    }
+
+    void setLaunchDisplayId(ActivityOptions options,int displayId){
+        try{
+            java.lang.reflect.Method m=ActivityOptions.class.getMethod("setLaunchDisplayId",int.class);
+            m.invoke(options,displayId);
+        }catch(Exception ignored){}
     }
 
     void setLaunchWindowingMode(ActivityOptions options,int mode){
