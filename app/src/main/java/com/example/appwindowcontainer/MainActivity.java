@@ -712,7 +712,8 @@ public class MainActivity extends AppCompatActivity {
         box.addView(labeledNumberField("任务间隔",interval));
 
         final JSONArray[] tasks={loadAutoTasks()};
-        Runnable refreshTasks=()->{
+        final Runnable[] refreshTasks=new Runnable[1];
+        refreshTasks[0]=()->{
             listBox.removeAllViews();
             if(tasks[0].length()==0){
                 TextView empty=text("暂无自动启动项目，点击下面按钮添加",13);
@@ -741,7 +742,7 @@ public class MainActivity extends AppCompatActivity {
                 del.setOnClickListener(v->{
                     JSONArray next=new JSONArray();
                     for(int j=0;j<tasks[0].length();j++) if(j!=index) next.put(tasks[0].optJSONObject(j));
-                    tasks[0]=next; refreshTasks.run();
+                    tasks[0]=next; refreshTasks[0].run();
                 });
                 listBox.addView(row,new LinearLayout.LayoutParams(-1,dp(54)));
             }
@@ -749,8 +750,8 @@ public class MainActivity extends AppCompatActivity {
 
         Button add=button("＋ 添加启动任务");
         box.addView(add,new LinearLayout.LayoutParams(-1,dp(48)));
-        add.setOnClickListener(v->showAddAutoTaskDialog(tasks,refreshTasks));
-        refreshTasks.run();
+        add.setOnClickListener(v->showAddAutoTaskDialog(tasks,refreshTasks[0]));
+        refreshTasks[0].run();
 
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("自动启动项目")
                 .setView(box).setNegativeButton("关闭",null).setPositiveButton("保存",null).create();
