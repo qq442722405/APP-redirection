@@ -40,7 +40,13 @@ jobs:
           find app/src/main/java -type f -name '*.java' -print
 
       - name: 构建 Debug APK
-        run: gradle clean :app:assembleDebug --no-daemon --stacktrace
+        run: gradle clean :app:assembleDebug --no-daemon --stacktrace --info --console=plain
+
+      - name: 检查构建输出
+        if: always()
+        run: |
+          echo "=== APK 输出 ==="
+          find app/build/outputs -type f -name "*.apk" -print 2>/dev/null || true
 
       - name: 准备 APK
         run: |
@@ -49,6 +55,7 @@ jobs:
           ls -lh output/
 
       - name: 上传 APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: APP窗口容器_触控修复_间距快速调整版
