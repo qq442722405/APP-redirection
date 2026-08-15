@@ -51,7 +51,9 @@ jobs:
       - name: 准备 APK
         run: |
           mkdir -p output
-          cp app/build/outputs/apk/debug/app-debug.apk "output/APP窗口容器_窗口模式_手动保存修复版.apk"
+          APK=$(find app/build/outputs/apk -type f -name "*.apk" | head -n 1)
+          test -n "$APK"
+          cp "$APK" "output/APP窗口容器_窗口模式_手动保存修复版.apk"
           ls -lh output/
 
       - name: 上传 APK
