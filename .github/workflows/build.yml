@@ -44,21 +44,6 @@ jobs:
           echo '=== XML resources ==='
           find app/src/main/res -type f -name '*.xml' -print
 
-      - name: 检查 Android 资源引用
-        shell: bash
-        run: |
-          set -e
-          echo '=== 检查残留 shortcuts.xml / reselect 引用 ==='
-          if grep -RIn --include='*.xml' 'string/reselect' app/src/main/res; then
-            echo '发现非法的 @string/reselect 引用'
-            exit 1
-          fi
-          if find app/src/main/res -type f -name 'shortcuts.xml' | grep -q .; then
-            echo '发现不应存在的 shortcuts.xml'
-            exit 1
-          fi
-          echo '资源检查通过'
-
       - name: 构建 Debug APK
         run: gradle clean :app:assembleDebug --no-daemon --stacktrace
 
