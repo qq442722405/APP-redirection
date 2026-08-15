@@ -52,5 +52,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: APP窗口容器_全屏APP测试增强版
-          path: output/APP窗口容器_三区域诊断增强版.apk
+          path: output/APP窗口容器_全屏APP测试增强版.apk
           if-no-files-found: error
