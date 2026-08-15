@@ -44,10 +44,10 @@ public class MainActivity extends AppCompatActivity {
 
     static class Preset {
         String name;
-        int x,y,w,h,dpi,displayId;
-        Preset(String n,int x,int y,int w,int h,int dpi){this(n,x,y,w,h,dpi,-1);}
-        Preset(String n,int x,int y,int w,int h,int dpi,int displayId){
-            this.name=n; this.x=x; this.y=y; this.w=w; this.h=h; this.dpi=dpi; this.displayId=displayId;
+        int x,y,w,h,displayId;
+        Preset(String n,int x,int y,int w,int h){this(n,x,y,w,h,-1);}
+        Preset(String n,int x,int y,int w,int h,int displayId){
+            this.name=n; this.x=x; this.y=y; this.w=w; this.h=h; this.displayId=displayId;
         }
     }
 
@@ -260,7 +260,7 @@ public class MainActivity extends AppCompatActivity {
                 JSONObject o=a.getJSONObject(i);
                 presets.add(new Preset(
                         o.getString("name"),o.getInt("x"),o.getInt("y"),
-                        o.getInt("w"),o.getInt("h"),o.optInt("dpi",160),o.optInt("displayId",-1)
+                        o.getInt("w"),o.getInt("h"),o.optInt("displayId",-1)
                 ));
             }
         }catch(Exception ignored){}
@@ -278,7 +278,7 @@ public class MainActivity extends AppCompatActivity {
             for(Preset p:presets){
                 JSONObject o=new JSONObject();
                 o.put("name",p.name); o.put("x",p.x); o.put("y",p.y);
-                o.put("w",p.w); o.put("h",p.h); o.put("dpi",p.dpi); o.put("displayId",p.displayId);
+                o.put("w",p.w); o.put("h",p.h); o.put("displayId",p.displayId);
                 a.put(o);
             }
         }catch(Exception ignored){}
@@ -305,8 +305,7 @@ public class MainActivity extends AppCompatActivity {
         TextView pt=text("窗口预设",17); pt.setTypeface(null,1);
         presetHeader.addView(pt,new LinearLayout.LayoutParams(0,dp(44),1));
 
-        // 针对全屏 APP 的兼容性测试。所有测试使用固定实验参数：
-        // X=500、Y=100、1000×500、DPI=200。每个按钮代表不同的启动策略。
+        // 针对全屏 APP 的兼容性测试。每个按钮代表不同的启动策略。
         String[] testNames={"全屏1","全屏2","全屏3","全屏4","全屏5"};
         for(int i=1;i<=5;i++){
             final int testNo=i;
@@ -382,7 +381,7 @@ public class MainActivity extends AppCompatActivity {
         presetRow.removeAllViews();
         for(int i=0;i<presets.size();i++){
             final int index=i; Preset p=presets.get(i);
-            Button b=button(p.name+"\n位置 "+p.x+" , "+p.y+"   "+p.w+" × "+p.h+"\nDPI "+p.dpi);
+            Button b=button(p.name+"\n位置 "+p.x+" , "+p.y+"   "+p.w+" × "+p.h);
             b.setGravity(Gravity.CENTER); b.setTextSize(12);
             b.setOnClickListener(v->{
                 if(selectedPackage==null){
@@ -605,8 +604,7 @@ public class MainActivity extends AppCompatActivity {
         if(index<0){
             android.graphics.Point rs=getRealScreenSize();
             Preset old=new Preset("",0,TOP_BLANK,Math.min(2160,rs.x),
-                    Math.max(1,rs.y-TOP_BLANK-BOTTOM_BLANK),
-                    getResources().getDisplayMetrics().densityDpi,-1);
+                    Math.max(1,rs.y-TOP_BLANK-BOTTOM_BLANK),-1);
             showPresetEditor(-1,old);
             return;
         }
@@ -621,14 +619,12 @@ public class MainActivity extends AppCompatActivity {
         EditText y=numberField("Y 上下位置",String.valueOf(old.y));
         EditText width=numberField("窗口宽度",String.valueOf(old.w));
         EditText height=numberField("窗口高度",String.valueOf(old.h));
-        EditText dpi=numberField("APP DPI",String.valueOf(old.dpi));
 
         box.addView(labeledField("预设名称",name));
         box.addView(labeledNumberField("X 左上位置",x));
         box.addView(labeledNumberField("Y 上下位置",y));
         box.addView(labeledNumberField("窗口宽度",width));
         box.addView(labeledNumberField("窗口高度",height));
-        box.addView(labeledNumberField("APP DPI",dpi));
 
         android.graphics.Point rs=getRealScreenSize();
         TextView hint=text("车机当前实际屏幕："+rs.x+" × "+rs.y+"\n三区域直接按整块屏幕坐标输入，例如左区 X=0，中区 X=2160，右区 X=4320。\n+10 / -10 可快速微调。",12);
@@ -646,7 +642,6 @@ public class MainActivity extends AppCompatActivity {
                     Math.max(0,number(y,old.y)),
                     Math.max(1,number(width,old.w)),
                     Math.max(1,number(height,old.h)),
-                    Math.max(1,number(dpi,old.dpi)),
                     -1);
             if(index<0) presets.add(p); else presets.set(index,p);
             savePresets(); refresh();
@@ -676,9 +671,7 @@ public class MainActivity extends AppCompatActivity {
     /**
      * 车机兼容性测试。
      *
-     * 所有测试统一使用：左=500、上=100、宽=1000、高=500、DPI=200。
-     * DPI 仅作为测试参数记录/提示；Android 普通 ActivityOptions 公共 API
-     * 无法直接把“目标 APP 的单独 DPI”设置成 200，因此不会假装已经修改 DPI。
+     * 所有测试统一使用：左=500、上=100、宽=1000、高=500。
      *
      * 测试1：标准 LaunchBounds。
      * 测试2：NEW_DOCUMENT + LaunchBounds，尽量创建独立任务。
@@ -742,12 +735,11 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra("com.example.appwindowcontainer.target_y",top);
         intent.putExtra("com.example.appwindowcontainer.target_w",right-left);
         intent.putExtra("com.example.appwindowcontainer.target_h",bottom-top);
-        intent.putExtra("com.example.appwindowcontainer.target_dpi",200);
-
+        
         String mode=(testNo>=4)?"FREEFORM + LaunchBounds":"LaunchBounds";
         info.setText("全屏"+testNo+"："+selectedName+"\n"+
                 "方案="+mode+"  X="+left+" Y="+top+"  "+(right-left)+" × "+(bottom-top)+
-                "  DPI参数=200（仅记录，不能由普通 APK 直接修改目标 APP DPI）");
+                "  不修改 DPI");
         try{
             startActivity(intent,options.toBundle());
         }catch(Exception e){
@@ -824,10 +816,9 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra("com.example.appwindowcontainer.target_y",top);
         intent.putExtra("com.example.appwindowcontainer.target_w",right-left);
         intent.putExtra("com.example.appwindowcontainer.target_h",bottom-top);
-        intent.putExtra("com.example.appwindowcontainer.target_dpi",p.dpi);
         intent.putExtra("com.example.appwindowcontainer.target_display_id",targetDisplay==null?-1:targetDisplay.getDisplayId());
 
-        info.setText("启动："+selectedName+"\n"+p.name+"  X "+left+"  Y "+top+"  "+(right-left)+" × "+(bottom-top)+"  DPI "+p.dpi);
+        info.setText("启动："+selectedName+"\n"+p.name+"  X "+left+"  Y "+top+"  "+(right-left)+" × "+(bottom-top));
 
         try{
             startActivity(intent,options.toBundle());
