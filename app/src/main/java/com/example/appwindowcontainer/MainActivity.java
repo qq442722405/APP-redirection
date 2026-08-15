@@ -756,43 +756,50 @@ public class MainActivity extends AppCompatActivity {
             Intent intent=getPackageManager().getLaunchIntentForPackage(pkg);
             if(intent==null){ Toast.makeText(this,"无法启动："+name,Toast.LENGTH_SHORT).show(); return; }
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+
             ActivityOptions options=ActivityOptions.makeBasic();
-            android.graphics.Rect bounds=new android.graphics.Rect(Math.max(0,p.x),Math.max(0,p.y),
-                    Math.max(1,p.x+p.w),Math.max(1,p.y+p.h));
+            android.graphics.Rect bounds=new android.graphics.Rect(
+                    Math.max(0,p.x), Math.max(0,p.y),
+                    Math.max(1,p.x+p.w), Math.max(1,p.y+p.h));
+
+            // 所有兼容性较敏感的 ActivityOptions API 均通过反射调用，
+            // 避免不同 Android SDK / 厂商 SDK 在 javac 阶段直接报符号错误。
+            setLaunchBoundsCompat(options,bounds);
 
             switch(mode){
-                case 1:
-                    // 标准方案：直接使用 Android ActivityOptions 的 LaunchBounds。
-                    setLaunchBounds(options,bounds); break;
                 case 2:
-                    // 方案2：LaunchBounds + 明确指定当前 Display（Android 8+）。
-                    setLaunchBounds(options,bounds);
-                    setLaunchDisplayId(options,getWindow().getDisplay().getDisplayId());
+                    // 模式2：窗口范围 + 当前显示屏
+                    setLaunchDisplayIdCompat(options, getWindow().getDisplay().getDisplayId());
                     break;
                 case 3:
-                    // 方案3：尝试请求 Freeform，再设置 LaunchBounds。
-                    setLaunchBounds(options,bounds);
-                    setLaunchWindowingMode(options,5); // WINDOWING_MODE_FREEFORM
+                    // 模式3：窗口范围 + Freeform（部分车机会忽略）
+                    setLaunchWindowingMode(options,5);
                     break;
                 case 4:
-                    // 方案4：尝试 Multi-Window + LaunchBounds。
-                    setLaunchBounds(options,bounds);
-                    setLaunchWindowingMode(options,2); // WINDOWING_MODE_PINNED/MULTI_WINDOW 兼容尝试
+                    // 模式4：窗口范围 + Multi-window（部分车机会忽略）
+                    setLaunchWindowingMode(options,2);
                     break;
                 case 5:
-                    // 方案5：先用 bounds 启动，随后短延时再次启动同一任务配置。
-                    setLaunchBounds(options,bounds);
+                    // 模式5：先启动，短延时再次尝试窗口范围
                     break;
-                default: setLaunchBounds(options,bounds); break;
+                case 1:
+                default:
+                    // 模式1：仅 LaunchBounds
+                    break;
             }
-            Bundle b=options.toBundle();
-            startActivity(intent,b);
+
+            startActivity(intent,options.toBundle());
+
             if(mode==5){
                 new Handler().postDelayed(()->{
                     try{
-                        ActivityOptions retry=ActivityOptions.makeBasic(); setLaunchBounds(retry,bounds);
+                        ActivityOptions retry=ActivityOptions.makeBasic();
+                        setLaunchBoundsCompat(retry,bounds);
                         Intent retryIntent=getPackageManager().getLaunchIntentForPackage(pkg);
-                        if(retryIntent!=null){ retryIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_REORDER_TO_FRONT); startActivity(retryIntent,retry.toBundle()); }
+                        if(retryIntent!=null){
+                            retryIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+                            startActivity(retryIntent,retry.toBundle());
+                        }
                     }catch(Exception ignored){}
                 },450);
             }
@@ -803,14 +810,14 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    void setLaunchBounds(ActivityOptions options, android.graphics.Rect bounds){
+    void setLaunchBoundsCompat(ActivityOptions options, android.graphics.Rect bounds){
         try{
             java.lang.reflect.Method m=ActivityOptions.class.getMethod("setLaunchBounds",android.graphics.Rect.class);
             m.invoke(options,bounds);
         }catch(Exception ignored){}
     }
 
-    void setLaunchDisplayId(ActivityOptions options,int displayId){
+    void setLaunchDisplayIdCompat(ActivityOptions options,int displayId){
         try{
             java.lang.reflect.Method m=ActivityOptions.class.getMethod("setLaunchDisplayId",int.class);
             m.invoke(options,displayId);
