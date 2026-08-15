@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">APP窗口启动器</string>
     <string name="accessibility_service_description">用于悬浮窗口的返回、首页、菜单系统按键。</string>
+    <string name="reselect">重新选择</string>
 </resources>
