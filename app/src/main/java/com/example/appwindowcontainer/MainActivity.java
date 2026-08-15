@@ -660,13 +660,26 @@ public class MainActivity extends AppCompatActivity {
 
         FrameLayout.LayoutParams cp=new FrameLayout.LayoutParams(
                 -1,-2,Gravity.TOP|Gravity.CENTER_HORIZONTAL);
-        cp.leftMargin=dp(80); cp.rightMargin=dp(80); cp.topMargin=dp(80); cp.bottomMargin=dp(120);
+        cp.leftMargin=dp(80);
+        cp.rightMargin=dp(80);
+        cp.topMargin=dp(80);
+        cp.bottomMargin=dp(120);
 
         TextView title=text(index<0?"新建窗口预设":"编辑窗口预设",20);
-        title.setTypeface(null,1); title.setGravity(Gravity.CENTER);
+        title.setTypeface(null,1);
+        title.setGravity(Gravity.CENTER);
         card.addView(title,new LinearLayout.LayoutParams(-1,dp(48)));
 
-        // 新建时所有数值均为 0。编辑时使用副本，只有点击“保存”或“完成”才写回。
+        /*
+         * 新建预设：
+         * 1. 所有数值默认 0；
+         * 2. 不立即加入 presets；
+         * 3. 不自动保存；
+         * 4. 点击“保存”后才真正写入配置。
+         *
+         * 编辑预设：
+         * 使用副本编辑，点击取消/关闭不会修改原来的预设。
+         */
         String defaultName=index<0?"":old.name;
         EditText name=textField("预设名称（支持中文）",defaultName);
         EditText x=numberField("左边间距",index<0?"0":String.valueOf(old.x));
@@ -680,63 +693,65 @@ public class MainActivity extends AppCompatActivity {
         card.addView(labeledNumberField("窗口宽度",width));
         card.addView(labeledNumberField("窗口高度",height));
 
-        TextView hint=text("修改数值不会立即保存。点击“保存”或“完成”后才保存。\n"
-                +"这里不做任何触控偏移修正。",12);
+        TextView hint=text(
+                "只修改窗口位置和大小，不进行任何触控偏移/DPI纠正。\\n"
+                +"左边间距、上边间距、宽度、高度都可以使用右侧快捷按钮调整。",
+                12
+        );
         hint.setPadding(dp(115),dp(6),dp(6),dp(6));
         card.addView(hint,new LinearLayout.LayoutParams(-1,dp(58)));
 
         LinearLayout actions=new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+
+        Button cancel=button("取消");
         Button save=button("保存");
-        Button done=button("完成");
-        actions.addView(save,new LinearLayout.LayoutParams(dp(120),dp(48)));
-        actions.addView(done,new LinearLayout.LayoutParams(dp(120),dp(48)));
+
+        actions.addView(cancel,new LinearLayout.LayoutParams(dp(120),dp(48)));
+        LinearLayout.LayoutParams saveLp=new LinearLayout.LayoutParams(dp(120),dp(48));
+        saveLp.leftMargin=dp(12);
+        actions.addView(save,saveLp);
         card.addView(actions,new LinearLayout.LayoutParams(-1,dp(58)));
 
-        // 使用独立副本，编辑过程中不修改 presets，也不自动写 SharedPreferences。
-        final Preset working = new Preset(
-                index<0 ? "新建预设" : old.name,
-                index<0 ? 0 : old.x,
-                index<0 ? 0 : old.y,
-                index<0 ? 0 : old.w,
-                index<0 ? 0 : old.h,
-                index<0 ? -1 : old.displayId);
+        // 编辑时先复制，保存时再写回；新建时保存后才加入列表。
+        final Preset working=new Preset(
+                index<0?"新建预设":old.name,
+                index<0?0:old.x,
+                index<0?0:old.y,
+                index<0?0:old.w,
+                index<0?0:old.h,
+                index<0?-1:old.displayId
+        );
 
-        Runnable collect = () -> {
-            working.name=name.getText().toString().trim();
-            if(working.name.isEmpty()) working.name="新建预设";
+        cancel.setOnClickListener(v->{
+            screenRoot.removeView(overlay);
+        });
+
+        save.setOnClickListener(v->{
+            String n=name.getText().toString().trim();
+            working.name=n.isEmpty()?"新建预设":n;
             working.x=Math.max(0,number(x,0));
             working.y=Math.max(0,number(y,0));
             working.w=Math.max(0,number(width,0));
             working.h=Math.max(0,number(height,0));
-        };
 
-        Runnable saveWorking = () -> {
-            collect.run();
             if(index<0){
-                presets.add(new Preset(working.name,working.x,working.y,working.w,working.h,working.displayId));
+                presets.add(working);
             }else if(index<presets.size()){
-                Preset p=presets.get(index);
-                p.name=working.name; p.x=working.x; p.y=working.y;
-                p.w=working.w; p.h=working.h; p.displayId=working.displayId;
+                presets.set(index,working);
             }
+
             savePresets();
-            refresh();
-        };
-
-        // “保存”：保存当前内容但继续留在编辑界面，方便继续调整。
-        save.setOnClickListener(v -> saveWorking.run());
-
-        // “完成”：保存当前内容并关闭编辑界面。
-        done.setOnClickListener(v -> {
-            saveWorking.run();
             screenRoot.removeView(overlay);
+            refresh();
+            Toast.makeText(this,"窗口预设已保存",Toast.LENGTH_SHORT).show();
         });
 
         overlay.addView(card,cp);
         screenRoot.addView(overlay,new FrameLayout.LayoutParams(-1,-1));
-        overlay.bringToFront(); card.bringToFront();
+        overlay.bringToFront();
+        card.bringToFront();
     }
 
     void launchApp(Preset p){
