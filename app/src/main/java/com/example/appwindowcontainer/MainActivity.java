@@ -542,7 +542,7 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(8),dp(4),dp(8),dp(4));
         EditText search=textField("搜索 APP",""); box.addView(search,new LinearLayout.LayoutParams(-1,dp(48)));
         LinearLayout tabs=new LinearLayout(this); tabs.setOrientation(LinearLayout.HORIZONTAL);
-        // 添加 APP 默认只显示“用户”应用；不再把“全部”作为默认分类。
+        // 添加 APP 默认选中“用户”，不再显示“默认用户分类”字样。
         // 仍保留“系统”按钮，方便需要时添加车机系统 APP。
         String[] cats={"用户","系统"};
         Button[] tabBtns=new Button[cats.length];
@@ -554,7 +554,7 @@ public class MainActivity extends AppCompatActivity {
         box.addView(tabs);
         LinearLayout rows=new LinearLayout(this); rows.setOrientation(LinearLayout.VERTICAL);
         ScrollView scroll=new ScrollView(this); scroll.addView(rows); box.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("添加 APP（默认：用户）").setView(box).setNegativeButton("关闭",null).create();
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("添加 APP").setView(box).setNegativeButton("关闭",null).create();
         final int[] category={0};
         Runnable refreshAppPicker=()->{
             rows.removeAllViews(); String q=search.getText().toString().trim().toLowerCase(); int count=0;
