@@ -44,8 +44,26 @@ jobs:
           echo '=== XML resources ==='
           find app/src/main/res -type f -name '*.xml' -print
 
+      - name: 最终资源检查
+        shell: bash
+        run: |
+          echo '=== 检查 shortcuts.xml ==='
+          if find app/src/main/res -type f -name 'shortcuts.xml' | grep -q .; then
+            echo 'ERROR: 不允许存在旧 shortcuts.xml'
+            exit 1
+          fi
+          echo '=== accessibility_service_config.xml ==='
+          cat app/src/main/res/xml/accessibility_service_config.xml
+          echo '=== strings.xml ==='
+          cat app/src/main/res/values/strings.xml
+
       - name: 构建 Debug APK
-        run: gradle clean :app:assembleDebug --no-daemon --stacktrace
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --version
+          gradle clean :app:assembleDebug --no-daemon --stacktrace
+
 
       - name: 准备 APK
         run: |
