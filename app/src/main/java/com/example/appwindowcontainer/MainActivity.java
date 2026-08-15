@@ -757,11 +757,9 @@ public class MainActivity extends AppCompatActivity {
             startActivity(intent,options.toBundle());
             // 给车机 Launcher 一点时间完成 Activity 切换。这里不再尝试使用
             // 非公开 API 强制修改别的 APP，避免在 Android 12 上崩溃。
-            new Handler().postDelayed(()->{
-                Toast.makeText(MainActivity.this,
-                        "已按预设请求窗口："+(right-left)+" × "+(bottom-top),
-                        Toast.LENGTH_SHORT).show();
-            },350);
+            Toast.makeText(this,
+                    "已按预设请求窗口："+(right-left)+" × "+(bottom-top),
+                    Toast.LENGTH_SHORT).show();
         }catch(Exception e){
             info.setText("启动失败："+e.getMessage());
             try{startActivity(intent);}
