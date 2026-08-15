@@ -1,4 +1,4 @@
-name: 构建 APP窗口容器 三区域诊断增强版
+name: 构建 APP窗口启动器
 
 on:
   workflow_dispatch:
@@ -45,12 +45,12 @@ jobs:
       - name: 准备 APK
         run: |
           mkdir -p output
-          cp app/build/outputs/apk/debug/app-debug.apk "output/APP窗口容器_三区域诊断增强版.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "output/APP窗口启动器.apk"
           ls -lh output/
 
       - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
-          name: APP窗口容器_三区域诊断增强版
-          path: output/APP窗口容器_三区域诊断增强版.apk
+          name: APP窗口启动器
+          path: output/APP窗口启动器.apk
           if-no-files-found: error
