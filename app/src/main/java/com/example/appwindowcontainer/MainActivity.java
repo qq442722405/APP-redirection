@@ -346,6 +346,13 @@ public class MainActivity extends AppCompatActivity {
         footer.addView(screenInfo,new LinearLayout.LayoutParams(dp(250),dp(62)));
         updateScreenInfo(screenInfo);
 
+        TextView note=plusButton();
+        note.setText("📝");
+        note.setTextSize(22);
+        note.setContentDescription("记事本");
+        note.setOnClickListener(v->showNotes());
+        footer.addView(note,new LinearLayout.LayoutParams(dp(58),dp(58)));
+
         TextView settings=plusButton();
         settings.setText("⚙");
         settings.setTextSize(24);
@@ -490,36 +497,56 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void chooseApp(){
-        PackageManager pm=getPackageManager(); ArrayList<ApplicationInfo> list=new ArrayList<>();
+        PackageManager pm=getPackageManager();
+        ArrayList<ApplicationInfo> list=new ArrayList<>();
         for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){
-            if(!ai.packageName.equals(getPackageName())&&pm.getLaunchIntentForPackage(ai.packageName)!=null)list.add(ai);
+            if(!ai.packageName.equals(getPackageName())&&pm.getLaunchIntentForPackage(ai.packageName)!=null) list.add(ai);
         }
         Collections.sort(list,(a,b)->pm.getApplicationLabel(a).toString().compareToIgnoreCase(pm.getApplicationLabel(b).toString()));
-        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
-        EditText search=textField("搜索 APP",""); box.addView(search,new LinearLayout.LayoutParams(-1,dp(50)));
+
+        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(8),dp(4),dp(8),dp(4));
+        EditText search=textField("搜索 APP",""); box.addView(search,new LinearLayout.LayoutParams(-1,dp(48)));
+        LinearLayout tabs=new LinearLayout(this); tabs.setOrientation(LinearLayout.HORIZONTAL);
+        String[] cats={"全部","系统","用户","默认用户"};
+        Button[] tabBtns=new Button[cats.length];
+        for(int i=0;i<cats.length;i++){
+            Button b=button(cats[i]); b.setTextSize(12); tabBtns[i]=b;
+            tabs.addView(b,new LinearLayout.LayoutParams(0,dp(42),1));
+        }
+        tabBtns[2].setBackgroundResource(R.drawable.card_selected);
+        box.addView(tabs);
         LinearLayout rows=new LinearLayout(this); rows.setOrientation(LinearLayout.VERTICAL);
-        ScrollView scroll=new ScrollView(this); scroll.addView(rows); box.addView(scroll,new LinearLayout.LayoutParams(-1,dp(430)));
+        ScrollView scroll=new ScrollView(this); scroll.addView(rows); box.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("添加 APP").setView(box).setNegativeButton("关闭",null).create();
-        Runnable refreshList=()->{
+        final int[] category={2};
+        Runnable refreshAppPicker=()->{
             rows.removeAllViews(); String q=search.getText().toString().trim().toLowerCase(); int count=0;
             for(ApplicationInfo ai:list){
+                boolean system=(ai.flags & ApplicationInfo.FLAG_SYSTEM)!=0;
+                boolean updated=(ai.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)!=0;
+                boolean show=category[0]==0 || (category[0]==1 && system) || (category[0]==2 && !system) || (category[0]==3 && !system && !updated);
                 String name=pm.getApplicationLabel(ai).toString();
-                if(!q.isEmpty()&&!name.toLowerCase().contains(q))continue;
-                Button b=button(name); b.setGravity(Gravity.LEFT|Gravity.CENTER_VERTICAL);
-                b.setOnClickListener(v->{
-                    boolean exists=false; for(AppItem a:apps)if(a.pkg.equals(ai.packageName)){exists=true;break;}
-                    if(!exists){apps.add(new AppItem(ai.packageName,name));saveApps();}
-                    selectedPackage=ai.packageName; selectedName=name; refresh(); dialog.dismiss();
-                });
-                rows.addView(b,new LinearLayout.LayoutParams(-1,dp(48))); if(++count>=40)break;
+                if(!show || (!q.isEmpty()&&!name.toLowerCase().contains(q))) continue;
+                LinearLayout row=new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(dp(8),dp(3),dp(8),dp(3));
+                ImageView icon=new ImageView(this); try{icon.setImageDrawable(pm.getApplicationIcon(ai));}catch(Exception ignored){}
+                row.addView(icon,new LinearLayout.LayoutParams(dp(44),dp(44)));
+                LinearLayout texts=new LinearLayout(this); texts.setOrientation(LinearLayout.VERTICAL); texts.setPadding(dp(10),0,dp(4),0);
+                TextView n=text(name,14); TextView pkg=text(ai.packageName,10); pkg.setTextColor(Color.GRAY);
+                texts.addView(n,new LinearLayout.LayoutParams(-1,dp(27))); texts.addView(pkg,new LinearLayout.LayoutParams(-1,dp(20)));
+                row.addView(texts,new LinearLayout.LayoutParams(0,dp(52),1));
+                row.setBackgroundResource(R.drawable.card);
+                row.setOnClickListener(v->{ boolean exists=false; for(AppItem a:apps)if(a.pkg.equals(ai.packageName)){exists=true;break;} if(!exists){apps.add(new AppItem(ai.packageName,name));saveApps();} selectedPackage=ai.packageName; selectedName=name; refresh(); dialog.dismiss(); });
+                rows.addView(row,new LinearLayout.LayoutParams(-1,dp(56))); if(++count>=80) break;
             }
         };
-        search.addTextChangedListener(new android.text.TextWatcher(){
-            public void beforeTextChanged(CharSequence s,int a,int b,int c){}
-            public void onTextChanged(CharSequence s,int a,int b,int c){refreshList.run();}
-            public void afterTextChanged(android.text.Editable e){}
-        });
-        refreshList.run(); dialog.show();
+        for(int i=0;i<tabBtns.length;i++){ final int ci=i; tabBtns[i].setOnClickListener(v->{category[0]=ci; for(int j=0;j<tabBtns.length;j++)tabBtns[j].setBackgroundResource(j==ci?R.drawable.card_selected:R.drawable.button); refreshAppPicker.run();}); }
+        search.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int b,int c){} public void onTextChanged(CharSequence s,int a,int b,int c){refreshAppPicker.run();} public void afterTextChanged(android.text.Editable e){}});
+        dialog.show(); refreshAppPicker.run();
+    }
+
+    void showNotes(){
+        EditText edit=new EditText(this); edit.setText(prefs.getString("notes","")); edit.setTextColor(Color.WHITE); edit.setHintTextColor(Color.GRAY); edit.setGravity(Gravity.TOP|Gravity.LEFT); edit.setHint("在这里记录内容……"); edit.setSingleLine(false); edit.setMinLines(12); edit.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE|android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES); edit.setPadding(dp(12),dp(12),dp(12),dp(12));
+        new AlertDialog.Builder(this).setTitle("记事本").setView(edit).setNegativeButton("取消",null).setPositiveButton("保存",(d,w)->{prefs.edit().putString("notes",edit.getText().toString()).apply(); Toast.makeText(this,"已保存",Toast.LENGTH_SHORT).show();}).show();
     }
 
     void presetMenu(int index){
@@ -535,8 +562,7 @@ public class MainActivity extends AppCompatActivity {
     void editPreset(int index){
         if(index<0){
             android.graphics.Point rs=getRealScreenSize();
-            Preset old=new Preset("",0,TOP_BLANK,Math.min(2160,rs.x),
-                    Math.max(1,rs.y-TOP_BLANK-BOTTOM_BLANK),-1,1);
+            Preset old=new Preset("",0,0,0,0,-1,1);
             showPresetEditor(-1,old);
             return;
         }
@@ -576,18 +602,12 @@ public class MainActivity extends AppCompatActivity {
                 for(Button q:modeButtons) q.setBackgroundResource(q==v?R.drawable.card_selected:R.drawable.button);
                 if(mm==6){
                     x.setText("0"); y.setText("0");
-                    android.graphics.Point rr=getRealScreenSize();
-                    width.setText(String.valueOf(rr.x)); height.setText(String.valueOf(rr.y));
+                    width.setText("0"); height.setText("0");
                 }
             });
             modeRow.addView(mb,new LinearLayout.LayoutParams(0,dp(42),1));
         }
         box.addView(modeRow,new LinearLayout.LayoutParams(-1,dp(48)));
-
-        android.graphics.Point rs=getRealScreenSize();
-        TextView hint=text("车机当前实际屏幕："+rs.x+" × "+rs.y+"\n三区域直接按整块屏幕坐标输入，例如左区左间距=0，中区左间距=2160，右区左间距=4320。\n每个数字输入框均提供 +100、-100、+10、-10、归零。",12);
-        hint.setPadding(dp(115),dp(4),dp(4),dp(4));
-        box.addView(hint);
 
         AlertDialog dialog=new AlertDialog.Builder(this)
                 .setTitle(index<0?"新建窗口预设":"编辑窗口预设")
@@ -654,6 +674,9 @@ public class MainActivity extends AppCompatActivity {
         Button presetPick=button("点击选择窗口预设");
         box.addView(presetPick,new LinearLayout.LayoutParams(-1,dp(52)));
 
+        EditText interval=numberField("启动间隔（秒）",String.valueOf(prefs.getInt("auto_start_interval",1)));
+        box.addView(labeledNumberField("启动间隔",interval));
+
         final String[] chosenPkg={null};
         final String[] chosenName={null};
         final int[] chosenPreset={-1};
@@ -692,7 +715,8 @@ public class MainActivity extends AppCompatActivity {
                 try{
                     JSONArray arr=new JSONArray(prefs.getString("auto_start_items","[]"));
                     JSONObject o=new JSONObject(); o.put("pkg",chosenPkg[0]); o.put("name",chosenName[0]); o.put("preset",chosenPreset[0]); arr.put(o);
-                    prefs.edit().putString("auto_start_items",arr.toString()).putBoolean("auto_start_enabled",true).apply();
+                    int sec=Math.max(1,number(interval,1));
+                    prefs.edit().putString("auto_start_items",arr.toString()).putInt("auto_start_interval",sec).putBoolean("auto_start_enabled",true).apply();
                     Toast.makeText(this,"已添加自动启动项目",Toast.LENGTH_SHORT).show();
                     dialog.dismiss();
                 }catch(Exception e){Toast.makeText(this,"保存失败",Toast.LENGTH_SHORT).show();}
