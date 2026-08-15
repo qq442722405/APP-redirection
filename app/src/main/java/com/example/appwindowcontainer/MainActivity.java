@@ -884,6 +884,7 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL);
         ScrollView scroll=new ScrollView(this); scroll.addView(list); card.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        // 使用 Runnable[]，避免 Java 编译器对 lambda 内部自引用的“variable might not have been initialized”错误。
         final Runnable[] render = new Runnable[1];
         render[0] = () -> {
             list.removeAllViews();
