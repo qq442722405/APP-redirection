@@ -1,4 +1,4 @@
-name: 构建 APP窗口容器 全屏APP测试增强版
+name: 构建 APP窗口容器 触控修复_间距快速调整版
 
 on:
   workflow_dispatch:
@@ -45,12 +45,12 @@ jobs:
       - name: 准备 APK
         run: |
           mkdir -p output
-          cp app/build/outputs/apk/debug/app-debug.apk "output/APP窗口容器_全屏APP测试增强版.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "output/APP窗口容器_触控修复_间距快速调整版.apk"
           ls -lh output/
 
       - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
-          name: APP窗口容器_全屏APP测试增强版
-          path: output/APP窗口容器_全屏APP测试增强版.apk
+          name: APP窗口容器_触控修复_间距快速调整版
+          path: output/APP窗口容器_触控修复_间距快速调整版.apk
           if-no-files-found: error
