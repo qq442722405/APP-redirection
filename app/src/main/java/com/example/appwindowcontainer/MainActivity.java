@@ -14,7 +14,6 @@ import android.net.Uri;
 import android.os.Handler;
 import android.view.*;
 import android.widget.*;
-import android.content.res.Configuration;
 import androidx.appcompat.app.*;
 import org.json.*;
 import java.util.*;
@@ -173,11 +172,6 @@ public class MainActivity extends AppCompatActivity {
 
     static final int REQ_RUNTIME_PERMS = 19041;
 
-    @Override public void onWindowFocusChanged(boolean hasFocus){
-        super.onWindowFocusChanged(hasFocus);
-        if(hasFocus) applyImmersiveLayout();
-    }
-
     /**
      * 只申请本 APK 在 Android 12/13+ 上真正可以由用户授予的运行时权限。
      * 特殊权限不强行跳转，避免启动 APP 时被连续带离主界面；下面的 helper
@@ -291,32 +285,9 @@ public class MainActivity extends AppCompatActivity {
         prefs.edit().putString(PRESETS,a.toString()).apply();
     }
 
-    void applyImmersiveLayout(){
-        getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                | View.SYSTEM_UI_FLAG_FULLSCREEN
-                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
-        if(Build.VERSION.SDK_INT>=30){
-            try{
-                getWindow().setDecorFitsSystemWindows(false);
-                getWindow().getInsetsController().hide(
-                        android.view.WindowInsets.Type.statusBars()
-                        | android.view.WindowInsets.Type.navigationBars());
-                getWindow().getInsetsController().setSystemBarsBehavior(
-                        android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-            }catch(Exception ignored){}
-        }
-    }
-
     void buildUI(){
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
-        // 车机实机部分会出现“画面/触控坐标相差一段状态栏高度”的现象。
-        // 让内容直接铺满物理 Display，并隐藏系统栏，避免 WindowInsets 再次给内容加偏移。
-        applyImmersiveLayout();
 
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -333,6 +304,19 @@ public class MainActivity extends AppCompatActivity {
         presetHeader.addView(addPreset,new LinearLayout.LayoutParams(dp(52),dp(44)));
         TextView pt=text("窗口预设",17); pt.setTypeface(null,1);
         presetHeader.addView(pt,new LinearLayout.LayoutParams(0,dp(44),1));
+
+        // 测试方案：放在“窗口预设”右侧。每个测试都使用同一组
+        // 目标参数（X=500，Y=100，1000×500，DPI=200），
+        // 但采用不同的 Activity 启动策略，方便在车机上逐个试出
+        // 哪一种方式能够约束目标 APP 的窗口。
+        for(int i=1;i<=5;i++){
+            final int testNo=i;
+            Button tb=button("测试"+i);
+            tb.setTextSize(11);
+            tb.setMinWidth(0); tb.setPadding(0,0,0,0);
+            tb.setOnClickListener(v->runWindowTest(testNo));
+            presetHeader.addView(tb,new LinearLayout.LayoutParams(dp(58),dp(42)));
+        }
         root.addView(presetHeader,new LinearLayout.LayoutParams(-1,dp(44)));
 
         ScrollView presetScroll=new ScrollView(this);
@@ -468,73 +452,36 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void chooseApp(){
-        PackageManager pm=getPackageManager();
-        ArrayList<ApplicationInfo> all=new ArrayList<>();
+        PackageManager pm=getPackageManager(); ArrayList<ApplicationInfo> list=new ArrayList<>();
         for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){
-            if(ai.packageName.equals(getPackageName())) continue;
-            if(pm.getLaunchIntentForPackage(ai.packageName)==null) continue;
-            all.add(ai);
+            if(!ai.packageName.equals(getPackageName())&&pm.getLaunchIntentForPackage(ai.packageName)!=null)list.add(ai);
         }
-        Collections.sort(all,(a,b)->pm.getApplicationLabel(a).toString().compareToIgnoreCase(pm.getApplicationLabel(b).toString()));
-
+        Collections.sort(list,(a,b)->pm.getApplicationLabel(a).toString().compareToIgnoreCase(pm.getApplicationLabel(b).toString()));
         LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout tabs=new LinearLayout(this); tabs.setOrientation(LinearLayout.HORIZONTAL);
-        Button tabAll=button("全部 APP"), tabUser=button("用户 APP"), tabSystem=button("系统 APP");
-        tabs.addView(tabAll,new LinearLayout.LayoutParams(0,dp(46),1));
-        tabs.addView(tabUser,new LinearLayout.LayoutParams(0,dp(46),1));
-        tabs.addView(tabSystem,new LinearLayout.LayoutParams(0,dp(46),1));
-        box.addView(tabs);
-        EditText search=textField("搜索 APP"," "); box.addView(search,new LinearLayout.LayoutParams(-1,dp(50)));
-
-        ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true);
-        GridLayout grid=new GridLayout(this); grid.setColumnCount(4); grid.setUseDefaultMargins(false);
-        scroll.addView(grid); box.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("添加 APP")
-                .setView(box).setNegativeButton("关闭",null).create();
-        final int[] mode={0}; // 0全部 1用户 2系统
-
+        EditText search=textField("搜索 APP",""); box.addView(search,new LinearLayout.LayoutParams(-1,dp(50)));
+        LinearLayout rows=new LinearLayout(this); rows.setOrientation(LinearLayout.VERTICAL);
+        ScrollView scroll=new ScrollView(this); scroll.addView(rows); box.addView(scroll,new LinearLayout.LayoutParams(-1,dp(430)));
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("添加 APP").setView(box).setNegativeButton("关闭",null).create();
         Runnable refreshList=()->{
-            grid.removeAllViews();
-            String q=search.getText().toString().trim().toLowerCase();
-            for(ApplicationInfo ai:all){
-                boolean system=(ai.flags & ApplicationInfo.FLAG_SYSTEM)!=0 ||
-                        (ai.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)!=0;
-                if(mode[0]==1 && system) continue;
-                if(mode[0]==2 && !system) continue;
+            rows.removeAllViews(); String q=search.getText().toString().trim().toLowerCase(); int count=0;
+            for(ApplicationInfo ai:list){
                 String name=pm.getApplicationLabel(ai).toString();
-                if(!q.isEmpty()&&!name.toLowerCase().contains(q)) continue;
-
-                LinearLayout card=new LinearLayout(this);
-                card.setOrientation(LinearLayout.VERTICAL); card.setGravity(Gravity.CENTER);
-                card.setPadding(dp(6),dp(5),dp(6),dp(5)); card.setBackgroundResource(R.drawable.card);
-                ImageView icon=new ImageView(this); icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                try{icon.setImageDrawable(pm.getApplicationIcon(ai));}catch(Exception ignored){}
-                card.addView(icon,new LinearLayout.LayoutParams(dp(58),dp(58)));
-                TextView title=text(name,12); title.setGravity(Gravity.CENTER); title.setMaxLines(2);
-                card.addView(title,new LinearLayout.LayoutParams(dp(94),dp(38)));
-                card.setOnClickListener(v->{
-                    boolean exists=false; for(AppItem a:apps) if(a.pkg.equals(ai.packageName)){exists=true;break;}
-                    if(!exists){apps.add(new AppItem(ai.packageName,name)); saveApps();}
+                if(!q.isEmpty()&&!name.toLowerCase().contains(q))continue;
+                Button b=button(name); b.setGravity(Gravity.LEFT|Gravity.CENTER_VERTICAL);
+                b.setOnClickListener(v->{
+                    boolean exists=false; for(AppItem a:apps)if(a.pkg.equals(ai.packageName)){exists=true;break;}
+                    if(!exists){apps.add(new AppItem(ai.packageName,name));saveApps();}
                     selectedPackage=ai.packageName; selectedName=name; refresh(); dialog.dismiss();
                 });
-                GridLayout.LayoutParams gp=new GridLayout.LayoutParams();
-                gp.width=dp(106); gp.height=dp(104); grid.addView(card,gp);
+                rows.addView(b,new LinearLayout.LayoutParams(-1,dp(48))); if(++count>=40)break;
             }
         };
-        View.OnClickListener tabClick=v->{
-            if(v==tabAll) mode[0]=0; else if(v==tabUser) mode[0]=1; else mode[0]=2;
-            refreshList.run();
-        };
-        tabAll.setOnClickListener(tabClick); tabUser.setOnClickListener(tabClick); tabSystem.setOnClickListener(tabClick);
-        search.setText("");
         search.addTextChangedListener(new android.text.TextWatcher(){
             public void beforeTextChanged(CharSequence s,int a,int b,int c){}
             public void onTextChanged(CharSequence s,int a,int b,int c){refreshList.run();}
             public void afterTextChanged(android.text.Editable e){}
         });
         refreshList.run(); dialog.show();
-        dialog.getWindow().setLayout((int)(getResources().getDisplayMetrics().widthPixels*0.92), (int)(getResources().getDisplayMetrics().heightPixels*0.88));
     }
 
     void presetMenu(int index){
@@ -618,6 +565,76 @@ public class MainActivity extends AppCompatActivity {
                 .setNegativeButton("关闭",null).show();
     }
 
+
+    /**
+     * 车机兼容性测试。
+     *
+     * 所有测试统一使用：左=500、上=100、宽=1000、高=500、DPI=200。
+     * DPI 仅作为测试参数记录/提示；Android 普通 ActivityOptions 公共 API
+     * 无法直接把“目标 APP 的单独 DPI”设置成 200，因此不会假装已经修改 DPI。
+     *
+     * 测试1：标准 LaunchBounds。
+     * 测试2：NEW_DOCUMENT + LaunchBounds，尽量创建独立任务。
+     * 测试3：NEW_TASK + CLEAR_TOP + LaunchBounds。
+     * 测试4：NEW_DOCUMENT + MULTIPLE_TASK + LaunchBounds。
+     * 测试5：标准 LaunchBounds + 不传额外窗口参数，用于对比车机行为。
+     */
+    void runWindowTest(int testNo){
+        if(selectedPackage==null){
+            Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        PackageManager pm=getPackageManager();
+        Intent intent=pm.getLaunchIntentForPackage(selectedPackage);
+        if(intent==null){
+            Toast.makeText(this,"无法启动 APP",Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        android.view.Display display=getWindow().getWindowManager().getDefaultDisplay();
+        android.graphics.Point real=getRealScreenSize(display);
+        int left=Math.max(0,Math.min(500,real.x-1));
+        int top=Math.max(0,Math.min(100,real.y-1));
+        int right=Math.max(left+1,Math.min(left+1000,real.x));
+        int bottom=Math.max(top+1,Math.min(top+500,real.y));
+        android.graphics.Rect bounds=new android.graphics.Rect(left,top,right,bottom);
+
+        ActivityOptions options=ActivityOptions.makeBasic();
+        options.setLaunchBounds(bounds);
+        if(Build.VERSION.SDK_INT>=26 && display!=null){
+            try{
+                java.lang.reflect.Method m=ActivityOptions.class.getMethod("setLaunchDisplayId",int.class);
+                m.invoke(options,display.getDisplayId());
+            }catch(Exception ignored){}
+        }
+
+        // 不同测试只改变 Android 任务/启动策略，窗口坐标始终保持一致。
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if(testNo==2){
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+        }else if(testNo==3){
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+        }else if(testNo==4){
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+        }else if(testNo==5){
+            // 测试5保留最干净的启动方式，仅依赖 LaunchBounds。
+        }
+
+        intent.putExtra("com.example.appwindowcontainer.test_mode",testNo);
+        intent.putExtra("com.example.appwindowcontainer.target_x",left);
+        intent.putExtra("com.example.appwindowcontainer.target_y",top);
+        intent.putExtra("com.example.appwindowcontainer.target_w",right-left);
+        intent.putExtra("com.example.appwindowcontainer.target_h",bottom-top);
+        intent.putExtra("com.example.appwindowcontainer.target_dpi",200);
+
+        info.setText("测试"+testNo+"："+selectedName+"\nX="+left+" Y="+top+"  "+(right-left)+" × "+(bottom-top)+"  DPI参数=200");
+        try{
+            startActivity(intent,options.toBundle());
+        }catch(Exception e){
+            info.setText("测试"+testNo+"启动失败："+e.getMessage());
+        }
+    }
+
     void launchAppDirect(String pkg,String name){
         Intent intent=getPackageManager().getLaunchIntentForPackage(pkg);
         if(intent==null){Toast.makeText(this,"无法启动 APP",Toast.LENGTH_SHORT).show();return;}
@@ -670,13 +687,7 @@ public class MainActivity extends AppCompatActivity {
             }catch(Exception ignored){}
         }
 
-        // 尽量为不同 APP / 同一 APP 的不同预设创建独立任务，避免后启动的 APP
-        // 把前一个任务直接复用掉。目标 APP 若自身声明 singleTask/singleInstance，
-        // Android 仍可能由系统复用它，这是目标 APP 的任务策略，容器无法强制改变。
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
-                | Intent.FLAG_ACTIVITY_NEW_DOCUMENT
-                | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
         intent.putExtra("com.example.appwindowcontainer.target_x",left);
         intent.putExtra("com.example.appwindowcontainer.target_y",top);
         intent.putExtra("com.example.appwindowcontainer.target_w",right-left);
