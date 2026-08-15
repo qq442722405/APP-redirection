@@ -757,11 +757,20 @@ public class MainActivity extends AppCompatActivity {
         // 三区域车机按一个超宽 Display 处理，窗口位置使用整块屏幕的绝对坐标。
         android.view.Display targetDisplay=getWindow().getWindowManager().getDefaultDisplay();
         android.graphics.Point real=getRealScreenSize(targetDisplay);
-        int left=Math.max(0,Math.min(p.x,real.x-1));
-        int top=Math.max(0,Math.min(p.y,real.y-1));
-        int right=Math.max(left+1,Math.min(p.x+p.w,real.x));
-        int bottom=Math.max(top+1,Math.min(p.y+p.h,real.y));
-        if(p.mode==6){
+        // 先复制预设参数到 final 局部变量，避免部分车机/Java 编译环境
+        // 在后续 lambda/Android Gradle Transform 阶段误判局部变量有效性。
+        final int presetX=p.x;
+        final int presetY=p.y;
+        final int presetW=p.w;
+        final int presetH=p.h;
+        final int presetMode=p.mode;
+        final String presetName=p.name;
+
+        int left=Math.max(0,Math.min(presetX,real.x-1));
+        int top=Math.max(0,Math.min(presetY,real.y-1));
+        int right=Math.max(left+1,Math.min(presetX+presetW,real.x));
+        int bottom=Math.max(top+1,Math.min(presetY+presetH,real.y));
+        if(presetMode==6){
             left=0; top=0; right=real.x; bottom=real.y;
             getWindow().getDecorView().setSystemUiVisibility(
                     View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
@@ -793,9 +802,9 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra("com.example.appwindowcontainer.target_w",right-left);
         intent.putExtra("com.example.appwindowcontainer.target_h",bottom-top);
                 intent.putExtra("com.example.appwindowcontainer.target_display_id",targetDisplay==null?-1:targetDisplay.getDisplayId());
-        intent.putExtra("com.example.appwindowcontainer.fullscreen",p.mode==6);
+        intent.putExtra("com.example.appwindowcontainer.fullscreen",presetMode==6);
 
-        info.setText("启动："+selectedName+"\n"+p.name+"  左间距 "+left+"  上间距 "+top+"  "+(right-left)+" × "+(bottom-top)+"  "+(p.mode==6?"全屏":"模式"+p.mode));
+        info.setText("启动："+selectedName+"\n"+presetName+"  左间距 "+left+"  上间距 "+top+"  "+(right-left)+" × "+(bottom-top)+"  "+(presetMode==6?"全屏":"模式"+presetMode));
 
         try{
             startActivity(intent,options.toBundle());
