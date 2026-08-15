@@ -702,4 +702,82 @@ public class MainActivity extends AppCompatActivity {
         name.requestFocus();
     }
 
+    void launchAppDirect(String pkg, String name){
+        try{
+            Intent intent=getPackageManager().getLaunchIntentForPackage(pkg);
+            if(intent==null){
+                Toast.makeText(this,"无法找到 "+name+" 的启动入口",Toast.LENGTH_SHORT).show();
+                return;
+            }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            startActivity(intent);
+        }catch(Exception e){
+            Toast.makeText(this,"启动失败："+e.getMessage(),Toast.LENGTH_SHORT).show();
+        }
+    }
 
+    /**
+     * 使用 Android 公共 ActivityOptions 设置启动边界。
+     * 这是普通 APK 能做的标准方式，不修改触控坐标，也不做任何触控纠正。
+     * 如果目标 APP 是强制全屏/不可调整大小，目标 APP 或车机 WindowManager
+     * 可能忽略该边界，这是 Android 系统层面的限制。
+     */
+    void launchApp(Preset p){
+        if(selectedPackage==null) return;
+        try{
+            Intent intent=getPackageManager().getLaunchIntentForPackage(selectedPackage);
+            if(intent==null){
+                Toast.makeText(this,"找不到 APP 启动入口",Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            ActivityOptions options=ActivityOptions.makeBasic();
+
+            if(Build.VERSION.SDK_INT>=24){
+                android.graphics.Rect bounds=new android.graphics.Rect(
+                        p.x,
+                        p.y,
+                        p.x + Math.max(1,p.w),
+                        p.y + Math.max(1,p.h)
+                );
+                options.setLaunchBounds(bounds);
+            }
+
+            if(Build.VERSION.SDK_INT>=26 && p.displayId>=0){
+                try{
+                    options.setLaunchDisplayId(p.displayId);
+                }catch(Exception ignored){}
+            }
+
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
+                    Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            startActivity(intent,options.toBundle());
+
+            info.setText("已启动："+selectedName+
+                    "    位置 "+p.x+" , "+p.y+
+                    "    大小 "+p.w+" × "+p.h);
+        }catch(Exception e){
+            Toast.makeText(this,"窗口启动失败："+e.getMessage(),Toast.LENGTH_LONG).show();
+        }
+    }
+
+    void showScreenDiagnostics(){
+        android.graphics.Point rs=getRealScreenSize();
+        android.view.Display d=getWindow().getDecorView().getDisplay();
+        String displayInfo="当前 Display ID："+(d==null?"-":String.valueOf(d.getDisplayId()));
+        String msg=displayInfo+"\n"+
+                "实际分辨率："+rs.x+" × "+rs.y+"\n"+
+                "当前预设数量："+presets.size()+"\n"+
+                "已添加 APP："+apps.size()+"\n\n"+
+                "坐标说明：\n"+
+                "左区可使用 X=0\n"+
+                "中区可使用 X=2160\n"+
+                "右区可使用 X=4320\n\n"+
+                "本版本没有触控纠正、X/Y 偏移补偿或 DPI 修改。";
+        new AlertDialog.Builder(this)
+                .setTitle("屏幕诊断")
+                .setMessage(msg)
+                .setPositiveButton("关闭",null)
+                .show();
+    }
+}
