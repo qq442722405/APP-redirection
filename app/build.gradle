@@ -6,7 +6,12 @@ android {
     namespace 'com.example.appwindowcontainer'
     compileSdk 35
 
-    defaultConfig {
+    compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
+}
+
+defaultConfig {
         applicationId 'com.example.appwindowcontainer'
         minSdk 26
         targetSdk 35

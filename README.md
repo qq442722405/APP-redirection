@@ -25,3 +25,8 @@
 - 移除旧版 `com.example.carappjump` 源码，工程统一使用 `com.example.appwindowcontainer`。
 - 修复多 Display 框选层中错误调用 `Presentation.getDisplay()` 导致的 Java 编译问题，改为从窗口 DecorView 获取实际 Display。
 - GitHub Actions 改为直接执行一次 `clean :app:assembleDebug`，避免重复编译造成日志混淆。
+
+\n## 构建稳定性修复
+- 增加 Java 8 编译兼容配置，确保 Lambda/Android API 混用时由 Android Gradle Plugin 正确脱糖。
+- 自动启动接入保存的窗口预设：有预设时使用 LaunchBounds 请求位置/大小；无预设则直接启动。
+- 自动启动仍遵循车机系统限制；普通 APK 没有权限强制修改其他 APK 的窗口管理策略。
