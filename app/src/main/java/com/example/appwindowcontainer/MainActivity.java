@@ -911,8 +911,8 @@ public class MainActivity extends AppCompatActivity {
         actions.addView(close,new LinearLayout.LayoutParams(dp(100),dp(58)));
         card.addView(actions,new LinearLayout.LayoutParams(-1,dp(68)));
 
-        add.setOnClickListener(v->showAutoStartItemEditor(item->{
-            // 添加窗口中的“确定”只加入当前草稿，不立即保存。
+        add.setOnClickListener(v->showAutoStartItemEditor(()->{
+            // 添加窗口中的“添加”只加入当前草稿，不立即保存。
             render[0].run();
         },draft));
         save.setOnClickListener(v->{
