@@ -133,41 +133,150 @@ public class FloatingService extends Service {
         showPanel();
     }
 
-    void showApps(){
-        // 使用独立 Dialog 并显式指定 Overlay 类型，避免部分车机中 PopupWindow
-        // 从 Service Context 创建时没有 token 导致点击“添加 APP”直接闪退。
-        final Dialog dialog=new Dialog(this);
-        LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(dp(8),dp(8),dp(8),dp(8));
-        GradientDrawable bg=new GradientDrawable();bg.setColor(0xF0202020);bg.setCornerRadius(dp(12));box.setBackground(bg);
-        TextView title=new TextView(this);title.setText("选择 APP 添加到悬浮窗口");title.setTextColor(Color.WHITE);title.setTextSize(16);title.setGravity(Gravity.CENTER_VERTICAL);box.addView(title,new LinearLayout.LayoutParams(-1,dp(44)));
-        EditText search=new EditText(this);search.setHint("搜索 APP");search.setHintTextColor(Color.GRAY);search.setTextColor(Color.WHITE);search.setSingleLine(true);box.addView(search,new LinearLayout.LayoutParams(-1,dp(48)));
-        ScrollView sv=new ScrollView(this);LinearLayout rows=new LinearLayout(this);rows.setOrientation(LinearLayout.VERTICAL);sv.addView(rows);box.addView(sv,new LinearLayout.LayoutParams(dp(340),dp(390)));
-        PackageManager pm=getPackageManager();
-        ArrayList<android.content.pm.ApplicationInfo> list=new ArrayList<>();
-        for(android.content.pm.ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)) if(!ai.packageName.equals(getPackageName())&&pm.getLaunchIntentForPackage(ai.packageName)!=null) list.add(ai);
-        Collections.sort(list,(a,b)->pm.getApplicationLabel(a).toString().compareToIgnoreCase(pm.getApplicationLabel(b).toString()));
-        Runnable refresh=()->{
-            rows.removeAllViews(); String q=search.getText().toString().trim().toLowerCase(); int count=0;
-            for(android.content.pm.ApplicationInfo ai:list){
-                String name=pm.getApplicationLabel(ai).toString(); if(!q.isEmpty()&&!name.toLowerCase().contains(q))continue;
-                LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(dp(8),dp(3),dp(8),dp(3));
-                ImageView icon=new ImageView(this);try{icon.setImageDrawable(pm.getApplicationIcon(ai));}catch(Exception ignored){} row.addView(icon,new LinearLayout.LayoutParams(dp(46),dp(46)));
-                TextView t=new TextView(this);t.setText(name);t.setTextColor(Color.WHITE);t.setTextSize(13);t.setPadding(dp(10),0,0,0);row.addView(t,new LinearLayout.LayoutParams(0,dp(52),1));
-                row.setOnClickListener(v->{
-                    if(!floatingPkgs.contains(ai.packageName)){floatingPkgs.add(ai.packageName);floatingNames.add(name);saveFloatingApps();rebuildButtons();}
-                    dialog.dismiss();
-                });
-                rows.addView(row,new LinearLayout.LayoutParams(-1,dp(54)));if(++count>=100)break;
-            }
-        };
-        search.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int b,int c){}public void onTextChanged(CharSequence s,int a,int b,int c){refresh.run();}public void afterTextChanged(android.text.Editable e){}});
-        dialog.setContentView(box); dialog.setTitle("添加 APP");
-        Window win=dialog.getWindow();
-        if(win!=null){win.setType(Build.VERSION.SDK_INT>=26?WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY:WindowManager.LayoutParams.TYPE_PHONE);win.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));WindowManager.LayoutParams q=win.getAttributes();q.width=dp(370);q.height=dp(520);win.setAttributes(q);}
-        dialog.setCanceledOnTouchOutside(true);dialog.setOnShowListener(x->refresh.run());
-        try{dialog.show();}catch(Exception e){Toast.makeText(this,"打开 APP 列表失败："+e.getMessage(),Toast.LENGTH_SHORT).show();}
+    // 使用 WindowManager 直接创建选择面板，不再从 Service Context 创建 Dialog。
+    // 部分车机对 Service Context + Dialog 的 Window Token 处理不完整，点击“添加 APP”
+    // 会直接崩溃；直接使用 TYPE_APPLICATION_OVERLAY 可以避开这个问题。
+    View appPickerOverlay;
+    WindowManager.LayoutParams appPickerLp;
+
+    void closeAppPicker(){
+        try{
+            if(appPickerOverlay!=null && wm!=null) wm.removeView(appPickerOverlay);
+        }catch(Exception ignored){}
+        appPickerOverlay=null;
     }
 
-    @Override public void onDestroy(){try{if(wm!=null&&panel!=null)wm.removeView(panel);}catch(Exception ignored){}super.onDestroy();}
+    void showApps(){
+        if(wm==null) wm=(WindowManager)getSystemService(WINDOW_SERVICE);
+        if(Build.VERSION.SDK_INT>=23 && !Settings.canDrawOverlays(this)){
+            Toast.makeText(this,"请先授权悬浮窗权限",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        closeAppPicker();
+
+        FrameLayout root=new FrameLayout(this);
+        GradientDrawable bg=new GradientDrawable();
+        bg.setColor(0xF0202020); bg.setCornerRadius(dp(16));
+        root.setBackground(bg); root.setPadding(dp(10),dp(10),dp(10),dp(10));
+
+        LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        root.addView(box,new FrameLayout.LayoutParams(-1,-1));
+
+        LinearLayout titleRow=new LinearLayout(this);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title=new TextView(this);
+        title.setText("选择 APP 添加到悬浮窗口"); title.setTextColor(Color.WHITE); title.setTextSize(16);
+        titleRow.addView(title,new LinearLayout.LayoutParams(0,dp(46),1));
+        ImageButton close=iconButton(android.R.drawable.ic_menu_close_clear_cancel);
+        close.setContentDescription("关闭");
+        close.setOnClickListener(v->closeAppPicker());
+        titleRow.addView(close,new LinearLayout.LayoutParams(dp(46),dp(46)));
+        box.addView(titleRow);
+
+        EditText search=new EditText(this);
+        search.setHint("搜索 APP"); search.setHintTextColor(Color.GRAY); search.setTextColor(Color.WHITE);
+        search.setSingleLine(true); search.setPadding(dp(10),0,dp(10),0);
+        box.addView(search,new LinearLayout.LayoutParams(-1,dp(48)));
+
+        ScrollView sv=new ScrollView(this);
+        LinearLayout rows=new LinearLayout(this); rows.setOrientation(LinearLayout.VERTICAL);
+        sv.addView(rows,new ScrollView.LayoutParams(-1,-2));
+        box.addView(sv,new LinearLayout.LayoutParams(-1,0,1));
+
+        PackageManager pm=getPackageManager();
+        ArrayList<ApplicationInfo> list=new ArrayList<>();
+        try{
+            for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){
+                if(ai.packageName.equals(getPackageName())) continue;
+                if(pm.getLaunchIntentForPackage(ai.packageName)==null) continue;
+                list.add(ai);
+            }
+            Collections.sort(list,(a,b)->{
+                String aa=String.valueOf(pm.getApplicationLabel(a));
+                String bb=String.valueOf(pm.getApplicationLabel(b));
+                return aa.compareToIgnoreCase(bb);
+            });
+        }catch(Exception ignored){}
+
+        Runnable refresh=()->{
+            rows.removeAllViews();
+            String q=search.getText().toString().trim().toLowerCase(Locale.ROOT);
+            int count=0;
+            for(ApplicationInfo ai:list){
+                String name;
+                try{name=pm.getApplicationLabel(ai).toString();}catch(Exception e){name=ai.packageName;}
+                if(!q.isEmpty() && !name.toLowerCase(Locale.ROOT).contains(q) && !ai.packageName.toLowerCase(Locale.ROOT).contains(q)) continue;
+
+                LinearLayout row=new LinearLayout(this);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(dp(8),dp(4),dp(8),dp(4));
+                row.setBackgroundResource(R.drawable.card);
+
+                ImageView icon=new ImageView(this);
+                try{icon.setImageDrawable(pm.getApplicationIcon(ai));}catch(Exception ignored){}
+                row.addView(icon,new LinearLayout.LayoutParams(dp(48),dp(48)));
+
+                TextView nameView=new TextView(this);
+                nameView.setText(name); nameView.setTextColor(Color.WHITE); nameView.setTextSize(14);
+                nameView.setGravity(Gravity.CENTER_VERTICAL); nameView.setPadding(dp(12),0,0,0);
+                row.addView(nameView,new LinearLayout.LayoutParams(0,dp(56),1));
+
+                TextView state=new TextView(this);
+                state.setText(floatingPkgs.contains(ai.packageName)?"已添加":"添加");
+                state.setTextColor(0xFFB0BEC5); state.setGravity(Gravity.CENTER);
+                row.addView(state,new LinearLayout.LayoutParams(dp(60),dp(50)));
+
+                row.setOnClickListener(v->{
+                    try{
+                        if(!floatingPkgs.contains(ai.packageName)){
+                            floatingPkgs.add(ai.packageName);
+                            floatingNames.add(name);
+                            saveFloatingApps();
+                            rebuildButtons();
+                        }
+                        closeAppPicker();
+                    }catch(Exception e){
+                        Toast.makeText(this,"添加 APP 失败："+e.getMessage(),Toast.LENGTH_SHORT).show();
+                    }
+                });
+                rows.addView(row,new LinearLayout.LayoutParams(-1,dp(60)));
+                if(++count>=150) break;
+            }
+            if(count==0){
+                TextView empty=new TextView(this); empty.setText("没有找到可启动的 APP");
+                empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER);
+                rows.addView(empty,new LinearLayout.LayoutParams(-1,dp(80)));
+            }
+        };
+        search.addTextChangedListener(new android.text.TextWatcher(){
+            public void beforeTextChanged(CharSequence s,int a,int b,int c){}
+            public void onTextChanged(CharSequence s,int a,int b,int c){refresh.run();}
+            public void afterTextChanged(android.text.Editable e){}
+        });
+
+        appPickerOverlay=root;
+        int type=Build.VERSION.SDK_INT>=26?WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY:WindowManager.LayoutParams.TYPE_PHONE;
+        appPickerLp=new WindowManager.LayoutParams(
+                dp(390),dp(540),type,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                PixelFormat.TRANSLUCENT);
+        appPickerLp.gravity=Gravity.CENTER;
+        appPickerLp.dimAmount=0.35f;
+        if(Build.VERSION.SDK_INT>=21) appPickerLp.flags |= WindowManager.LayoutParams.FLAG_DIM_BEHIND;
+        try{
+            wm.addView(appPickerOverlay,appPickerLp);
+            refresh.run();
+        }catch(Exception e){
+            appPickerOverlay=null;
+            Toast.makeText(this,"打开 APP 列表失败："+e.getMessage(),Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override public void onDestroy(){
+        closeAppPicker();
+        try{if(wm!=null&&panel!=null)wm.removeView(panel);}catch(Exception ignored){}
+        super.onDestroy();
+    }
     @Override public IBinder onBind(Intent i){return null;}
 }

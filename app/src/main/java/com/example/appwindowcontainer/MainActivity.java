@@ -391,13 +391,38 @@ public class MainActivity extends AppCompatActivity {
         as.setOnCheckedChangeListener((v,checked)->prefs.edit().putBoolean("auto_start_enabled",checked).apply());
         autoRow.addView(as); box.addView(autoRow);
 
-        Button add=button("添加自动启动项目"); add.setOnClickListener(v->showAutoStartEditor());
+        Button add=button("管理自动启动项目（支持多个任务）"); add.setOnClickListener(v->showAutoStartEditor());
         box.addView(add,new LinearLayout.LayoutParams(-1,dp(50)));
+
+        // 设置页面直接列出当前加入自动启动的 APP，避免用户不知道哪些任务会开机启动。
+        LinearLayout autoList=new LinearLayout(this); autoList.setOrientation(LinearLayout.VERTICAL);
+        JSONArray currentTasks=loadAutoTasks();
+        if(currentTasks.length()==0){
+            TextView emptyAuto=text("当前没有自动启动任务",12); emptyAuto.setTextColor(Color.GRAY);
+            autoList.addView(emptyAuto,new LinearLayout.LayoutParams(-1,dp(34)));
+        }else{
+            for(int i=0;i<currentTasks.length();i++){
+                JSONObject o=currentTasks.optJSONObject(i); if(o==null) continue;
+                LinearLayout ar=new LinearLayout(this); ar.setGravity(Gravity.CENTER_VERTICAL);
+                ImageView aiIcon=new ImageView(this);
+                try{aiIcon.setImageDrawable(getPackageManager().getApplicationIcon(o.optString("pkg","")));}catch(Exception ignored){}
+                ar.addView(aiIcon,new LinearLayout.LayoutParams(dp(32),dp(32)));
+                TextView an=text((i+1)+". "+o.optString("name",o.optString("pkg","APP")),12);
+                ar.addView(an,new LinearLayout.LayoutParams(0,dp(38),1));
+                autoList.addView(ar,new LinearLayout.LayoutParams(-1,dp(38)));
+            }
+        }
+        box.addView(autoList,new LinearLayout.LayoutParams(-1,Math.min(dp(150),Math.max(dp(38),dp(38)*Math.max(1,currentTasks.length())))));
+
         LinearLayout bootRow=new LinearLayout(this); bootRow.setGravity(Gravity.CENTER_VERTICAL);
         TextView bootLabel=text("开机延迟启动（秒）",15); bootRow.addView(bootLabel,new LinearLayout.LayoutParams(0,dp(52),1));
         EditText bootDelay=numberField("0",String.valueOf(prefs.getInt("boot_delay_seconds",0))); bootRow.addView(bootDelay,new LinearLayout.LayoutParams(dp(100),dp(52)));
         box.addView(bootRow,new LinearLayout.LayoutParams(-1,dp(54)));
-        bootDelay.setOnFocusChangeListener((v,has)->{ if(!has) prefs.edit().putInt("boot_delay_seconds",Math.max(0,number(bootDelay,0))).apply(); });
+        bootDelay.addTextChangedListener(new android.text.TextWatcher(){
+            public void beforeTextChanged(CharSequence s,int st,int c,int a){}
+            public void onTextChanged(CharSequence s,int st,int before,int count){ prefs.edit().putInt("boot_delay_seconds",Math.max(0,number(bootDelay,0))).apply(); }
+            public void afterTextChanged(android.text.Editable e){}
+        });
 
         Button floatLayout=button("悬浮窗方向："+(prefs.getBoolean("floating_vertical",false)?"竖向":"横向"));
         box.addView(floatLayout,new LinearLayout.LayoutParams(-1,dp(48)));
@@ -517,24 +542,26 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(8),dp(4),dp(8),dp(4));
         EditText search=textField("搜索 APP",""); box.addView(search,new LinearLayout.LayoutParams(-1,dp(48)));
         LinearLayout tabs=new LinearLayout(this); tabs.setOrientation(LinearLayout.HORIZONTAL);
-        String[] cats={"全部","系统","用户"};
+        // 添加 APP 默认只显示“用户”应用；不再把“全部”作为默认分类。
+        // 仍保留“系统”按钮，方便需要时添加车机系统 APP。
+        String[] cats={"用户","系统"};
         Button[] tabBtns=new Button[cats.length];
         for(int i=0;i<cats.length;i++){
             Button b=button(cats[i]); b.setTextSize(12); tabBtns[i]=b;
             tabs.addView(b,new LinearLayout.LayoutParams(0,dp(42),1));
         }
-        tabBtns[2].setBackgroundResource(R.drawable.card_selected);
+        tabBtns[0].setBackgroundResource(R.drawable.card_selected);
         box.addView(tabs);
         LinearLayout rows=new LinearLayout(this); rows.setOrientation(LinearLayout.VERTICAL);
         ScrollView scroll=new ScrollView(this); scroll.addView(rows); box.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("添加 APP").setView(box).setNegativeButton("关闭",null).create();
-        final int[] category={2};
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("添加 APP（默认：用户）").setView(box).setNegativeButton("关闭",null).create();
+        final int[] category={0};
         Runnable refreshAppPicker=()->{
             rows.removeAllViews(); String q=search.getText().toString().trim().toLowerCase(); int count=0;
             for(ApplicationInfo ai:list){
                 boolean system=(ai.flags & ApplicationInfo.FLAG_SYSTEM)!=0;
                 boolean updated=(ai.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)!=0;
-                boolean show=category[0]==0 || (category[0]==1 && system) || (category[0]==2 && !system) || (category[0]==3 && !system && !updated);
+                boolean show=(category[0]==0 && !system) || (category[0]==1 && system);
                 String name=pm.getApplicationLabel(ai).toString();
                 if(!show || (!q.isEmpty()&&!name.toLowerCase().contains(q))) continue;
                 LinearLayout row=new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(dp(8),dp(3),dp(8),dp(3));
