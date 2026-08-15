@@ -10,8 +10,8 @@ android {
         applicationId 'com.example.appwindowcontainer'
         minSdk 26
         targetSdk 35
-        versionCode 10
-        versionName '1.9-permission'
+        versionCode 11
+        versionName '2.0-fullscreen-test'
     }
 
     packaging {
