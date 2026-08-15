@@ -305,16 +305,6 @@ public class MainActivity extends AppCompatActivity {
         TextView pt=text("窗口预设",17); pt.setTypeface(null,1);
         presetHeader.addView(pt,new LinearLayout.LayoutParams(0,dp(44),1));
 
-        // 针对全屏 APP 的兼容性测试。每个按钮代表不同的启动策略。
-        String[] testNames={"全屏1","全屏2","全屏3","全屏4","全屏5"};
-        for(int i=1;i<=5;i++){
-            final int testNo=i;
-            Button tb=button(testNames[i-1]);
-            tb.setTextSize(11);
-            tb.setMinWidth(0); tb.setPadding(0,0,0,0);
-            tb.setOnClickListener(v->runWindowTest(testNo));
-            presetHeader.addView(tb,new LinearLayout.LayoutParams(dp(62),dp(42)));
-        }
         root.addView(presetHeader,new LinearLayout.LayoutParams(-1,dp(44)));
 
         ScrollView presetScroll=new ScrollView(this);
@@ -615,14 +605,14 @@ public class MainActivity extends AppCompatActivity {
     void showPresetEditor(int index,Preset old){
         LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
         EditText name=textField("预设名称（支持中文）",old.name);
-        EditText x=numberField("X 左上位置",String.valueOf(old.x));
-        EditText y=numberField("Y 上下位置",String.valueOf(old.y));
+        EditText x=numberField("左边间距",String.valueOf(old.x));
+        EditText y=numberField("上边间距",String.valueOf(old.y));
         EditText width=numberField("窗口宽度",String.valueOf(old.w));
         EditText height=numberField("窗口高度",String.valueOf(old.h));
 
         box.addView(labeledField("预设名称",name));
-        box.addView(labeledNumberField("X 左上位置",x));
-        box.addView(labeledNumberField("Y 上下位置",y));
+        box.addView(labeledNumberField("左边间距",x));
+        box.addView(labeledNumberField("上边间距",y));
         box.addView(labeledNumberField("窗口宽度",width));
         box.addView(labeledNumberField("窗口高度",height));
 
@@ -653,12 +643,9 @@ public class MainActivity extends AppCompatActivity {
     void showScreenDiagnostics(){
         android.view.Display d=getWindow().getWindowManager().getDefaultDisplay();
         android.graphics.Point p=getRealScreenSize(d);
-        android.util.DisplayMetrics m=new android.util.DisplayMetrics(); d.getRealMetrics(m);
         String s="当前车机 Display\n\n"+
                 "Display ID: "+d.getDisplayId()+"\n"+
                 "真实分辨率: "+p.x+" × "+p.y+"\n"+
-                "densityDpi: "+m.densityDpi+"\n"+
-                "density: "+m.density+"\n"+
                 "rotation: "+d.getRotation()+"\n\n"+
                 "三区域按整块超宽屏坐标处理：\n"+
                 "左区约 X=0\n中区约 X=2160\n右区约 X=4320";
@@ -667,97 +654,6 @@ public class MainActivity extends AppCompatActivity {
                 .setNegativeButton("关闭",null).show();
     }
 
-
-    /**
-     * 车机兼容性测试。
-     *
-     * 所有测试统一使用：左=500、上=100、宽=1000、高=500。
-     *
-     * 测试1：标准 LaunchBounds。
-     * 测试2：NEW_DOCUMENT + LaunchBounds，尽量创建独立任务。
-     * 测试3：NEW_TASK + CLEAR_TOP + LaunchBounds。
-     * 测试4：NEW_DOCUMENT + MULTIPLE_TASK + LaunchBounds。
-     * 测试5：标准 LaunchBounds + 不传额外窗口参数，用于对比车机行为。
-     */
-    void runWindowTest(int testNo){
-        if(selectedPackage==null){
-            Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show();
-            return;
-        }
-        PackageManager pm=getPackageManager();
-        Intent intent=pm.getLaunchIntentForPackage(selectedPackage);
-        if(intent==null){
-            Toast.makeText(this,"无法启动 APP",Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        android.view.Display display=getWindow().getWindowManager().getDefaultDisplay();
-        android.graphics.Point real=getRealScreenSize(display);
-
-        final int left=Math.max(0,Math.min(500,real.x-1));
-        final int top=Math.max(0,Math.min(100,real.y-1));
-        final int right=Math.max(left+1,Math.min(left+1000,real.x));
-        final int bottom=Math.max(top+1,Math.min(top+500,real.y));
-        android.graphics.Rect bounds=new android.graphics.Rect(left,top,right,bottom);
-
-        ActivityOptions options=ActivityOptions.makeBasic();
-        options.setLaunchBounds(bounds);
-
-        // 车机全屏 APP 专用测试：
-        // 1 = 标准 LaunchBounds
-        // 2 = LaunchBounds + NEW_DOCUMENT
-        // 3 = LaunchBounds + MULTIPLE_TASK
-        // 4 = 通过 Android 8+ 隐藏 API 尝试请求 FREEFORM
-        // 5 = FREEFORM + LaunchBounds + 独立任务
-        // 这些方案只能“请求”系统 WindowManager，不能绕过系统权限。
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        if(testNo==2){
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
-        }else if(testNo==3){
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
-        }else if(testNo==4){
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-            trySetLaunchWindowingMode(options,5); // WINDOWING_MODE_FREEFORM
-        }else if(testNo==5){
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
-            trySetLaunchWindowingMode(options,5);
-        }
-
-        if(Build.VERSION.SDK_INT>=26 && display!=null){
-            try{
-                java.lang.reflect.Method m=ActivityOptions.class.getMethod("setLaunchDisplayId",int.class);
-                m.invoke(options,display.getDisplayId());
-            }catch(Exception ignored){}
-        }
-
-        intent.putExtra("com.example.appwindowcontainer.test_mode",testNo);
-        intent.putExtra("com.example.appwindowcontainer.target_x",left);
-        intent.putExtra("com.example.appwindowcontainer.target_y",top);
-        intent.putExtra("com.example.appwindowcontainer.target_w",right-left);
-        intent.putExtra("com.example.appwindowcontainer.target_h",bottom-top);
-        
-        String mode=(testNo>=4)?"FREEFORM + LaunchBounds":"LaunchBounds";
-        info.setText("全屏"+testNo+"："+selectedName+"\n"+
-                "方案="+mode+"  X="+left+" Y="+top+"  "+(right-left)+" × "+(bottom-top)+
-                "  不修改 DPI");
-        try{
-            startActivity(intent,options.toBundle());
-        }catch(Exception e){
-            info.setText("全屏"+testNo+"启动失败："+e.getMessage());
-            try{startActivity(intent);}catch(Exception ignored){}
-        }
-    }
-
-    void trySetLaunchWindowingMode(ActivityOptions options,int mode){
-        if(Build.VERSION.SDK_INT<26) return;
-        try{
-            java.lang.reflect.Method m=ActivityOptions.class.getMethod("setLaunchWindowingMode",int.class);
-            m.setAccessible(true);
-            m.invoke(options,mode);
-        }catch(Throwable ignored){
-            // Android 12 对隐藏 API 可能阻止反射；这里静默失败，仍保留 LaunchBounds。
-        }
-    }
 
     void launchAppDirect(String pkg,String name){
         Intent intent=getPackageManager().getLaunchIntentForPackage(pkg);
