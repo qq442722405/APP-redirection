@@ -337,8 +337,7 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout modeRow=new LinearLayout(this);
         modeRow.setOrientation(LinearLayout.HORIZONTAL);
         modeRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView modeTitle=text("窗口模式",14);
-        modeRow.addView(modeTitle,new LinearLayout.LayoutParams(dp(82),dp(40)));
+        // 不显示“窗口模式”标题，直接显示 5 个紧凑模式按钮。
         modeButtons.clear();
         String[] modeNames={"模式1","模式2","模式3","模式4","模式5"};
         for(int i=0;i<modeNames.length;i++){
@@ -353,7 +352,10 @@ public class MainActivity extends AppCompatActivity {
                 refreshPresets();
                 Toast.makeText(this,"已选择 "+modeNames[mode-1],Toast.LENGTH_SHORT).show();
             });
-            modeRow.addView(mb,new LinearLayout.LayoutParams(0,dp(40),1));
+            // 每个模式按钮保持紧凑，约为原来占满整行宽度的 1/3。
+            LinearLayout.LayoutParams modeLp=new LinearLayout.LayoutParams(dp(64),dp(40));
+            if(i>0) modeLp.leftMargin=dp(4);
+            modeRow.addView(mb,modeLp);
         }
         root.addView(modeRow,new LinearLayout.LayoutParams(-1,dp(42)));
 
@@ -687,12 +689,13 @@ public class MainActivity extends AppCompatActivity {
         card.setPadding(dp(24),dp(16),dp(24),dp(16));
         card.setBackgroundResource(R.drawable.card);
 
+        // 编辑框占用可用高度，底部“完成”固定可见，避免车机矮屏把按钮挤出屏幕。
         FrameLayout.LayoutParams cp=new FrameLayout.LayoutParams(
-                -1,-2,Gravity.TOP|Gravity.CENTER_HORIZONTAL);
+                -1,-1,Gravity.TOP|Gravity.CENTER_HORIZONTAL);
         cp.leftMargin=dp(80);
         cp.rightMargin=dp(80);
-        cp.topMargin=dp(80);
-        cp.bottomMargin=dp(120);
+        cp.topMargin=dp(45);
+        cp.bottomMargin=dp(45);
 
         TextView title=text(index<0?"新建窗口预设":"编辑窗口预设",20);
         title.setTypeface(null,1);
