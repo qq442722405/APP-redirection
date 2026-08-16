@@ -1,0 +1,129 @@
+name: 构建 APP窗口启动器
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v5
+
+      - name: 设置 Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 设置 Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: 安装 Android SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: 设置 Gradle 8.7
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: '8.7'
+          cache-cleanup: always
+
+      - name: 强制清理旧工程残留
+        shell: bash
+        run: |
+          set -e
+          echo "=== 清理历史包名/资源残留 ==="
+
+          # 如果仓库仍存在旧 Java 包目录，先迁移到新包目录；若新目录已存在，
+          # 删除旧目录，避免同名类重复编译。
+          OLD_DIR="app/src/main/java/com/example/carappjump"
+          NEW_DIR="app/src/main/java/com/example/appwindowcontainer"
+          if [ -d "$OLD_DIR" ]; then
+            mkdir -p "$NEW_DIR"
+            if [ -z "$(find "$NEW_DIR" -type f -name "*.java" -print -quit)" ]; then
+              cp -f "$OLD_DIR"/*.java "$NEW_DIR"/ 2>/dev/null || true
+            fi
+            rm -rf "$OLD_DIR"
+          fi
+
+          # 全工程 Java/Kotlin/XML/Gradle 文本统一替换历史包名。
+          find app/src/main -type f \( -name "*.java" -o -name "*.kt" -o -name "*.xml" \) -print0 | \
+            xargs -0 -r sed -i 's/com\.example\.carappjump/com.example.appwindowcontainer/g'
+
+          # 旧快捷方式资源不是本版本功能，直接删除，避免 AAPT 引用历史字符串。
+          rm -f app/src/main/res/xml/shortcuts.xml
+
+          echo "=== 当前 Java 文件 ==="
+          find app/src/main/java -type f -name "*.java" -print | sort
+
+          echo "=== 检查是否仍存在旧包名 ==="
+          if grep -R -n --exclude-dir=build 'com\.example\.carappjump' app/src/main 2>/dev/null; then
+            echo "错误：源码仍存在旧包名"
+            exit 1
+          fi
+
+          echo "=== 检查新包名 ==="
+          grep -R -n '^package com.example.appwindowcontainer;' app/src/main/java
+
+          echo "=== 修复 Java LayoutParams 类型错误 ==="
+          # 防止历史版本把 LinearLayout.LayoutParams 错写成 LinearLayout，
+          # 这会导致 setMargins/addView 编译失败。
+          find app/src/main/java -type f -name "*.java" -print0 | \
+            xargs -0 -r sed -i \
+              -e 's/LinearLayout clp=new LinearLayout\.LayoutParams/LinearLayout.LayoutParams clp=new LinearLayout.LayoutParams/g' \
+              -e 's/LinearLayout closeLp=new LinearLayout\.LayoutParams/LinearLayout.LayoutParams closeLp=new LinearLayout.LayoutParams/g'
+
+          # 编译前直接检查这两个变量的类型，发现错误立即给出清晰提示。
+          if grep -R -n --include="*.java" -E 'LinearLayout (clp|closeLp)=new LinearLayout\.LayoutParams' app/src/main/java 2>/dev/null; then
+            echo "错误：仍存在 LayoutParams 类型声明错误"
+            exit 1
+          fi
+
+          echo "=== 检查关键资源 ==="
+          test -f app/src/main/res/values/strings.xml
+          test -f app/src/main/res/xml/accessibility_service_config.xml
+          grep -q 'name="selector_title"' app/src/main/res/values/strings.xml
+          grep -q 'name="search_hint"' app/src/main/res/values/strings.xml
+          grep -q 'name="accessibility_desc"' app/src/main/res/values/strings.xml
+
+          echo "=== 检查 shortcuts.xml ==="
+          if [ -e app/src/main/res/xml/shortcuts.xml ]; then
+            echo "错误：shortcuts.xml 未删除"
+            exit 1
+          fi
+
+      - name: 构建 Debug APK
+        run: |
+          set -o pipefail
+          gradle --version
+          echo "=== 最终工程结构 ==="
+          find app/src/main/java -type f -name "*.java" -print | sort
+          find app/src/main/res -type f -print | sort
+          echo "=== 开始 Gradle 编译 ==="
+          gradle clean :app:assembleDebug --no-daemon --stacktrace --info --console=plain 2>&1 | tee build.log
+
+      - name: 构建失败时输出关键日志
+        if: failure()
+        run: |
+          echo "=== 最后 250 行构建日志 ==="
+          if [ -f build.log ]; then tail -n 250 build.log; fi
+          echo "=== Java/XML 关键文件 ==="
+          sed -n '1,80p' app/src/main/AndroidManifest.xml
+          sed -n '1,80p' app/build.gradle
+
+      - name: 准备 APK
+        run: |
+          set -e
+          mkdir -p output
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          cp app/build/outputs/apk/debug/app-debug.apk "output/APP窗口启动器.apk"
+          ls -lh output/APP窗口启动器.apk
+
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: APP窗口启动器
+          path: output/APP窗口启动器.apk
+          if-no-files-found: error
