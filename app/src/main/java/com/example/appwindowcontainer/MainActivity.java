@@ -377,17 +377,44 @@ public class MainActivity extends AppCompatActivity {
      * 统一修正弹出窗口位置：车机顶部约 80px 为状态栏/触控映射保留区。
      * 将所有 AlertDialog 放到屏幕顶部 80px 以下，避免车机触控坐标落到左上角。
      */
+    /**
+     * 车机触控兼容：不要把 Dialog Window 本身移动到 y=80。
+     * 很多车机的触摸坐标仍按整块物理屏幕映射，Dialog Window 如果 y=80，
+     * 就会出现“视觉在这里、点击跑到左上/上方”的现象。
+     *
+     * 正确做法：让 Dialog Window 永远从物理屏幕 (0,0) 开始、占满整屏，
+     * 再把 Dialog 的内容区域向下留 80px。这样视觉避开状态栏，同时触摸
+     * 坐标系与主 Activity 保持一致。
+     */
     void placeDialogBelowTop(Dialog dialog){
         if(dialog==null || dialog.getWindow()==null) return;
         Window w=dialog.getWindow();
-        w.setGravity(Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-        WindowManager.LayoutParams lp=w.getAttributes();
-        lp.y=TOP_BLANK;
-        lp.x=0;
-        w.setAttributes(lp);
+        try{
+            w.setGravity(Gravity.TOP | Gravity.LEFT);
+            w.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
+            if(Build.VERSION.SDK_INT>=19){
+                w.getDecorView().setSystemUiVisibility(
+                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+            }
+            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            w.setLayout(WindowManager.LayoutParams.MATCH_PARENT,WindowManager.LayoutParams.MATCH_PARENT);
+            WindowManager.LayoutParams lp=w.getAttributes();
+            lp.x=0;
+            lp.y=0;
+            lp.width=WindowManager.LayoutParams.MATCH_PARENT;
+            lp.height=WindowManager.LayoutParams.MATCH_PARENT;
+            w.setAttributes(lp);
+
+            // Window 原点保持 0,0；仅把实际 Dialog 内容留出顶部 80px。
+            View decor=w.getDecorView();
+            decor.setPadding(0,dp(TOP_BLANK),0,0);
+        }catch(Exception ignored){}
     }
 
     void showDialogBelowTop(AlertDialog dialog){
+        if(dialog==null) return;
         dialog.show();
         placeDialogBelowTop(dialog);
     }
@@ -412,8 +439,16 @@ public class MainActivity extends AppCompatActivity {
         hint.setPadding(0,dp(6),0,dp(6));
         box.addView(hint,new LinearLayout.LayoutParams(-1,dp(58)));
 
+        LinearLayout actionRow=new LinearLayout(this);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setGravity(Gravity.CENTER_VERTICAL);
         Button test=button("窗口位置测试");
-        box.addView(test,new LinearLayout.LayoutParams(-1,dp(50)));
+        Button copy=button("复制参数");
+        actionRow.addView(test,new LinearLayout.LayoutParams(0,dp(50),1));
+        LinearLayout.LayoutParams copyLp=new LinearLayout.LayoutParams(dp(110),dp(50));
+        copyLp.setMargins(dp(8),0,0,0);
+        actionRow.addView(copy,copyLp);
+        box.addView(actionRow,new LinearLayout.LayoutParams(-1,dp(54)));
 
         AlertDialog config=new AlertDialog.Builder(this)
                 .setTitle("窗口位置测试")
@@ -421,50 +456,115 @@ public class MainActivity extends AppCompatActivity {
                 .setNegativeButton("关闭",null)
                 .create();
         test.setOnClickListener(v->showPositionSampleWindow(number(top,TOP_BLANK),number(left,0),number(width,600),number(height,300)));
+        copy.setOnClickListener(v->copyPositionTestToClipboard(number(top,TOP_BLANK),number(left,0),number(width,600),number(height,300)));
         showDialogBelowTop(config);
     }
 
+    /**
+     * 全屏窗口位置测试。
+     *
+     * 这里不能使用 Dialog：Dialog 属于当前 Activity 的应用窗口层，
+     * 当车机把 MainActivity 限制在屏幕中间区域时，Dialog 也会被限制在
+     * 那个区域，所以看起来无论怎么设置都跑不到整块物理屏幕的左右区域。
+     *
+     * 改为 SYSTEM_ALERT_WINDOW / TYPE_APPLICATION_OVERLAY 后，窗口直接交给
+     * 系统 WindowManager 管理，坐标以整个物理 Display 左上角为原点，
+     * 可以真正测试超宽车机的任意 X/Y/宽/高。
+     */
+    /**
+     * 把“窗口位置测试”的参数复制成新建/编辑预设可直接粘贴的 JSON。
+     * 测试窗口的“离顶部”对应预设 Y，“离左边”对应预设 X。
+     */
+    void copyPositionTestToClipboard(int top,int left,int width,int height){
+        try{
+            JSONObject o=new JSONObject();
+            o.put("name","");
+            o.put("x",Math.max(0,left));
+            o.put("y",Math.max(0,top));
+            o.put("w",Math.max(1,width));
+            o.put("h",Math.max(1,height));
+            o.put("mode",1);
+            android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("窗口预设参数",o.toString()));
+            Toast.makeText(this,"参数已复制，进入“新建窗口预设”点击“粘贴”即可导入",Toast.LENGTH_LONG).show();
+        }catch(Exception e){
+            Toast.makeText(this,"复制参数失败",Toast.LENGTH_SHORT).show();
+        }
+    }
+
     void showPositionSampleWindow(int top,int left,int width,int height){
-        android.graphics.Point screen=getRealScreenSize();
-        top=Math.max(0,top); left=Math.max(0,left);
-        width=Math.max(180,Math.min(width,screen.x-left));
-        height=Math.max(120,Math.min(height,screen.y-top));
-        int bottom=Math.max(0,screen.y-top-height);
+        final android.graphics.Point screen=getRealScreenSize();
+        top=Math.max(0,top);
+        left=Math.max(0,left);
+        width=Math.max(180,Math.min(width,Math.max(180,screen.x-left)));
+        height=Math.max(120,Math.min(height,Math.max(120,screen.y-top)));
+        final int finalTop=top;
+        final int finalLeft=left;
+        final int finalWidth=width;
+        final int finalHeight=height;
+        final int bottom=Math.max(0,screen.y-finalTop-finalHeight);
+
+        if(Build.VERSION.SDK_INT>=23 && !android.provider.Settings.canDrawOverlays(this)){
+            Toast.makeText(this,"请先允许本APP显示在其他应用上层，测试窗口才能覆盖整个屏幕",Toast.LENGTH_LONG).show();
+            try{
+                Intent intent=new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION);
+                intent.setData(android.net.Uri.parse("package:"+getPackageName()));
+                startActivity(intent);
+            }catch(Exception ignored){
+                try{startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION));}catch(Exception ignored2){}
+            }
+            return;
+        }
+
+        final WindowManager wm=(WindowManager)getSystemService(WINDOW_SERVICE);
+        if(wm==null) return;
 
         LinearLayout box=new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(12),dp(8),dp(12),dp(8));
         box.setBackgroundColor(Color.rgb(25,25,25));
-        TextView title=text("窗口位置测试",18); title.setTypeface(null,1);
+        box.setElevation(dp(8));
+
+        TextView title=text("全屏窗口位置测试",18);
+        title.setTypeface(null,1);
         box.addView(title,new LinearLayout.LayoutParams(-1,dp(38)));
-        TextView info=text("离上："+top+" px\n离下："+bottom+" px\n离左："+left+" px\n窗口大小："+width+" × "+height+" px",15);
+
+        TextView info=text(
+                "屏幕："+screen.x+" × "+screen.y+
+                "\n离上："+finalTop+" px   离下："+bottom+" px"+
+                "\n离左："+finalLeft+" px   离右："+Math.max(0,screen.x-finalLeft-finalWidth)+" px"+
+                "\n窗口大小："+finalWidth+" × "+finalHeight+" px",15);
         info.setTextColor(Color.WHITE);
         box.addView(info,new LinearLayout.LayoutParams(-1,0,1));
+
         Button close=button("关闭测试窗口");
         box.addView(close,new LinearLayout.LayoutParams(-1,dp(46)));
 
-        Dialog sample=new Dialog(this);
-        sample.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        sample.setContentView(box);
-        Window w=sample.getWindow();
-        if(w!=null){
-            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            w.setGravity(Gravity.TOP | Gravity.LEFT);
-            w.setLayout(width,height);
-            WindowManager.LayoutParams lp=w.getAttributes();
-            lp.width=width; lp.height=height; lp.x=left; lp.y=top;
-            w.setAttributes(lp);
+        final WindowManager.LayoutParams lp=new WindowManager.LayoutParams();
+        lp.width=finalWidth;
+        lp.height=finalHeight;
+        lp.x=finalLeft;
+        lp.y=finalTop;
+        lp.gravity=Gravity.TOP | Gravity.LEFT;
+        lp.format=android.graphics.PixelFormat.TRANSLUCENT;
+        lp.flags=WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN |
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+        if(Build.VERSION.SDK_INT>=26){
+            lp.type=WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+        }else{
+            lp.type=WindowManager.LayoutParams.TYPE_PHONE;
         }
-        close.setOnClickListener(v->sample.dismiss());
-        sample.show();
-        w=sample.getWindow();
-        if(w!=null){
-            w.setGravity(Gravity.TOP | Gravity.LEFT);
-            w.setLayout(width,height);
-            WindowManager.LayoutParams lp=w.getAttributes();
-            lp.width=width; lp.height=height; lp.x=left; lp.y=top;
-            w.setAttributes(lp);
+
+        try{
+            wm.addView(box,lp);
+        }catch(Exception e){
+            Toast.makeText(this,"无法创建全屏测试窗口："+e.getMessage(),Toast.LENGTH_LONG).show();
+            return;
         }
+
+        close.setOnClickListener(v->{
+            try{wm.removeView(box);}catch(Exception ignored){}
+        });
     }
 
     void showSettingsMenu(){
@@ -713,54 +813,139 @@ public class MainActivity extends AppCompatActivity {
         showDialogBelowTop(dialog);
     }
 
+    /**
+     * 添加 APP：默认“全部”分类；采用正方形图标卡片 + APP 名称。
+     * 用户/系统分类只是筛选按钮，不再把“默认用户分类”作为默认页面。
+     */
     void chooseApp(){
         PackageManager pm=getPackageManager();
         ArrayList<ApplicationInfo> list=new ArrayList<>();
         for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){
-            if(!ai.packageName.equals(getPackageName())&&pm.getLaunchIntentForPackage(ai.packageName)!=null) list.add(ai);
+            if(ai.packageName.equals(getPackageName())) continue;
+            if(pm.getLaunchIntentForPackage(ai.packageName)==null) continue;
+            list.add(ai);
         }
         Collections.sort(list,(a,b)->pm.getApplicationLabel(a).toString().compareToIgnoreCase(pm.getApplicationLabel(b).toString()));
 
-        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(8),dp(4),dp(8),dp(4));
-        EditText search=textField("搜索 APP",""); box.addView(search,new LinearLayout.LayoutParams(-1,dp(48)));
-        LinearLayout tabs=new LinearLayout(this); tabs.setOrientation(LinearLayout.HORIZONTAL);
-        // 添加 APP 默认选中“用户”，不再显示“默认用户分类”字样。
-        // 仍保留“系统”按钮，方便需要时添加车机系统 APP。
-        String[] cats={"用户","系统"};
+        LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(8),dp(4),dp(8),dp(4));
+
+        EditText search=textField("搜索 APP","");
+        search.setText("");
+        box.addView(search,new LinearLayout.LayoutParams(-1,dp(50)));
+
+        LinearLayout tabs=new LinearLayout(this);
+        tabs.setOrientation(LinearLayout.HORIZONTAL);
+        tabs.setGravity(Gravity.CENTER_VERTICAL);
+        String[] cats={"全部","用户","系统"};
         Button[] tabBtns=new Button[cats.length];
         for(int i=0;i<cats.length;i++){
-            Button b=button(cats[i]); b.setTextSize(12); tabBtns[i]=b;
-            tabs.addView(b,new LinearLayout.LayoutParams(0,dp(42),1));
+            Button b=button(cats[i]);
+            b.setTextSize(12);
+            tabBtns[i]=b;
+            tabs.addView(b,new LinearLayout.LayoutParams(0,dp(44),1));
         }
         tabBtns[0].setBackgroundResource(R.drawable.card_selected);
-        box.addView(tabs);
-        LinearLayout rows=new LinearLayout(this); rows.setOrientation(LinearLayout.VERTICAL);
-        ScrollView scroll=new ScrollView(this); scroll.addView(rows); box.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("添加 APP").setView(box).setNegativeButton("关闭",null).create();
+        box.addView(tabs,new LinearLayout.LayoutParams(-1,dp(46)));
+
+        ScrollView scroll=new ScrollView(this);
+        scroll.setFillViewport(true);
+        GridLayout grid=new GridLayout(this);
+        int pickerColumns=Math.max(4,Math.min(10,getRealScreenSize().x/Math.max(1,dp(120))));
+        grid.setColumnCount(pickerColumns);
+        grid.setUseDefaultMargins(false);
+        scroll.addView(grid,new ScrollView.LayoutParams(-1,-2));
+        box.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+
+        AlertDialog dialog=new AlertDialog.Builder(this)
+                .setTitle("添加 APP")
+                .setView(box)
+                .setNegativeButton("关闭",null)
+                .create();
+
         final int[] category={0};
         Runnable refreshAppPicker=()->{
-            rows.removeAllViews(); String q=search.getText().toString().trim().toLowerCase(); int count=0;
+            grid.removeAllViews();
+            String q=search.getText().toString().trim().toLowerCase(Locale.ROOT);
+            int count=0;
+            int tileW=dp(112), tileH=dp(116);
             for(ApplicationInfo ai:list){
-                boolean system=(ai.flags & ApplicationInfo.FLAG_SYSTEM)!=0;
-                boolean updated=(ai.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)!=0;
-                boolean show=(category[0]==0 && !system) || (category[0]==1 && system);
+                boolean system=(ai.flags & ApplicationInfo.FLAG_SYSTEM)!=0 ||
+                        (ai.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)!=0;
+                boolean show=category[0]==0 ||
+                        (category[0]==1 && !system) ||
+                        (category[0]==2 && system);
                 String name=pm.getApplicationLabel(ai).toString();
-                if(!show || (!q.isEmpty()&&!name.toLowerCase().contains(q))) continue;
-                LinearLayout row=new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(dp(8),dp(3),dp(8),dp(3));
-                ImageView icon=new ImageView(this); try{icon.setImageDrawable(pm.getApplicationIcon(ai));}catch(Exception ignored){}
-                row.addView(icon,new LinearLayout.LayoutParams(dp(44),dp(44)));
-                LinearLayout texts=new LinearLayout(this); texts.setOrientation(LinearLayout.VERTICAL); texts.setPadding(dp(10),0,dp(4),0);
-                TextView n=text(name,14); TextView pkg=text(ai.packageName,10); pkg.setTextColor(Color.GRAY);
-                texts.addView(n,new LinearLayout.LayoutParams(-1,dp(27))); texts.addView(pkg,new LinearLayout.LayoutParams(-1,dp(20)));
-                row.addView(texts,new LinearLayout.LayoutParams(0,dp(52),1));
-                row.setBackgroundResource(R.drawable.card);
-                row.setOnClickListener(v->{ boolean exists=false; for(AppItem a:apps)if(a.pkg.equals(ai.packageName)){exists=true;break;} if(!exists){apps.add(new AppItem(ai.packageName,name));saveApps();} selectedPackage=ai.packageName; selectedName=name; refresh(); dialog.dismiss(); });
-                rows.addView(row,new LinearLayout.LayoutParams(-1,dp(56))); if(++count>=80) break;
+                if(!show) continue;
+                if(!q.isEmpty() && !name.toLowerCase(Locale.ROOT).contains(q) &&
+                        !ai.packageName.toLowerCase(Locale.ROOT).contains(q)) continue;
+
+                LinearLayout tile=new LinearLayout(this);
+                tile.setOrientation(LinearLayout.VERTICAL);
+                tile.setGravity(Gravity.CENTER);
+                tile.setPadding(dp(6),dp(6),dp(6),dp(6));
+                tile.setBackgroundResource(R.drawable.card);
+
+                ImageView icon=new ImageView(this);
+                icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+                try{icon.setImageDrawable(pm.getApplicationIcon(ai));}catch(Exception ignored){}
+                tile.addView(icon,new LinearLayout.LayoutParams(dp(58),dp(58)));
+
+                TextView nameView=text(name,11);
+                nameView.setGravity(Gravity.CENTER);
+                nameView.setMaxLines(2);
+                nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                tile.addView(nameView,new LinearLayout.LayoutParams(dp(100),dp(38)));
+
+                tile.setOnClickListener(v->{
+                    boolean exists=false;
+                    for(AppItem a:apps){
+                        if(a.pkg.equals(ai.packageName)){exists=true;break;}
+                    }
+                    if(!exists){
+                        apps.add(new AppItem(ai.packageName,name));
+                        saveApps();
+                    }
+                    selectedPackage=ai.packageName;
+                    selectedName=name;
+                    refresh();
+                    dialog.dismiss();
+                });
+
+                GridLayout.LayoutParams glp=new GridLayout.LayoutParams();
+                glp.width=tileW;
+                glp.height=tileH;
+                glp.setMargins(dp(4),dp(4),dp(4),dp(4));
+                grid.addView(tile,glp);
+                count++;
+            }
+            if(count==0){
+                TextView empty=text("没有找到可启动的 APP",14);
+                empty.setGravity(Gravity.CENTER);
+                GridLayout.LayoutParams ep=new GridLayout.LayoutParams();
+                ep.width=dp(460); ep.height=dp(100);
+                grid.addView(empty,ep);
             }
         };
-        for(int i=0;i<tabBtns.length;i++){ final int ci=i; tabBtns[i].setOnClickListener(v->{category[0]=ci; for(int j=0;j<tabBtns.length;j++)tabBtns[j].setBackgroundResource(j==ci?R.drawable.card_selected:R.drawable.button); refreshAppPicker.run();}); }
-        search.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int b,int c){} public void onTextChanged(CharSequence s,int a,int b,int c){refreshAppPicker.run();} public void afterTextChanged(android.text.Editable e){}});
-        showDialogBelowTop(dialog); refreshAppPicker.run();
+
+        for(int i=0;i<tabBtns.length;i++){
+            final int ci=i;
+            tabBtns[i].setOnClickListener(v->{
+                category[0]=ci;
+                for(int j=0;j<tabBtns.length;j++)
+                    tabBtns[j].setBackgroundResource(j==ci?R.drawable.card_selected:R.drawable.button);
+                refreshAppPicker.run();
+            });
+        }
+        search.addTextChangedListener(new android.text.TextWatcher(){
+            public void beforeTextChanged(CharSequence s,int a,int b,int c){}
+            public void onTextChanged(CharSequence s,int a,int b,int c){refreshAppPicker.run();}
+            public void afterTextChanged(android.text.Editable e){}
+        });
+
+        showDialogBelowTop(dialog);
+        refreshAppPicker.run();
     }
 
     void showNotes(){
