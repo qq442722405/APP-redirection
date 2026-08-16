@@ -1,5 +1,6 @@
 package com.acc.acc;
 
+import com.acc.acc.R;
 import android.app.ActivityOptions;
 import android.app.Dialog;
 import android.content.*;

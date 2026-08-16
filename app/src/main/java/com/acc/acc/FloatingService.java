@@ -1,5 +1,6 @@
 package com.acc.acc;
 
+import com.acc.acc.R;
 import android.app.*;
 import android.content.*;
 import android.content.pm.*;
