@@ -142,6 +142,17 @@ public class MainActivity extends AppCompatActivity {
         return row;
     }
 
+    // 普通数字设置行：悬浮窗口自适应尺寸/位置不再提供加减和归零快捷按钮。
+    LinearLayout labeledSimpleNumberField(String label, EditText input){
+        LinearLayout row=new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        TextView l=text(label,14);
+        row.addView(l,new LinearLayout.LayoutParams(dp(150),dp(54)));
+        row.addView(input,new LinearLayout.LayoutParams(0,dp(54),1));
+        return row;
+    }
+
     void adjustNumber(EditText input,int delta){
         int value=number(input,0)+delta;
         input.setText(String.valueOf(value));
@@ -296,11 +307,25 @@ public class MainActivity extends AppCompatActivity {
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
 
+        FrameLayout frame=new FrameLayout(this);
+        frame.setBackgroundColor(Color.BLACK);
+
+        TextView accBg=new TextView(this);
+        accBg.setText("ACC");
+        accBg.setTextColor(0x22FFFFFF);
+        accBg.setTextSize(190*fontScale());
+        accBg.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        accBg.setGravity(Gravity.CENTER);
+        accBg.setSingleLine(true);
+        accBg.setClickable(false);
+        frame.addView(accBg,new FrameLayout.LayoutParams(-1,-1));
+
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.BLACK);
+        root.setBackgroundColor(Color.TRANSPARENT);
         // 主界面固定从顶部 80px 以下开始，避开车机状态栏/触控保留区。
         root.setPadding(dp(12),dp(TOP_BLANK),dp(12),dp(BOTTOM_BLANK));
+        frame.addView(root,new FrameLayout.LayoutParams(-1,-1));
 
         // “+”统一放在最左边
         LinearLayout presetHeader=new LinearLayout(this);
@@ -369,7 +394,7 @@ public class MainActivity extends AppCompatActivity {
         settings.setOnClickListener(v->showSettingsMenu());
         footer.addView(settings,new LinearLayout.LayoutParams(dp(58),dp(58)));
         root.addView(footer,new LinearLayout.LayoutParams(-1,dp(64)));
-        setContentView(root);
+        setContentView(frame);
         refresh();
     }
 
@@ -656,8 +681,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void showFloatingWindowSettingsDialog(){
-        // 顶部标题 + 中间可滚动设置 + 底部固定“保存/关闭”按钮。
-        // 保存只保存并刷新悬浮窗，不关闭本窗口，方便连续调整。
+        // 悬浮窗口尺寸由内容自动适应，位置只通过拖动调整。保存后窗口保持打开。
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(18),dp(6),dp(18),dp(10));
@@ -685,22 +709,21 @@ public class MainActivity extends AppCompatActivity {
         });
         box.addView(direction,new LinearLayout.LayoutParams(-1,dp(58)));
 
-        EditText width=numberField("420",String.valueOf(prefs.getInt("floating_window_width_px",420)));
-        box.addView(labeledNumberField("悬浮窗口宽度",width),new LinearLayout.LayoutParams(-1,dp(54)));
-        EditText height=numberField("72",String.valueOf(prefs.getInt("floating_window_height_px",72)));
-        box.addView(labeledNumberField("悬浮窗口高度",height),new LinearLayout.LayoutParams(-1,dp(54)));
         EditText spacing=numberField("6",String.valueOf(prefs.getInt("floating_button_spacing_px",6)));
-        box.addView(labeledNumberField("按钮图标间距",spacing),new LinearLayout.LayoutParams(-1,dp(54)));
-        EditText icon=numberField("44",String.valueOf(prefs.getInt("floating_icon_size_px",44)));
-        box.addView(labeledNumberField("按钮图标大小",icon),new LinearLayout.LayoutParams(-1,dp(54)));
-        EditText posX=numberField("30",String.valueOf(prefs.getInt("floating_position_x",30)));
-        box.addView(labeledNumberField("悬浮窗口左位置",posX),new LinearLayout.LayoutParams(-1,dp(54)));
-        EditText posY=numberField("180",String.valueOf(prefs.getInt("floating_position_y",180)));
-        box.addView(labeledNumberField("悬浮窗口上位置",posY),new LinearLayout.LayoutParams(-1,dp(54)));
+        box.addView(labeledSimpleNumberField("按钮图标间距",spacing),new LinearLayout.LayoutParams(-1,dp(54)));
 
-        TextView hint=text("悬浮窗口支持拖动。可拖动左侧“☰”按钮移动位置。保存后本窗口不会关闭，可以继续调整。",11);
+        EditText icon=numberField("44",String.valueOf(prefs.getInt("floating_icon_size_px",44)));
+        box.addView(labeledSimpleNumberField("按钮图标大小",icon),new LinearLayout.LayoutParams(-1,dp(54)));
+
+        EditText opacity=numberField("80",String.valueOf(prefs.getInt("floating_background_opacity",80)));
+        box.addView(labeledSimpleNumberField("悬浮窗口透明度",opacity),new LinearLayout.LayoutParams(-1,dp(54)));
+        TextView opacityHint=text("0 = 完全透明，100 = 完全不透明。悬浮窗口四角保持圆角透明效果。",10);
+        opacityHint.setTextColor(Color.GRAY);
+        box.addView(opacityHint,new LinearLayout.LayoutParams(-1,dp(36)));
+
+        TextView hint=text("悬浮窗口大小自动适应内容，不需要设置宽度和高度。悬浮窗口可以直接拖动位置。保存后本窗口不会关闭，可以继续调整。",11);
         hint.setTextColor(Color.GRAY); hint.setPadding(0,dp(4),0,dp(8));
-        box.addView(hint,new LinearLayout.LayoutParams(-1,dp(50)));
+        box.addView(hint,new LinearLayout.LayoutParams(-1,dp(58)));
         scroll.addView(box,new ScrollView.LayoutParams(-1,-2));
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
 
@@ -726,20 +749,16 @@ public class MainActivity extends AppCompatActivity {
 
         close.setOnClickListener(v->dialog.dismiss());
         save.setOnClickListener(v->{
-            int ww=number(width,420), hh=number(height,72), sp=number(spacing,6), ic=number(icon,44);
-            int px=number(posX,30), py=number(posY,180);
-            if(ww<120||ww>1600||hh<52||hh>1000||sp<0||sp>80||ic<20||ic>200||px<-10000||py<-10000){
-                Toast.makeText(this,"范围：宽120-1600，高52-1000，间距0-80，图标20-200",Toast.LENGTH_LONG).show();
+            int sp=number(spacing,6), ic=number(icon,44), op=number(opacity,80);
+            if(sp<0||sp>80||ic<20||ic>200||op<0||op>100){
+                Toast.makeText(this,"范围：间距0-80，图标20-200，透明度0-100",Toast.LENGTH_LONG).show();
                 return;
             }
             boolean oldEnabled=prefs.getBoolean("floating_enabled",false);
             prefs.edit().putBoolean("floating_enabled",enable.isChecked())
-                    .putInt("floating_window_width_px",ww)
-                    .putInt("floating_window_height_px",hh)
                     .putInt("floating_button_spacing_px",sp)
                     .putInt("floating_icon_size_px",ic)
-                    .putInt("floating_position_x",px)
-                    .putInt("floating_position_y",py)
+                    .putInt("floating_background_opacity",op)
                     .apply();
 
             if(enable.isChecked()){

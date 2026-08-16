@@ -29,7 +29,7 @@ public class FloatingService extends Service {
     final ArrayList<String> floatingNames=new ArrayList<>();
 
     boolean vertical;
-    int windowWidthPx=420, windowHeightPx=72, buttonSpacingPx=6, iconSizePx=44;
+    int buttonSpacingPx=6, iconSizePx=44, backgroundOpacity=80;
     boolean addBack=false, addHome=false, addMenu=false;
     final int ACTION_BACK=1,ACTION_HOME=2,ACTION_MENU=3;
 
@@ -48,10 +48,9 @@ public class FloatingService extends Service {
         loadFloatingApps();
         SharedPreferences p=getSharedPreferences(MainActivity.PREF,0);
         vertical=p.getBoolean("floating_vertical",false);
-        windowWidthPx=p.getInt("floating_window_width_px",420);
-        windowHeightPx=p.getInt("floating_window_height_px",72);
         buttonSpacingPx=p.getInt("floating_button_spacing_px",6);
         iconSizePx=p.getInt("floating_icon_size_px",44);
+        backgroundOpacity=Math.max(0,Math.min(100,p.getInt("floating_background_opacity",80)));
         addBack=p.getBoolean("floating_back",false);
         addHome=p.getBoolean("floating_home",false);
         addMenu=p.getBoolean("floating_menu",false);
@@ -153,9 +152,9 @@ public class FloatingService extends Service {
         plus.setOnClickListener(v->showAddMenu());
         rebuildButtons();
 
-        lp=new WindowManager.LayoutParams(dp(windowWidthPx),dp(windowHeightPx),overlayType(),
+        lp=new WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.WRAP_CONTENT,overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                PixelFormat.OPAQUE);
+                PixelFormat.TRANSLUCENT);
         lp.gravity=Gravity.TOP|Gravity.LEFT;
         lp.x=getSharedPreferences(MainActivity.PREF,0).getInt("floating_position_x",30);
         lp.y=getSharedPreferences(MainActivity.PREF,0).getInt("floating_position_y",180);
