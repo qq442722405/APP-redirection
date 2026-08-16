@@ -337,7 +337,7 @@ public class MainActivity extends AppCompatActivity {
         addPreset.setOnClickListener(v->editPreset(-1));
         presetHeader.addView(addPreset,new LinearLayout.LayoutParams(dp(52),dp(44)));
         TextView pt=text("窗口预设",17); pt.setTypeface(null,1);
-        presetHeader.addView(pt,new LinearLayout.LayoutParams(0,dp(44),1));
+        presetHeader.addView(pt,new LinearLayout.LayoutParams(-2,dp(44)));
 
         // 直接通过悬浮选位器创建/修改窗口预设：拖动红框到目标位置，
         // 在红框中央填写宽高，确认后自动回填到“新建窗口预设”。
@@ -1205,9 +1205,14 @@ public class MainActivity extends AppCompatActivity {
         sizeRow.addView(heightInput,new LinearLayout.LayoutParams(0,dp(50),1));
         controls.addView(sizeRow,new LinearLayout.LayoutParams(-1,dp(54)));
 
+        TextView positionInfo=text("上距离：0 px    左距离：0 px",11);
+        positionInfo.setTextColor(Color.WHITE);
+        positionInfo.setGravity(Gravity.CENTER);
+        controls.addView(positionInfo,new LinearLayout.LayoutParams(-1,dp(34)));
+
         TextView tip=text("拖动红框到目标位置，再点击“确定”自动回填",10);
         tip.setTextColor(Color.LTGRAY); tip.setGravity(Gravity.CENTER);
-        controls.addView(tip,new LinearLayout.LayoutParams(-1,dp(34)));
+        controls.addView(tip,new LinearLayout.LayoutParams(-1,dp(28)));
 
         LinearLayout actionRow=new LinearLayout(this);
         actionRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -1223,7 +1228,7 @@ public class MainActivity extends AppCompatActivity {
         picker.addView(controls,cp);
 
         android.graphics.Point screen=getRealScreenSize();
-        int initialW=480, initialH=300;
+        int initialW=600, initialH=400;
         int currentX=30, currentY=180;
         if(!presets.isEmpty()){
             Preset last=presets.get(presets.size()-1);
@@ -1243,6 +1248,7 @@ public class MainActivity extends AppCompatActivity {
                 PixelFormat.TRANSLUCENT);
         lp.gravity=Gravity.TOP|Gravity.LEFT;
         lp.x=Math.max(0,currentX); lp.y=Math.max(0,currentY);
+        positionInfo.setText("上距离："+lp.y+" px    左距离："+lp.x+" px");
 
         saveSize.setOnClickListener(v->{
             int w=Math.max(180,number(widthInput,lp.width));
@@ -1266,6 +1272,7 @@ public class MainActivity extends AppCompatActivity {
                 lp.x=Math.max(0,Math.min(lp.x,Math.max(0,screen.x-lp.width)));
                 lp.y=Math.max(0,Math.min(lp.y,Math.max(0,screen.y-lp.height)));
                 try{pickerWm.updateViewLayout(picker,lp);}catch(Exception ignored){}
+                positionInfo.setText("上距离："+Math.max(0,lp.y)+" px    左距离："+Math.max(0,lp.x)+" px");
                 return true;
             }
             return true;
