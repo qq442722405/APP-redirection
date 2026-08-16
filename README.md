@@ -11,7 +11,7 @@
 - 支持设置任务启动间隔。
 - 支持设置开机后的启动延迟。
 - 悬浮窗“添加 APP”使用 WindowManager 自绘选择页，避免 Service Context Dialog 导致部分车机 ROM 闪退。
-- 构建前检查旧 `com.example.carappjump` 包名和旧 `shortcuts.xml`，避免历史文件混入。
+- 构建前检查旧 `旧历史包名` 包名和旧 `shortcuts.xml`，避免历史文件混入。
 
 ## GitHub Actions
 
