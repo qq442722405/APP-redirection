@@ -1,0 +1,9 @@
+pluginManagement {
+    repositories { google(); mavenCentral(); gradlePluginPortal() }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories { google(); mavenCentral() }
+}
+rootProject.name = "Acc1-Acc10"
+include(":app1", ":app2", ":app3", ":app4", ":app5", ":app6", ":app7", ":app8", ":app9", ":app10")

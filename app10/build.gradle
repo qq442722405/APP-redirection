@@ -1,0 +1,30 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.acc.acc10'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.acc.acc10'
+        minSdk 26
+        targetSdk 32
+        versionCode 1
+        versionName '1.0'
+    }
+    signingConfigs {
+        release {
+            storeFile file('../Acc.jks')
+            storePassword 'Acc123456!'
+            keyAlias 'Acc'
+            keyPassword 'Acc123456!'
+        }
+        debug {
+            storeFile file('../Acc.jks')
+            storePassword 'Acc123456!'
+            keyAlias 'Acc'
+            keyPassword 'Acc123456!'
+        }
+    }
+    buildTypes {
+        debug { signingConfig signingConfigs.debug }
+        release { signingConfig signingConfigs.release; minifyEnabled false }
+    }
+}
