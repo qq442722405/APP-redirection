@@ -759,11 +759,11 @@ public class MainActivity extends AppCompatActivity {
             box.addView(floatSettings,new LinearLayout.LayoutParams(-1,dp(52)));
         }
 
-        Button permissions=button("权限与诊断");
+        Button permissions=button("权限与诊断  ›");
         permissions.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
         permissions.setPadding(dp(14),0,dp(14),0);
         permissions.setOnClickListener(v->{if(settingsDialog[0]!=null)settingsDialog[0].dismiss();showScreenDiagnostics();});
-        box.addView(permissions,new LinearLayout.LayoutParams(-1,dp(48)));
+        box.addView(permissions,new LinearLayout.LayoutParams(-1,dp(52)));
         settingsDialog[0]=new AlertDialog.Builder(this).setTitle("设置").setView(box).setNegativeButton("关闭",null).create();
         showDialogBelowTop(settingsDialog[0]);
     }
@@ -1447,6 +1447,66 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // 三区域车机按一个超宽 Display 处理，不再创建 Presentation。
+    /**
+     * 再次主动申请当前应用能够通过系统运行时权限对话框申请的权限。
+     * 已经授予的权限不会再次弹窗；不可运行时申请的特殊权限仍通过诊断界面查看。
+     */
+    void requestAllPermissionsAgain(){
+        try{
+            if(Build.VERSION.SDK_INT>=23){
+                java.util.ArrayList<String> requestable=new java.util.ArrayList<>();
+                String[] candidates={
+                        "android.permission.CAMERA",
+                        "android.permission.RECORD_AUDIO",
+                        "android.permission.ACCESS_FINE_LOCATION",
+                        "android.permission.ACCESS_COARSE_LOCATION",
+                        "android.permission.BLUETOOTH_SCAN",
+                        "android.permission.BLUETOOTH_CONNECT",
+                        "android.permission.BLUETOOTH_ADVERTISE",
+                        "android.permission.READ_PHONE_STATE",
+                        "android.permission.CALL_PHONE",
+                        "android.permission.ANSWER_PHONE_CALLS",
+                        "android.permission.READ_CALL_LOG",
+                        "android.permission.WRITE_CALL_LOG",
+                        "android.permission.READ_CONTACTS",
+                        "android.permission.WRITE_CONTACTS",
+                        "android.permission.READ_CALENDAR",
+                        "android.permission.WRITE_CALENDAR",
+                        "android.permission.ACTIVITY_RECOGNITION",
+                        "android.permission.BODY_SENSORS",
+                        "android.permission.SEND_SMS",
+                        "android.permission.RECEIVE_SMS",
+                        "android.permission.READ_SMS",
+                        "android.permission.RECEIVE_MMS",
+                        "android.permission.RECEIVE_WAP_PUSH",
+                        "android.permission.POST_NOTIFICATIONS",
+                        "android.permission.READ_EXTERNAL_STORAGE",
+                        "android.permission.WRITE_EXTERNAL_STORAGE",
+                        "android.permission.READ_MEDIA_IMAGES",
+                        "android.permission.READ_MEDIA_VIDEO",
+                        "android.permission.READ_MEDIA_AUDIO"
+                };
+                for(String perm:candidates){
+                    try{
+                        if(getPackageManager().getPermissionInfo(perm,0)!=null &&
+                                checkSelfPermission(perm)!=PackageManager.PERMISSION_GRANTED){
+                            requestable.add(perm);
+                        }
+                    }catch(Exception ignored){}
+                }
+                if(!requestable.isEmpty()){
+                    requestPermissions(requestable.toArray(new String[0]),REQ_RUNTIME_PERMS);
+                    Toast.makeText(this,"已重新发起权限申请，请按提示允许",Toast.LENGTH_SHORT).show();
+                    return;
+                }
+            }
+            // 没有可弹出的运行时权限时，直接进入权限总览，方便继续处理特殊权限。
+            showScreenDiagnostics();
+        }catch(Exception e){
+            Toast.makeText(this,"权限申请失败："+e.getMessage(),Toast.LENGTH_SHORT).show();
+        }
+    }
+
     void showScreenDiagnostics(){
         android.view.Display d=getWindow().getWindowManager().getDefaultDisplay();
         android.graphics.Point p=getRealScreenSize(d);
@@ -1499,8 +1559,19 @@ public class MainActivity extends AppCompatActivity {
         TextView msg=text(s.toString(),11);
         msg.setPadding(dp(4),dp(4),dp(4),dp(4));
         ScrollView scroll=new ScrollView(this); scroll.addView(msg,new ScrollView.LayoutParams(-1,-2));
+
+        LinearLayout content=new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(18),dp(6),dp(18),dp(10));
+        content.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+
+        Button requestPermissions=button("权限获取");
+        requestPermissions.setGravity(Gravity.CENTER);
+        requestPermissions.setOnClickListener(v->requestAllPermissionsAgain());
+        content.addView(requestPermissions,new LinearLayout.LayoutParams(-1,dp(48)));
+
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("权限与诊断")
-                .setView(scroll)
+                .setView(content)
                 .setNegativeButton("关闭",null).create();
         showDialogBelowTop(dialog);
     }
