@@ -158,7 +158,7 @@ public class FloatingService extends Service {
         TextView plus=baseButton("＋");
         plus.setTextSize(22);
         if(singleIconMode) {
-            ImageButton single=iconButton(android.R.drawable.transparent);
+            ImageButton single=iconButton(0);
             // 单图标模式的图形本身就是按钮，不显示任何 APP 图标。
             single.setImageDrawable(null);
             single.setContentDescription("单图标手势按钮");
