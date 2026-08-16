@@ -96,8 +96,22 @@ jobs:
 
       - name: 构建 Debug APK
         run: |
+          set -o pipefail
           gradle --version
-          gradle clean :app:assembleDebug --no-daemon --stacktrace --info --console=plain
+          echo "=== 最终工程结构 ==="
+          find app/src/main/java -type f -name "*.java" -print | sort
+          find app/src/main/res -type f -print | sort
+          echo "=== 开始 Gradle 编译 ==="
+          gradle clean :app:assembleDebug --no-daemon --stacktrace --info --console=plain 2>&1 | tee build.log
+
+      - name: 构建失败时输出关键日志
+        if: failure()
+        run: |
+          echo "=== 最后 250 行构建日志 ==="
+          if [ -f build.log ]; then tail -n 250 build.log; fi
+          echo "=== Java/XML 关键文件 ==="
+          sed -n '1,80p' app/src/main/AndroidManifest.xml
+          sed -n '1,80p' app/build.gradle
 
       - name: 准备 APK
         run: |
