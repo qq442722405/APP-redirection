@@ -1453,6 +1453,14 @@ public class MainActivity extends AppCompatActivity {
      * 已经授予的权限不会再次弹窗；不可运行时申请的特殊权限仍通过诊断界面查看。
      */
     void requestAllPermissionsAgain(){
+        // Android 12 的悬浮窗、使用情况访问、所有文件访问、修改系统设置
+        // 都不是普通 runtime permission，requestPermissions() 不会弹出它们。
+        // 先把这些特殊权限做成明确的“权限获取”入口，避免因为没有弹窗而
+        // 导致“悬浮窗选位/悬浮窗口设置”一直被隐藏。
+        showSpecialPermissionAcquireDialog();
+    }
+
+    void requestRuntimePermissionsOnly(){
         try{
             if(Build.VERSION.SDK_INT>=23){
                 java.util.ArrayList<String> requestable=new java.util.ArrayList<>();
@@ -1501,11 +1509,58 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
             }
-            // 没有可弹出的运行时权限时，直接进入权限总览，方便继续处理特殊权限。
-            showScreenDiagnostics();
+            Toast.makeText(this,"没有可直接弹出的运行时权限",Toast.LENGTH_SHORT).show();
         }catch(Exception e){
             Toast.makeText(this,"权限申请失败："+e.getMessage(),Toast.LENGTH_SHORT).show();
         }
+    }
+
+    void showSpecialPermissionAcquireDialog(){
+        LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18),dp(8),dp(18),dp(10));
+
+        TextView tip=text("特殊权限不会通过普通权限弹窗出现，请在下面逐项开启。开启后返回本程序，按钮会自动恢复显示。",12);
+        tip.setPadding(0,0,0,dp(10));
+        box.addView(tip,new LinearLayout.LayoutParams(-1,dp(64)));
+
+        Button overlay=button((hasOverlayPermission()?"✓ ":"")+"悬浮窗权限");
+        overlay.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+        overlay.setOnClickListener(v->{ openOverlaySettings(); });
+        box.addView(overlay,new LinearLayout.LayoutParams(-1,dp(48)));
+
+        Button usage=button((hasUsageAccess()?"✓ ":"")+"使用情况访问");
+        usage.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+        usage.setOnClickListener(v->{ openUsageSettings(); });
+        box.addView(usage,new LinearLayout.LayoutParams(-1,dp(48)));
+
+        Button files=button((hasAllFilesPermission()?"✓ ":"")+"所有文件访问");
+        files.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+        files.setOnClickListener(v->{ openAllFilesSettings(); });
+        box.addView(files,new LinearLayout.LayoutParams(-1,dp(48)));
+
+        Button write=button((Build.VERSION.SDK_INT<23 || Settings.System.canWrite(this)?"✓ ":"")+"修改系统设置");
+        write.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+        write.setOnClickListener(v->{
+            try{
+                Intent i=new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS,Uri.parse("package:"+getPackageName()));
+                startActivity(i);
+            }catch(Exception e){
+                try{startActivity(new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS));}catch(Exception ignored){}
+            }
+        });
+        box.addView(write,new LinearLayout.LayoutParams(-1,dp(48)));
+
+        Button runtime=button("重新申请普通权限");
+        runtime.setGravity(Gravity.CENTER);
+        runtime.setOnClickListener(v->requestRuntimePermissionsOnly());
+        box.addView(runtime,new LinearLayout.LayoutParams(-1,dp(48)));
+
+        AlertDialog dialog=new AlertDialog.Builder(this)
+                .setTitle("权限获取")
+                .setView(box)
+                .setNegativeButton("关闭",null).create();
+        showDialogBelowTop(dialog);
     }
 
     void showScreenDiagnostics(){
