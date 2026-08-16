@@ -379,41 +379,95 @@ public class MainActivity extends AppCompatActivity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(24),dp(8),dp(24),dp(8));
 
-        LinearLayout fontRow=new LinearLayout(this); fontRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView fontLabel=text("主界面字体大小",15); fontRow.addView(fontLabel,new LinearLayout.LayoutParams(0,dp(52),1));
-        float fsVal=prefs.getFloat("font_scale",1.0f);
-        Button fontBtn=button(Math.round(fsVal*100)+"%"); fontRow.addView(fontBtn,new LinearLayout.LayoutParams(dp(110),dp(46)));
-        fontBtn.setOnClickListener(v->{
-            float cur=prefs.getFloat("font_scale",1.0f); float next=cur+0.1f; if(next>1.3f) next=0.8f;
-            prefs.edit().putFloat("font_scale",next).apply();
-            Toast.makeText(this,"字体大小："+Math.round(next*100)+"%",Toast.LENGTH_SHORT).show();
-            if(settingsDialog[0]!=null) settingsDialog[0].dismiss();
-            buildUI();
-        });
-        box.addView(fontRow);
+        // 第一排：开机启动 + 开机延迟启动
+        LinearLayout firstRow=new LinearLayout(this);
+        firstRow.setGravity(Gravity.CENTER_VERTICAL);
 
-        LinearLayout uiRow=new LinearLayout(this); uiRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView uiLabel=text("主界面界面大小",15); uiRow.addView(uiLabel,new LinearLayout.LayoutParams(0,dp(52),1));
-        float uiVal=prefs.getFloat("ui_scale",1.0f);
-        Button uiBtn=button(Math.round(uiVal*100)+"%"); uiRow.addView(uiBtn,new LinearLayout.LayoutParams(dp(110),dp(46)));
-        uiBtn.setOnClickListener(v->{
-            float cur=prefs.getFloat("ui_scale",1.0f); float next=cur+0.1f; if(next>1.2f) next=0.8f;
-            prefs.edit().putFloat("ui_scale",next).apply();
-            Toast.makeText(this,"界面大小："+Math.round(next*100)+"%",Toast.LENGTH_SHORT).show();
-            if(settingsDialog[0]!=null) settingsDialog[0].dismiss();
-            buildUI();
-        });
-        box.addView(uiRow);
+        TextView appBootLabel=text("开机启动",15);
+        firstRow.addView(appBootLabel,new LinearLayout.LayoutParams(0,dp(52),1));
+        Switch appBoot=new Switch(this);
+        appBoot.setChecked(prefs.getBoolean("app_boot_enabled",false));
+        appBoot.setOnCheckedChangeListener((v,checked)->prefs.edit().putBoolean("app_boot_enabled",checked).apply());
+        firstRow.addView(appBoot,new LinearLayout.LayoutParams(dp(58),dp(52)));
 
-        LinearLayout floatRow=new LinearLayout(this); floatRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView fl=text("悬浮窗口",15); floatRow.addView(fl,new LinearLayout.LayoutParams(0,dp(52),1));
-        Switch fs=new Switch(this); fs.setChecked(prefs.getBoolean("floating_enabled",false));
+        TextView delayLabel=text("开机延迟启动（秒）",15);
+        LinearLayout.LayoutParams delayLabelLp=new LinearLayout.LayoutParams(0,dp(52),1);
+        delayLabelLp.setMargins(dp(18),0,0,0);
+        firstRow.addView(delayLabel,delayLabelLp);
+        EditText bootDelay=numberField("0",String.valueOf(prefs.getInt("boot_delay_seconds",0)));
+        LinearLayout.LayoutParams delayLp=new LinearLayout.LayoutParams(dp(88),dp(52));
+        firstRow.addView(bootDelay,delayLp);
+        box.addView(firstRow,new LinearLayout.LayoutParams(-1,dp(58)));
+
+        // 第二排：主界面字体大小、主界面界面大小，均手动输入，点击保存后生效
+        LinearLayout sizeRow=new LinearLayout(this);
+        sizeRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView fontLabel=text("主界面字体大小",14);
+        sizeRow.addView(fontLabel,new LinearLayout.LayoutParams(0,dp(52),1));
+        EditText fontInput=numberField("100",String.valueOf(Math.round(prefs.getFloat("font_scale",1.0f)*100)));
+        fontInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        sizeRow.addView(fontInput,new LinearLayout.LayoutParams(dp(78),dp(52)));
+        TextView fontPct=text("%",14);
+        sizeRow.addView(fontPct,new LinearLayout.LayoutParams(dp(24),dp(52)));
+
+        TextView uiLabel=text("主界面界面大小",14);
+        LinearLayout.LayoutParams uiLabelLp=new LinearLayout.LayoutParams(0,dp(52),1);
+        uiLabelLp.setMargins(dp(12),0,0,0);
+        sizeRow.addView(uiLabel,uiLabelLp);
+        EditText uiInput=numberField("100",String.valueOf(Math.round(prefs.getFloat("ui_scale",1.0f)*100)));
+        uiInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        sizeRow.addView(uiInput,new LinearLayout.LayoutParams(dp(78),dp(52)));
+        TextView uiPct=text("%",14);
+        sizeRow.addView(uiPct,new LinearLayout.LayoutParams(dp(24),dp(52)));
+        box.addView(sizeRow,new LinearLayout.LayoutParams(-1,dp(58)));
+
+        Button saveSize=button("保存设置");
+        saveSize.setOnClickListener(v->{
+            try{
+                float fs=Float.parseFloat(fontInput.getText().toString().trim());
+                float us=Float.parseFloat(uiInput.getText().toString().trim());
+                if(fs<80 || fs>130 || us<80 || us>120) throw new Exception();
+                prefs.edit().putFloat("font_scale",fs/100f).putFloat("ui_scale",us/100f).apply();
+                Toast.makeText(this,"字体大小和界面大小已保存并生效",Toast.LENGTH_SHORT).show();
+                if(settingsDialog[0]!=null) settingsDialog[0].dismiss();
+                buildUI();
+            }catch(Exception e){
+                Toast.makeText(this,"请输入有效数值：字体 80-130%，界面 80-120%",Toast.LENGTH_LONG).show();
+            }
+        });
+        box.addView(saveSize,new LinearLayout.LayoutParams(-1,dp(48)));
+
+        // 悬浮窗口：方向按钮放在开关左边
+        LinearLayout floatRow=new LinearLayout(this);
+        floatRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView fl=text("悬浮窗口",15);
+        floatRow.addView(fl,new LinearLayout.LayoutParams(0,dp(52),1));
+
+        Button floatLayout=button(prefs.getBoolean("floating_vertical",false)?"竖向":"横向");
+        LinearLayout.LayoutParams directionLp=new LinearLayout.LayoutParams(dp(82),dp(46));
+        directionLp.setMargins(0,0,dp(8),0);
+        floatRow.addView(floatLayout,directionLp);
+
+        Switch fs=new Switch(this);
+        fs.setChecked(prefs.getBoolean("floating_enabled",false));
         fs.setOnCheckedChangeListener((v,checked)->{
             prefs.edit().putBoolean("floating_enabled",checked).apply();
             if(checked){ if(hasOverlayPermission()) startFloatingService(); else { fs.setChecked(false); openOverlaySettings(); } }
             else stopFloatingService();
         });
-        floatRow.addView(fs); box.addView(floatRow);
+        floatRow.addView(fs,new LinearLayout.LayoutParams(dp(58),dp(52)));
+        box.addView(floatRow);
+
+        floatLayout.setOnClickListener(v->{
+            boolean vertical=!prefs.getBoolean("floating_vertical",false);
+            prefs.edit().putBoolean("floating_vertical",vertical).apply();
+            floatLayout.setText(vertical?"竖向":"横向");
+            if(prefs.getBoolean("floating_enabled",false)){
+                stopFloatingService();
+                new Handler().postDelayed(this::startFloatingService,200);
+            }
+        });
 
         LinearLayout autoRow=new LinearLayout(this); autoRow.setGravity(Gravity.CENTER_VERTICAL);
         TextView al=text("自动启动",15); autoRow.addView(al,new LinearLayout.LayoutParams(0,dp(52),1));
@@ -421,16 +475,10 @@ public class MainActivity extends AppCompatActivity {
         as.setOnCheckedChangeListener((v,checked)->prefs.edit().putBoolean("auto_start_enabled",checked).apply());
         autoRow.addView(as); box.addView(autoRow);
 
-        LinearLayout appBootRow=new LinearLayout(this); appBootRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView appBootLabel=text("本 APP 开机启动",15); appBootRow.addView(appBootLabel,new LinearLayout.LayoutParams(0,dp(52),1));
-        Switch appBoot=new Switch(this); appBoot.setChecked(prefs.getBoolean("app_boot_enabled",false));
-        appBoot.setOnCheckedChangeListener((v,checked)->prefs.edit().putBoolean("app_boot_enabled",checked).apply());
-        appBootRow.addView(appBoot); box.addView(appBootRow);
-
         Button add=button("管理自动启动项目（支持多个任务）"); add.setOnClickListener(v->showAutoStartEditor());
         box.addView(add,new LinearLayout.LayoutParams(-1,dp(50)));
 
-        // 设置页面直接列出当前加入自动启动的 APP，避免用户不知道哪些任务会开机启动。
+        // 设置页面直接列出当前加入自动启动的 APP
         LinearLayout autoList=new LinearLayout(this); autoList.setOrientation(LinearLayout.VERTICAL);
         JSONArray currentTasks=loadAutoTasks();
         if(currentTasks.length()==0){
@@ -450,19 +498,13 @@ public class MainActivity extends AppCompatActivity {
         }
         box.addView(autoList,new LinearLayout.LayoutParams(-1,Math.min(dp(150),Math.max(dp(38),dp(38)*Math.max(1,currentTasks.length())))));
 
-        LinearLayout bootRow=new LinearLayout(this); bootRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView bootLabel=text("开机延迟启动（秒）",15); bootRow.addView(bootLabel,new LinearLayout.LayoutParams(0,dp(52),1));
-        EditText bootDelay=numberField("0",String.valueOf(prefs.getInt("boot_delay_seconds",0))); bootRow.addView(bootDelay,new LinearLayout.LayoutParams(dp(100),dp(52)));
-        box.addView(bootRow,new LinearLayout.LayoutParams(-1,dp(54)));
         bootDelay.addTextChangedListener(new android.text.TextWatcher(){
             public void beforeTextChanged(CharSequence s,int st,int c,int a){}
-            public void onTextChanged(CharSequence s,int st,int before,int count){ prefs.edit().putInt("boot_delay_seconds",Math.max(0,number(bootDelay,0))).apply(); }
+            public void onTextChanged(CharSequence s,int st,int before,int count){
+                try{ prefs.edit().putInt("boot_delay_seconds",Math.max(0,Integer.parseInt(s.toString().trim()))).apply(); }catch(Exception ignored){}
+            }
             public void afterTextChanged(android.text.Editable e){}
         });
-
-        Button floatLayout=button("悬浮窗方向："+(prefs.getBoolean("floating_vertical",false)?"竖向":"横向"));
-        box.addView(floatLayout,new LinearLayout.LayoutParams(-1,dp(48)));
-        floatLayout.setOnClickListener(v->{ boolean vertical=!prefs.getBoolean("floating_vertical",false); prefs.edit().putBoolean("floating_vertical",vertical).apply(); floatLayout.setText("悬浮窗方向："+(vertical?"竖向":"横向")); if(prefs.getBoolean("floating_enabled",false)){ stopFloatingService(); new Handler().postDelayed(this::startFloatingService,200); }});
 
         Button perm=button("权限与诊断"); perm.setOnClickListener(v->showPermissionPreparation());
         box.addView(perm,new LinearLayout.LayoutParams(-1,dp(50)));
