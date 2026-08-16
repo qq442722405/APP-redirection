@@ -67,6 +67,20 @@ jobs:
           echo "=== 检查新包名 ==="
           grep -R -n '^package com.example.appwindowcontainer;' app/src/main/java
 
+          echo "=== 修复 Java LayoutParams 类型错误 ==="
+          # 防止历史版本把 LinearLayout.LayoutParams 错写成 LinearLayout，
+          # 这会导致 setMargins/addView 编译失败。
+          find app/src/main/java -type f -name "*.java" -print0 | \
+            xargs -0 -r sed -i \
+              -e 's/LinearLayout clp=new LinearLayout\.LayoutParams/LinearLayout.LayoutParams clp=new LinearLayout.LayoutParams/g' \
+              -e 's/LinearLayout closeLp=new LinearLayout\.LayoutParams/LinearLayout.LayoutParams closeLp=new LinearLayout.LayoutParams/g'
+
+          # 编译前直接检查这两个变量的类型，发现错误立即给出清晰提示。
+          if grep -R -n --include="*.java" -E 'LinearLayout (clp|closeLp)=new LinearLayout\.LayoutParams' app/src/main/java 2>/dev/null; then
+            echo "错误：仍存在 LayoutParams 类型声明错误"
+            exit 1
+          fi
+
           echo "=== 检查关键资源 ==="
           test -f app/src/main/res/values/strings.xml
           test -f app/src/main/res/xml/accessibility_service_config.xml
