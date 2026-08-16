@@ -15,8 +15,8 @@ defaultConfig {
         applicationId 'com.example.appwindowcontainer'
         minSdk 26
         targetSdk 35
-        versionCode 14
-        versionName '2.2-fullscreen-picker-build'
+        versionCode 15
+        versionName '2.3-touch-test-fullscreen'
     }
 
     packaging {

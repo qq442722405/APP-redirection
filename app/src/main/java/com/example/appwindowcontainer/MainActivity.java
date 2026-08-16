@@ -6,6 +6,7 @@ import android.content.*;
 import android.content.pm.*;
 import android.graphics.*;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Build;
 import android.os.Environment;
@@ -170,8 +171,44 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         prefs=getSharedPreferences(PREF,0);
         loadData();
+        applyStartupTransparentMode();
         buildUI();
         requestRuntimePermissions();
+    }
+
+    /**
+     * 全屏透明 50% 启动模式：用于车机没有 ADB/悬浮窗授权时进行窗口位置校准。
+     * 勾选后从下次启动开始生效。窗口尽量铺到整个物理 Display，背景为半透明黑色，
+     * 不依赖 SYSTEM_ALERT_WINDOW 权限；关闭勾选后恢复普通主界面。
+     */
+    void applyStartupTransparentMode(){
+        if(!prefs.getBoolean("startup_transparent_test",false)) return;
+        try{
+            Window w=getWindow();
+            w.setStatusBarColor(Color.TRANSPARENT);
+            w.setNavigationBarColor(Color.TRANSPARENT);
+            w.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN |
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN |
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS |
+                    WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS |
+                    WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
+            if(Build.VERSION.SDK_INT>=19){
+                w.getDecorView().setSystemUiVisibility(
+                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                        View.SYSTEM_UI_FLAG_FULLSCREEN |
+                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+            }
+            w.setBackgroundDrawable(new ColorDrawable(0x00000000));
+        }catch(Exception ignored){}
+    }
+
+    void applyTransparentRootBackground(View root){
+        if(root==null) return;
+        if(prefs.getBoolean("startup_transparent_test",false)){
+            root.setBackgroundColor(0x80000000);
+        }
     }
 
     static final int REQ_RUNTIME_PERMS = 19041;
@@ -295,7 +332,7 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.BLACK);
+        root.setBackgroundColor(prefs.getBoolean("startup_transparent_test",false)?0x80000000:Color.BLACK);
         root.setPadding(dp(12),TOP_BLANK,dp(12),dp(BOTTOM_BLANK));
 
         // “+”统一放在最左边
@@ -407,9 +444,15 @@ public class MainActivity extends AppCompatActivity {
             lp.height=WindowManager.LayoutParams.MATCH_PARENT;
             w.setAttributes(lp);
 
-            // Window 原点保持 0,0；仅把实际 Dialog 内容留出顶部 80px。
-            View decor=w.getDecorView();
-            decor.setPadding(0,dp(TOP_BLANK),0,0);
+            // 不再给 DecorView 设置 padding。部分车机触控驱动会把 Dialog
+            // 的 padding 当成触摸原点偏移，造成“鼠标正常、触控偏左上”。
+            // 保持 Window 原点 0,0，只平移真正的内容容器；Android 会同步
+            // 更新子 View 的命中区域，因此视觉位置和触控位置一致。
+            View content=w.findViewById(android.R.id.content);
+            if(content!=null){
+                content.setPadding(0,0,0,0);
+                content.setTranslationY(dp(TOP_BLANK));
+            }
         }catch(Exception ignored){}
     }
 
@@ -492,6 +535,64 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * 无悬浮窗权限时的测试窗口：只在“全屏透明50%启动”模式下使用。
+     * 测试框直接添加到 Activity 的 content 层，不需要 ADB，也不需要悬浮窗权限。
+     */
+    void showPositionSampleInActivity(int top,int left,int width,int height,android.graphics.Point screen,int bottom){
+        FrameLayout content=findViewById(android.R.id.content);
+        if(content==null){
+            Toast.makeText(this,"无法创建测试窗口",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final FrameLayout overlay=new FrameLayout(this);
+        overlay.setBackgroundColor(Color.TRANSPARENT);
+        overlay.setClickable(true);
+
+        LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER);
+        box.setPadding(dp(18),dp(18),dp(18),dp(18));
+        GradientDrawable bg=new GradientDrawable();
+        bg.setColor(0xCC202020);
+        bg.setCornerRadius(dp(10));
+        bg.setStroke(dp(4),Color.RED);
+        box.setBackground(bg);
+
+        TextView title=text("窗口位置测试",22);
+        title.setTypeface(null,1);
+        title.setGravity(Gravity.CENTER);
+        box.addView(title,new LinearLayout.LayoutParams(-1,dp(46)));
+
+        TextView info=text("上距离："+top+" px\n"+
+                "左距离："+left+" px\n"+
+                "下距离："+bottom+" px\n"+
+                "右距离："+Math.max(0,screen.x-left-width)+" px\n"+
+                "窗口大小："+width+" × "+height+" px",18);
+        info.setGravity(Gravity.CENTER);
+        info.setTypeface(null,1);
+        box.addView(info,new LinearLayout.LayoutParams(-1,0,1));
+
+        LinearLayout actions=new LinearLayout(this);
+        actions.setGravity(Gravity.CENTER);
+        Button copy=button("复制参数");
+        Button close=button("关闭测试窗口");
+        actions.addView(copy,new LinearLayout.LayoutParams(0,dp(50),1));
+        LinearLayout clp=new LinearLayout.LayoutParams(0,dp(50),1);
+        clp.setMargins(dp(8),0,0,0);
+        actions.addView(close,clp);
+        box.addView(actions,new LinearLayout.LayoutParams(-1,dp(58)));
+
+        FrameLayout.LayoutParams blp=new FrameLayout.LayoutParams(width,height);
+        blp.leftMargin=left;
+        blp.topMargin=top;
+        overlay.addView(box,new FrameLayout.LayoutParams(-1,-1));
+        content.addView(overlay,blp);
+
+        copy.setOnClickListener(v->copyPositionTestToClipboard(top,left,width,height));
+        close.setOnClickListener(v->{try{content.removeView(overlay);}catch(Exception ignored){}});
+    }
+
     void showPositionSampleWindow(int top,int left,int width,int height){
         final android.graphics.Point screen=getRealScreenSize();
         top=Math.max(0,top);
@@ -505,7 +606,14 @@ public class MainActivity extends AppCompatActivity {
         final int bottom=Math.max(0,screen.y-finalTop-finalHeight);
 
         if(Build.VERSION.SDK_INT>=23 && !android.provider.Settings.canDrawOverlays(this)){
-            Toast.makeText(this,"请先允许本APP显示在其他应用上层，测试窗口才能覆盖整个屏幕",Toast.LENGTH_LONG).show();
+            // 没有 ADB/悬浮窗授权时，如果用户开启了“全屏透明50%启动”，
+            // 直接把测试框放进当前 Activity 的全屏内容层，不再要求 SYSTEM_ALERT_WINDOW。
+            // 这样车机无法授权悬浮窗时也可以完成坐标校准。
+            if(prefs.getBoolean("startup_transparent_test",false)){
+                showPositionSampleInActivity(finalTop,finalLeft,finalWidth,finalHeight,screen,bottom);
+                return;
+            }
+            Toast.makeText(this,"请先允许本APP显示在其他应用上层，或在设置中开启“全屏透明50%启动”后重启本APP",Toast.LENGTH_LONG).show();
             try{
                 Intent intent=new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION);
                 intent.setData(android.net.Uri.parse("package:"+getPackageName()));
@@ -521,24 +629,40 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout box=new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(12),dp(8),dp(12),dp(8));
-        box.setBackgroundColor(Color.rgb(25,25,25));
+        box.setGravity(Gravity.CENTER);
+        box.setPadding(dp(18),dp(18),dp(18),dp(18));
+        GradientDrawable testBg=new GradientDrawable();
+        testBg.setColor(0xCC202020);
+        testBg.setCornerRadius(dp(10));
+        testBg.setStroke(dp(4),Color.RED);
+        box.setBackground(testBg);
         box.setElevation(dp(8));
 
-        TextView title=text("全屏窗口位置测试",18);
+        TextView title=text("窗口位置测试",22);
         title.setTypeface(null,1);
-        box.addView(title,new LinearLayout.LayoutParams(-1,dp(38)));
+        title.setGravity(Gravity.CENTER);
+        box.addView(title,new LinearLayout.LayoutParams(-1,dp(46)));
 
         TextView info=text(
-                "屏幕："+screen.x+" × "+screen.y+
-                "\n离上："+finalTop+" px   离下："+bottom+" px"+
-                "\n离左："+finalLeft+" px   离右："+Math.max(0,screen.x-finalLeft-finalWidth)+" px"+
-                "\n窗口大小："+finalWidth+" × "+finalHeight+" px",15);
+                "上距离："+finalTop+" px\n"+
+                "左距离："+finalLeft+" px\n"+
+                "下距离："+bottom+" px\n"+
+                "右距离："+Math.max(0,screen.x-finalLeft-finalWidth)+" px\n"+
+                "窗口大小："+finalWidth+" × "+finalHeight+" px",18);
         info.setTextColor(Color.WHITE);
+        info.setGravity(Gravity.CENTER);
+        info.setTypeface(null,1);
         box.addView(info,new LinearLayout.LayoutParams(-1,0,1));
 
+        LinearLayout action=new LinearLayout(this);
+        action.setGravity(Gravity.CENTER);
+        Button copy=button("复制参数");
         Button close=button("关闭测试窗口");
-        box.addView(close,new LinearLayout.LayoutParams(-1,dp(46)));
+        action.addView(copy,new LinearLayout.LayoutParams(0,dp(50),1));
+        LinearLayout closeLp=new LinearLayout.LayoutParams(0,dp(50),1);
+        closeLp.setMargins(dp(8),0,0,0);
+        action.addView(close,closeLp);
+        box.addView(action,new LinearLayout.LayoutParams(-1,dp(58)));
 
         final WindowManager.LayoutParams lp=new WindowManager.LayoutParams();
         lp.width=finalWidth;
@@ -562,6 +686,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        copy.setOnClickListener(v->copyPositionTestToClipboard(finalTop,finalLeft,finalWidth,finalHeight));
         close.setOnClickListener(v->{
             try{wm.removeView(box);}catch(Exception ignored){}
         });
@@ -592,6 +717,23 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout.LayoutParams delayLp=new LinearLayout.LayoutParams(dp(88),dp(52));
         firstRow.addView(bootDelay,delayLp);
         box.addView(firstRow,new LinearLayout.LayoutParams(-1,dp(58)));
+
+        // 全屏透明 50% 启动：用于没有 ADB/悬浮窗权限时做全屏位置校准。
+        LinearLayout transparentRow=new LinearLayout(this);
+        transparentRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView transparentLabel=text("全屏透明50%启动",15);
+        transparentRow.addView(transparentLabel,new LinearLayout.LayoutParams(0,dp(52),1));
+        TextView transparentHint=text("下次启动生效",11);
+        transparentHint.setTextColor(Color.LTGRAY);
+        transparentRow.addView(transparentHint,new LinearLayout.LayoutParams(dp(90),dp(52)));
+        Switch transparentSwitch=new Switch(this);
+        transparentSwitch.setChecked(prefs.getBoolean("startup_transparent_test",false));
+        transparentSwitch.setOnCheckedChangeListener((v,checked)->{
+            prefs.edit().putBoolean("startup_transparent_test",checked).apply();
+            Toast.makeText(this,checked?"已开启，下次启动进入全屏透明50%测试模式":"已关闭，下次启动恢复正常模式",Toast.LENGTH_SHORT).show();
+        });
+        transparentRow.addView(transparentSwitch,new LinearLayout.LayoutParams(dp(58),dp(52)));
+        box.addView(transparentRow,new LinearLayout.LayoutParams(-1,dp(58)));
 
         // 第二排：主界面字体大小、主界面界面大小，均手动输入，点击保存后生效
         LinearLayout sizeRow=new LinearLayout(this);
