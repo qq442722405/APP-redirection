@@ -29,6 +29,7 @@ public class FloatingService extends Service {
     final ArrayList<String> floatingNames=new ArrayList<>();
 
     boolean vertical;
+    int windowWidthPx=420, windowHeightPx=72, buttonSpacingPx=6, iconSizePx=44;
     boolean addBack=false, addHome=false, addMenu=false;
     final int ACTION_BACK=1,ACTION_HOME=2,ACTION_MENU=3;
 
@@ -47,6 +48,10 @@ public class FloatingService extends Service {
         loadFloatingApps();
         SharedPreferences p=getSharedPreferences(MainActivity.PREF,0);
         vertical=p.getBoolean("floating_vertical",false);
+        windowWidthPx=p.getInt("floating_window_width_px",420);
+        windowHeightPx=p.getInt("floating_window_height_px",72);
+        buttonSpacingPx=p.getInt("floating_button_spacing_px",6);
+        iconSizePx=p.getInt("floating_icon_size_px",44);
         addBack=p.getBoolean("floating_back",false);
         addHome=p.getBoolean("floating_home",false);
         addMenu=p.getBoolean("floating_menu",false);
@@ -121,7 +126,8 @@ public class FloatingService extends Service {
         b.setImageResource(icon);
         b.setColorFilter(Color.WHITE);
         b.setBackgroundResource(R.drawable.button);
-        b.setPadding(dp(9),dp(9),dp(9),dp(9));
+        int pad=Math.max(2,(iconSizePx-28)/2);
+        b.setPadding(dp(pad),dp(pad),dp(pad),dp(pad));
         return b;
     }
 
@@ -141,13 +147,13 @@ public class FloatingService extends Service {
         drag.setTextSize(20);
         TextView plus=baseButton("＋");
         plus.setTextSize(22);
-        addView(drag,48,48);
-        addView(plus,48,48);
+        addView(drag,iconSizePx,iconSizePx);
+        addView(plus,iconSizePx,iconSizePx);
         plus.setContentDescription("添加悬浮项目");
         plus.setOnClickListener(v->showAddMenu());
         rebuildButtons();
 
-        lp=new WindowManager.LayoutParams(-2,-2,overlayType(),
+        lp=new WindowManager.LayoutParams(dp(windowWidthPx),dp(windowHeightPx),overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.OPAQUE);
         lp.gravity=Gravity.TOP|Gravity.LEFT;
@@ -172,7 +178,11 @@ public class FloatingService extends Service {
     }
 
     int downX,downY,startX,startY;
-    void addView(View v,int w,int h){panel.addView(v,new LinearLayout.LayoutParams(dp(w),dp(h)));}
+    void addView(View v,int w,int h){
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(dp(w),dp(h));
+        p.setMargins(dp(buttonSpacingPx),dp(buttonSpacingPx),dp(buttonSpacingPx),dp(buttonSpacingPx));
+        panel.addView(v,p);
+    }
 
     void rebuildButtons(){
         if(panel==null)return;
@@ -195,7 +205,7 @@ public class FloatingService extends Service {
                 }
             });
             b.setOnLongClickListener(v->{removeFloatingApp(pkg);return true;});
-            addView(b,52,52);
+            addView(b,iconSizePx,iconSizePx);
         }
 
         if(addBack) addSystemButton(R.drawable.ic_back,"返回",ACTION_BACK);
@@ -207,7 +217,7 @@ public class FloatingService extends Service {
         ImageButton b=iconButton(icon);
         b.setContentDescription(desc);
         b.setOnClickListener(v->globalAction(action));
-        addView(b,52,52);
+        addView(b,iconSizePx,iconSizePx);
     }
 
     void globalAction(int action){

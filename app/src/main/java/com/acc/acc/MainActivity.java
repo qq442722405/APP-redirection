@@ -545,16 +545,67 @@ public class MainActivity extends AppCompatActivity {
             // 都由同一个 Window 管理，避免车机 ROM 造成上下/左右触控偏移。
             WindowManager.LayoutParams lp=w.getAttributes();
             lp.gravity=Gravity.CENTER;
-            // 车机弹窗触控纠正：主界面不使用此偏移，只对所有 Dialog 生效。
-            // 正值向右/向下移动弹窗，负值向左/向上移动弹窗。
-            lp.x=touchOffsetLeft();
-            lp.y=touchOffsetTop();
+            // 触控纠正不能再通过 lp.x/lp.y 移动整个弹窗。
+            // 那样只会改变视觉位置，车机 ROM 的触控坐标偏移依然存在。
+            // 这里保持弹窗视觉位置不变，真正修正 Window.Callback 收到的触摸坐标。
+            lp.x=0;
+            lp.y=0;
             lp.width=width;
             lp.height=WindowManager.LayoutParams.WRAP_CONTENT;
             lp.dimAmount=0.55f;
             w.setAttributes(lp);
             w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            installTouchCorrection(dialog);
         }catch(Exception ignored){}
+    }
+
+    /**
+     * 真正修正车机弹窗触控坐标。
+     * 正值“上”表示把触点坐标向上修正，正值“左”表示把触点坐标向左修正。
+     * 主界面完全不经过这里，因此主界面触控不会受到影响。
+     */
+    void installTouchCorrection(Dialog dialog){
+        if(dialog==null || dialog.getWindow()==null) return;
+        final Window window=dialog.getWindow();
+        final Window.Callback original=window.getCallback();
+        if(original==null || original instanceof TouchCorrectingCallback) return;
+        window.setCallback(new TouchCorrectingCallback(original, touchOffsetLeft(), touchOffsetTop()));
+    }
+
+    static class TouchCorrectingCallback implements Window.Callback{
+        final Window.Callback delegate;
+        final int left, top;
+        TouchCorrectingCallback(Window.Callback d,int l,int t){delegate=d;left=l;top=t;}
+        public boolean dispatchKeyEvent(KeyEvent e){return delegate.dispatchKeyEvent(e);}
+        public boolean dispatchKeyShortcutEvent(KeyEvent e){return delegate.dispatchKeyShortcutEvent(e);}
+        public boolean dispatchTouchEvent(MotionEvent e){
+            MotionEvent copy=MotionEvent.obtain(e);
+            try{
+                // 修正的是触摸坐标，不移动弹窗视觉位置。
+                copy.offsetLocation(-left,-top);
+                return delegate.dispatchTouchEvent(copy);
+            }finally{copy.recycle();}
+        }
+        public boolean dispatchTrackballEvent(MotionEvent e){return delegate.dispatchTrackballEvent(e);}
+        public boolean dispatchGenericMotionEvent(MotionEvent e){return delegate.dispatchGenericMotionEvent(e);}
+        public boolean dispatchPopulateAccessibilityEvent(android.view.accessibility.AccessibilityEvent e){return delegate.dispatchPopulateAccessibilityEvent(e);}
+        public android.view.View onCreatePanelView(int featureId){return delegate.onCreatePanelView(featureId);}
+        public boolean onCreatePanelMenu(int featureId, android.view.Menu menu){return delegate.onCreatePanelMenu(featureId,menu);}
+        public boolean onPreparePanel(int featureId, android.view.View view, android.view.Menu menu){return delegate.onPreparePanel(featureId,view,menu);}
+        public boolean onMenuOpened(int featureId, android.view.Menu menu){return delegate.onMenuOpened(featureId,menu);}
+        public boolean onMenuItemSelected(int featureId, android.view.MenuItem item){return delegate.onMenuItemSelected(featureId,item);}
+        public void onWindowAttributesChanged(WindowManager.LayoutParams attrs){delegate.onWindowAttributesChanged(attrs);}
+        public void onContentChanged(){delegate.onContentChanged();}
+        public void onWindowFocusChanged(boolean hasFocus){delegate.onWindowFocusChanged(hasFocus);}
+        public void onAttachedToWindow(){delegate.onAttachedToWindow();}
+        public void onDetachedFromWindow(){delegate.onDetachedFromWindow();}
+        public void onPanelClosed(int featureId, android.view.Menu menu){delegate.onPanelClosed(featureId,menu);}
+        public boolean onSearchRequested(){return delegate.onSearchRequested();}
+        public boolean onSearchRequested(SearchEvent event){return Build.VERSION.SDK_INT>=23 ? delegate.onSearchRequested(event) : false;}
+        public ActionMode onWindowStartingActionMode(ActionMode.Callback callback){return delegate.onWindowStartingActionMode(callback);}
+        public ActionMode onWindowStartingActionMode(ActionMode.Callback callback,int type){return Build.VERSION.SDK_INT>=23 ? delegate.onWindowStartingActionMode(callback,type) : null;}
+        public void onActionModeStarted(ActionMode mode){delegate.onActionModeStarted(mode);}
+        public void onActionModeFinished(ActionMode mode){delegate.onActionModeFinished(mode);}
     }
 
     void showDialogBelowTop(AlertDialog dialog){
@@ -590,14 +641,14 @@ public class MainActivity extends AppCompatActivity {
         box.addView(autoButton,new LinearLayout.LayoutParams(-1,dp(52)));
 
         LinearLayout floatRow=new LinearLayout(this); floatRow.setGravity(Gravity.CENTER_VERTICAL);
-        floatRow.addView(text("悬浮窗口",15),new LinearLayout.LayoutParams(0,dp(52),1));
-        Button floatLayout=button(prefs.getBoolean("floating_vertical",false)?"竖向":"横向");
-        LinearLayout.LayoutParams directionLp=new LinearLayout.LayoutParams(dp(82),dp(46)); directionLp.setMargins(0,0,dp(8),0);
-        floatRow.addView(floatLayout,directionLp);
+        Button floatSettings=button("悬浮窗口设置");
+        floatSettings.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+        floatSettings.setPadding(dp(14),0,dp(14),0);
+        floatSettings.setOnClickListener(v->showFloatingWindowSettingsDialog());
+        floatRow.addView(floatSettings,new LinearLayout.LayoutParams(0,dp(52),1));
         Switch fswitch=new Switch(this); fswitch.setChecked(prefs.getBoolean("floating_enabled",false));
         floatRow.addView(fswitch,new LinearLayout.LayoutParams(dp(58),dp(52)));
         box.addView(floatRow,new LinearLayout.LayoutParams(-1,dp(58)));
-        floatLayout.setOnClickListener(v->{boolean vertical=!prefs.getBoolean("floating_vertical",false);prefs.edit().putBoolean("floating_vertical",vertical).apply();floatLayout.setText(vertical?"竖向":"横向");if(fswitch.isChecked()){stopFloatingService();startFloatingService();}});
         fswitch.setOnCheckedChangeListener((v,checked)->{
             if(checked){
                 if(Build.VERSION.SDK_INT>=23 && !android.provider.Settings.canDrawOverlays(this)){
@@ -622,6 +673,54 @@ public class MainActivity extends AppCompatActivity {
         box.addView(permissions,new LinearLayout.LayoutParams(-1,dp(48)));
         settingsDialog[0]=new AlertDialog.Builder(this).setTitle("设置").setView(box).setNegativeButton("关闭",null).create();
         showDialogBelowTop(settingsDialog[0]);
+    }
+
+    void showFloatingWindowSettingsDialog(){
+        LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(24),dp(8),dp(24),dp(12));
+
+        LinearLayout direction=new LinearLayout(this); direction.setGravity(Gravity.CENTER_VERTICAL);
+        direction.addView(text("排列方向",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        Button dirBtn=button(prefs.getBoolean("floating_vertical",false)?"竖向":"横向");
+        direction.addView(dirBtn,new LinearLayout.LayoutParams(dp(110),dp(48)));
+        dirBtn.setOnClickListener(v->{boolean vertical=!prefs.getBoolean("floating_vertical",false);prefs.edit().putBoolean("floating_vertical",vertical).apply();dirBtn.setText(vertical?"竖向":"横向");});
+        box.addView(direction,new LinearLayout.LayoutParams(-1,dp(58)));
+
+        EditText width=numberField("420",String.valueOf(prefs.getInt("floating_window_width_px",420)));
+        box.addView(labeledNumberField("悬浮窗口宽度",width),new LinearLayout.LayoutParams(-1,dp(54)));
+        EditText height=numberField("72",String.valueOf(prefs.getInt("floating_window_height_px",72)));
+        box.addView(labeledNumberField("悬浮窗口高度",height),new LinearLayout.LayoutParams(-1,dp(54)));
+        EditText spacing=numberField("6",String.valueOf(prefs.getInt("floating_button_spacing_px",6)));
+        box.addView(labeledNumberField("按钮图标间距",spacing),new LinearLayout.LayoutParams(-1,dp(54)));
+        EditText icon=numberField("44",String.valueOf(prefs.getInt("floating_icon_size_px",44)));
+        box.addView(labeledNumberField("按钮图标大小",icon),new LinearLayout.LayoutParams(-1,dp(54)));
+
+        TextView hint=text("保存后重新打开悬浮窗口即可生效。横向/竖向决定按钮排列方向。",11);
+        hint.setTextColor(Color.GRAY); hint.setPadding(0,dp(4),0,dp(6));
+        box.addView(hint,new LinearLayout.LayoutParams(-1,dp(36)));
+
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("悬浮窗口设置").setView(box).setNegativeButton("返回",null).create();
+        dialog.setOnShowListener(d->{
+            Button save=dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            if(save!=null) return;
+        });
+        dialog.setButton(AlertDialog.BUTTON_POSITIVE,"保存",(d,w)->{});
+        dialog.setOnShowListener(d->{
+            Button save=dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            if(save!=null) save.setOnClickListener(v->{
+                int ww=number(width,420), hh=number(height,72), sp=number(spacing,6), ic=number(icon,44);
+                if(ww<120||ww>1600||hh<52||hh>1000||sp<0||sp>80||ic<20||ic>200){
+                    Toast.makeText(this,"范围：宽120-1600，高52-1000，间距0-80，图标20-200 px",Toast.LENGTH_LONG).show(); return;
+                }
+                prefs.edit().putInt("floating_window_width_px",ww).putInt("floating_window_height_px",hh)
+                        .putInt("floating_button_spacing_px",sp).putInt("floating_icon_size_px",ic).apply();
+                if(prefs.getBoolean("floating_enabled",false)){ stopFloatingService(); startFloatingService(); }
+                Toast.makeText(this,"悬浮窗口设置已保存",Toast.LENGTH_SHORT).show();
+                dialog.dismiss();
+            });
+        });
+        showDialogBelowTop(dialog);
     }
 
     void showInterfaceOptionsDialog(){
@@ -976,7 +1075,7 @@ public class MainActivity extends AppCompatActivity {
         msg.setPadding(dp(4),dp(4),dp(4),dp(4));
         ScrollView scroll=new ScrollView(this); scroll.addView(msg,new ScrollView.LayoutParams(-1,-2));
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("权限与诊断")
-                .setView(scroll).setPositiveButton("界面选项",(x,w)->showInterfaceOptionsDialog())
+                .setView(scroll)
                 .setNegativeButton("关闭",null).create();
         showDialogBelowTop(dialog);
     }
