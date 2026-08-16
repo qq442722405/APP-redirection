@@ -590,9 +590,30 @@ public class MainActivity extends AppCompatActivity {
         public void onActionModeFinished(ActionMode mode){delegate.onActionModeFinished(mode);}
     }
 
+    void styleDialogActionButtons(AlertDialog dialog){
+        if(dialog==null) return;
+        try{
+            Button negative=dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+            Button positive=dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            Button neutral=dialog.getButton(AlertDialog.BUTTON_NEUTRAL);
+            Button[] buttons={negative,positive,neutral};
+            for(Button b:buttons){
+                if(b==null) continue;
+                b.setAllCaps(false);
+                b.setTextColor(Color.WHITE);
+                b.setTextSize(14*fontScale());
+                b.setBackgroundResource(R.drawable.button);
+                b.setMinHeight(dp(46));
+                b.setMinWidth(dp(100));
+                b.setPadding(dp(14),0,dp(14),0);
+            }
+        }catch(Exception ignored){}
+    }
+
     void showDialogBelowTop(AlertDialog dialog){
         if(dialog==null) return;
         dialog.show();
+        styleDialogActionButtons(dialog);
         placeDialogBelowTop(dialog);
     }
 
@@ -635,9 +656,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void showFloatingWindowSettingsDialog(){
+        // 顶部标题 + 中间可滚动设置 + 底部固定“保存/关闭”按钮。
+        // 保存只保存并刷新悬浮窗，不关闭本窗口，方便连续调整。
+        LinearLayout root=new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(18),dp(6),dp(18),dp(10));
+
+        ScrollView scroll=new ScrollView(this);
         LinearLayout box=new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(24),dp(8),dp(24),dp(12));
+        box.setPadding(dp(6),dp(4),dp(6),dp(8));
 
         LinearLayout enableRow=new LinearLayout(this); enableRow.setGravity(Gravity.CENTER_VERTICAL);
         enableRow.addView(text("悬浮窗口开关",14),new LinearLayout.LayoutParams(0,dp(52),1));
@@ -650,7 +678,11 @@ public class MainActivity extends AppCompatActivity {
         direction.addView(text("排列方向",14),new LinearLayout.LayoutParams(0,dp(52),1));
         Button dirBtn=button(prefs.getBoolean("floating_vertical",false)?"竖向":"横向");
         direction.addView(dirBtn,new LinearLayout.LayoutParams(dp(110),dp(48)));
-        dirBtn.setOnClickListener(v->{boolean vertical=!prefs.getBoolean("floating_vertical",false);prefs.edit().putBoolean("floating_vertical",vertical).apply();dirBtn.setText(vertical?"竖向":"横向");});
+        dirBtn.setOnClickListener(v->{
+            boolean vertical=!prefs.getBoolean("floating_vertical",false);
+            prefs.edit().putBoolean("floating_vertical",vertical).apply();
+            dirBtn.setText(vertical?"竖向":"横向");
+        });
         box.addView(direction,new LinearLayout.LayoutParams(-1,dp(58)));
 
         EditText width=numberField("420",String.valueOf(prefs.getInt("floating_window_width_px",420)));
@@ -661,31 +693,55 @@ public class MainActivity extends AppCompatActivity {
         box.addView(labeledNumberField("按钮图标间距",spacing),new LinearLayout.LayoutParams(-1,dp(54)));
         EditText icon=numberField("44",String.valueOf(prefs.getInt("floating_icon_size_px",44)));
         box.addView(labeledNumberField("按钮图标大小",icon),new LinearLayout.LayoutParams(-1,dp(54)));
-
         EditText posX=numberField("30",String.valueOf(prefs.getInt("floating_position_x",30)));
         box.addView(labeledNumberField("悬浮窗口左位置",posX),new LinearLayout.LayoutParams(-1,dp(54)));
         EditText posY=numberField("180",String.valueOf(prefs.getInt("floating_position_y",180)));
         box.addView(labeledNumberField("悬浮窗口上位置",posY),new LinearLayout.LayoutParams(-1,dp(54)));
 
-        TextView hint=text("悬浮窗口支持拖动。拖动左侧“☰”按钮即可移动位置；保存后窗口不会关闭，可以继续调整。",11);
-        hint.setTextColor(Color.GRAY); hint.setPadding(0,dp(4),0,dp(6));
-        box.addView(hint,new LinearLayout.LayoutParams(-1,dp(48)));
+        TextView hint=text("悬浮窗口支持拖动。可拖动左侧“☰”按钮移动位置。保存后本窗口不会关闭，可以继续调整。",11);
+        hint.setTextColor(Color.GRAY); hint.setPadding(0,dp(4),0,dp(8));
+        box.addView(hint,new LinearLayout.LayoutParams(-1,dp(50)));
+        scroll.addView(box,new ScrollView.LayoutParams(-1,-2));
+        root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
 
+        LinearLayout actionBar=new LinearLayout(this);
+        actionBar.setOrientation(LinearLayout.HORIZONTAL);
+        actionBar.setGravity(Gravity.CENTER);
+        actionBar.setPadding(dp(4),dp(8),dp(4),0);
+
+        Button close=button("关闭");
         Button save=button("保存设置");
-        box.addView(save,new LinearLayout.LayoutParams(-1,dp(50)));
+        LinearLayout.LayoutParams closeLp=new LinearLayout.LayoutParams(0,dp(50),1);
+        closeLp.setMargins(dp(4),0,dp(4),0);
+        LinearLayout.LayoutParams saveLp=new LinearLayout.LayoutParams(0,dp(50),1);
+        saveLp.setMargins(dp(4),0,dp(4),0);
+        actionBar.addView(close,closeLp);
+        actionBar.addView(save,saveLp);
+        root.addView(actionBar,new LinearLayout.LayoutParams(-1,dp(64)));
 
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("悬浮窗口设置").setView(box).setNegativeButton("返回",null).create();
+        AlertDialog dialog=new AlertDialog.Builder(this)
+                .setTitle("悬浮窗口设置")
+                .setView(root)
+                .create();
+
+        close.setOnClickListener(v->dialog.dismiss());
         save.setOnClickListener(v->{
             int ww=number(width,420), hh=number(height,72), sp=number(spacing,6), ic=number(icon,44);
             int px=number(posX,30), py=number(posY,180);
             if(ww<120||ww>1600||hh<52||hh>1000||sp<0||sp>80||ic<20||ic>200||px<-10000||py<-10000){
-                Toast.makeText(this,"范围：宽120-1600，高52-1000，间距0-80，图标20-200",Toast.LENGTH_LONG).show(); return;
+                Toast.makeText(this,"范围：宽120-1600，高52-1000，间距0-80，图标20-200",Toast.LENGTH_LONG).show();
+                return;
             }
             boolean oldEnabled=prefs.getBoolean("floating_enabled",false);
             prefs.edit().putBoolean("floating_enabled",enable.isChecked())
-                    .putInt("floating_window_width_px",ww).putInt("floating_window_height_px",hh)
-                    .putInt("floating_button_spacing_px",sp).putInt("floating_icon_size_px",ic)
-                    .putInt("floating_position_x",px).putInt("floating_position_y",py).apply();
+                    .putInt("floating_window_width_px",ww)
+                    .putInt("floating_window_height_px",hh)
+                    .putInt("floating_button_spacing_px",sp)
+                    .putInt("floating_icon_size_px",ic)
+                    .putInt("floating_position_x",px)
+                    .putInt("floating_position_y",py)
+                    .apply();
+
             if(enable.isChecked()){
                 if(Build.VERSION.SDK_INT>=23 && !Settings.canDrawOverlays(this)){
                     enable.setChecked(false);
@@ -694,12 +750,13 @@ public class MainActivity extends AppCompatActivity {
                     openOverlaySettings();
                     return;
                 }
-                stopFloatingService(); startFloatingService();
+                stopFloatingService();
+                startFloatingService();
             }else if(oldEnabled){
                 stopFloatingService();
             }
             Toast.makeText(this,"悬浮窗口设置已保存，可继续调整",Toast.LENGTH_SHORT).show();
-            // 故意不 dismiss：用户可以继续修改参数。
+            // 不 dismiss，保持设置窗口。
         });
         showDialogBelowTop(dialog);
     }
