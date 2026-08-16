@@ -398,10 +398,10 @@ public class MainActivity extends AppCompatActivity {
         footer.addView(info,new LinearLayout.LayoutParams(0,dp(62),1));
 
         TextView screenInfo=text("",10);
-        screenInfo.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+        screenInfo.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
         screenInfo.setTextColor(Color.WHITE);
         screenInfo.setPadding(dp(6),0,dp(6),0);
-        screenInfo.setMaxLines(4);
+        screenInfo.setMaxLines(5);
         footer.addView(screenInfo,new LinearLayout.LayoutParams(dp(720),dp(96)));
         updateScreenInfo(screenInfo);
 
@@ -579,10 +579,11 @@ public class MainActivity extends AppCompatActivity {
         }catch(Exception ignored){}
 
         view.setText(
-                "分辨率 " + rs.x + " × " + rs.y + "    DPI " + dm.densityDpi + "\n"
-                + "包名 " + packageName + "\n"
-                + "签名 " + signature + "\n"
-                + "版本 " + versionName + "    versionCode " + versionCode
+                "分辨率：" + rs.x + " × " + rs.y + "\n"
+                + "包名：" + packageName + "\n"
+                + "签名：" + signature + "\n"
+                + "版本：" + versionCode + "\n"
+                + "versionName：" + versionName
         );
     }
 
