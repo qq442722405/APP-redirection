@@ -3,8 +3,17 @@ plugins {
 }
 
 android {
-    namespace "Acc"
+    namespace "com.acc.acc"
     compileSdk 35
+
+    signingConfigs {
+        acc {
+            storeFile file("../Acc.jks")
+            storePassword "Acc123456!"
+            keyAlias "Acc"
+            keyPassword "Acc123456!"
+        }
+    }
 
     compileOptions {
     sourceCompatibility JavaVersion.VERSION_1_8
@@ -12,11 +21,12 @@ android {
 }
 
 defaultConfig {
-        applicationId "Acc"
+        applicationId "com.acc.acc"
         minSdk 26
         targetSdk 34
-        versionCode 17
-        versionName '2.3-build-85-permissions'
+        versionCode 18
+        versionName '2.3-build-85-permissions-fixed'
+        signingConfig signingConfigs.acc
     }
 
     packaging {
