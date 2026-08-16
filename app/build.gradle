@@ -16,7 +16,7 @@ defaultConfig {
         minSdk 26
         targetSdk 34
         versionCode 15
-        versionName '2.3-build-fix-78'
+        versionName '2.3-build-fix-79'
     }
 
     packaging {
