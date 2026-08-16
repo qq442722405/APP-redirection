@@ -490,6 +490,7 @@ public class MainActivity extends AppCompatActivity {
                 appGrid.addView(row,new LinearLayout.LayoutParams(-1,dp(122)));
             }
         }
+    }
 
     void updateScreenInfo(TextView view){
         android.util.DisplayMetrics dm=getResources().getDisplayMetrics();
