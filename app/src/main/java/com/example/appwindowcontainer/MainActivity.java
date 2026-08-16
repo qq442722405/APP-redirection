@@ -31,10 +31,6 @@ public class MainActivity extends AppCompatActivity {
     String selectedPackage=null;
     String selectedName=null;
 
-    // 容器本身固定避让车机原生区域
-    static final int TOP_BLANK=80;
-    static final int BOTTOM_BLANK=120;
-
     ArrayList<AppItem> apps=new ArrayList<>();
     ArrayList<Preset> presets=new ArrayList<>();
 
@@ -52,8 +48,8 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    float uiScale(){ return Math.max(0.80f, Math.min(1.25f, prefs==null?1.0f:prefs.getFloat("ui_scale",1.0f))); }
-    float fontScale(){ return Math.max(0.80f, Math.min(1.30f, prefs==null?1.0f:prefs.getFloat("font_scale",1.0f))); }
+    float uiScale(){ return prefs==null?1.0f:prefs.getFloat("ui_scale",1.0f); }
+    float fontScale(){ return prefs==null?1.0f:prefs.getFloat("font_scale",1.0f); }
 
     int dp(int v){
         return (int)(v*getResources().getDisplayMetrics().density*uiScale()+.5f);
@@ -141,6 +137,26 @@ public class MainActivity extends AppCompatActivity {
         int value=number(input,0)+delta;
         input.setText(String.valueOf(value));
         input.setSelection(input.length());
+    }
+
+    // 自动启动任务间隔专用：仅提供 +1 / -1 / 归零。
+    LinearLayout labeledNumberFieldStep1(String label, EditText input){
+        LinearLayout row=new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        TextView l=text(label,14);
+        row.addView(l,new LinearLayout.LayoutParams(dp(115),dp(54)));
+        row.addView(input,new LinearLayout.LayoutParams(0,dp(54),1));
+        String[] labels={"+1","-1","归零"};
+        int[] deltas={1,-1,0};
+        for(int i=0;i<labels.length;i++){
+            final int delta=deltas[i];
+            Button b=button(labels[i]);
+            b.setTextSize(10); b.setMinWidth(0); b.setPadding(0,0,0,0);
+            b.setOnClickListener(v->{ if(delta==0) input.setText("0"); else adjustNumber(input,delta); input.setSelection(input.length()); });
+            row.addView(b,new LinearLayout.LayoutParams(dp(50),dp(44)));
+        }
+        return row;
     }
 
     EditText textField(String label,String value){
@@ -296,7 +312,7 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.BLACK);
-        root.setPadding(dp(12),dp(TOP_BLANK),dp(12),dp(BOTTOM_BLANK));
+        root.setPadding(dp(12),dp(12),dp(12),dp(12));
 
         // “+”统一放在最左边
         LinearLayout presetHeader=new LinearLayout(this);
@@ -427,13 +443,13 @@ public class MainActivity extends AppCompatActivity {
             try{
                 float fs=Float.parseFloat(fontInput.getText().toString().trim());
                 float us=Float.parseFloat(uiInput.getText().toString().trim());
-                if(fs<80 || fs>130 || us<80 || us>120) throw new Exception();
+                if(fs<50 || fs>500 || us<50 || us>500) throw new Exception();
                 prefs.edit().putFloat("font_scale",fs/100f).putFloat("ui_scale",us/100f).apply();
                 Toast.makeText(this,"字体大小和界面大小已保存并生效",Toast.LENGTH_SHORT).show();
                 if(settingsDialog[0]!=null) settingsDialog[0].dismiss();
                 buildUI();
             }catch(Exception e){
-                Toast.makeText(this,"请输入有效数值：字体 80-130%，界面 80-120%",Toast.LENGTH_LONG).show();
+                Toast.makeText(this,"请输入有效数值：字体和界面大小均为 50-500%",Toast.LENGTH_LONG).show();
             }
         });
         box.addView(saveSize,new LinearLayout.LayoutParams(-1,dp(48)));
@@ -469,14 +485,21 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        LinearLayout autoRow=new LinearLayout(this); autoRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView al=text("自动启动",15); autoRow.addView(al,new LinearLayout.LayoutParams(0,dp(52),1));
-        Switch as=new Switch(this); as.setChecked(prefs.getBoolean("auto_start_enabled",false));
+        LinearLayout autoRow=new LinearLayout(this);
+        autoRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView al=text("自动启动任务",15);
+        autoRow.addView(al,new LinearLayout.LayoutParams(0,dp(52),1));
+        Switch as=new Switch(this);
+        as.setChecked(prefs.getBoolean("auto_start_enabled",false));
         as.setOnCheckedChangeListener((v,checked)->prefs.edit().putBoolean("auto_start_enabled",checked).apply());
-        autoRow.addView(as); box.addView(autoRow);
-
-        Button add=button("管理自动启动项目（支持多个任务）"); add.setOnClickListener(v->showAutoStartEditor());
-        box.addView(add,new LinearLayout.LayoutParams(-1,dp(50)));
+        autoRow.addView(as,new LinearLayout.LayoutParams(dp(58),dp(52)));
+        Button add=button("管理自动启动任务");
+        add.setTextSize(12);
+        add.setOnClickListener(v->showAutoStartEditor());
+        LinearLayout.LayoutParams addLp=new LinearLayout.LayoutParams(dp(150),dp(48));
+        addLp.setMargins(dp(8),0,0,0);
+        autoRow.addView(add,addLp);
+        box.addView(autoRow,new LinearLayout.LayoutParams(-1,dp(58)));
 
         // 设置页面直接列出当前加入自动启动的 APP
         LinearLayout autoList=new LinearLayout(this); autoList.setOrientation(LinearLayout.VERTICAL);
@@ -846,7 +869,7 @@ public class MainActivity extends AppCompatActivity {
         box.addView(scroll,new LinearLayout.LayoutParams(-1,dp(220)));
 
         EditText interval=numberField("启动间隔（秒）",String.valueOf(prefs.getInt("auto_start_interval",1)));
-        box.addView(labeledNumberField("任务间隔",interval));
+        box.addView(labeledNumberFieldStep1("任务间隔",interval));
 
         final JSONArray[] tasks={loadAutoTasks()};
         final Runnable[] refreshTasks=new Runnable[1];
@@ -890,14 +913,14 @@ public class MainActivity extends AppCompatActivity {
         add.setOnClickListener(v->showAddAutoTaskDialog(tasks,refreshTasks[0]));
         refreshTasks[0].run();
 
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("自动启动项目")
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("自动启动任务")
                 .setView(box).setNegativeButton("关闭",null).setPositiveButton("保存",null).create();
         dialog.setOnShowListener(x->{
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
                 int sec=Math.max(1,number(interval,1));
                 prefs.edit().putString("auto_start_items",tasks[0].toString())
                         .putInt("auto_start_interval",sec).putBoolean("auto_start_enabled",tasks[0].length()>0).apply();
-                Toast.makeText(this,"自动启动项目已保存",Toast.LENGTH_SHORT).show();
+                Toast.makeText(this,"自动启动任务已保存",Toast.LENGTH_SHORT).show();
                 dialog.dismiss();
             });
         });
