@@ -26,10 +26,24 @@ jobs:
           test -f Acc.jks
           ls -lh Acc.jks
 
-      - name: 检查包名
+      - name: 清理历史 Java 包目录
         run: |
-          grep -R 'applicationId' app*/build.gradle app/build.gradle 2>/dev/null || true
-          grep -R 'namespace' app*/build.gradle app/build.gradle 2>/dev/null || true
+          # 防止 GitHub 仓库里残留旧版本源码导致 R 不存在/包名冲突
+          rm -rf app/src/main/java/com/example
+          rm -rf app/src/main/java/com/old
+          find app/src/main/java -type f -name '*.java' -print
+
+      - name: 严格检查包名
+        run: |
+          test "$(grep -c '^package com.acc.acc;' app/src/main/java/com/acc/acc/*.java)" -ge 1
+          if grep -RInE 'com\.example\.|package[[:space:]]*=|package com\.example' app/src/main/java app/src/main/AndroidManifest.xml app/build.gradle; then
+            echo '错误：发现旧包名或旧 Manifest package 残留'
+            exit 1
+          fi
+          grep -n 'namespace' app/build.gradle
+          grep -n 'applicationId' app/build.gradle
+          echo '=== Java 源文件 ==='
+          find app/src/main/java -type f -name '*.java' -print
 
       - name: 构建 Debug APK
         run: gradle clean :app:assembleDebug --no-daemon --stacktrace
