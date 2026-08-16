@@ -12,6 +12,7 @@ import android.os.Environment;
 import android.provider.Settings;
 import android.net.Uri;
 import android.os.Handler;
+import android.os.Looper;
 import android.content.ComponentName;
 import android.view.*;
 import android.widget.*;
