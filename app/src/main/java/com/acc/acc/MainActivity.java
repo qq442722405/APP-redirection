@@ -31,6 +31,7 @@ public class MainActivity extends AppCompatActivity {
     SharedPreferences prefs;
     LinearLayout presetRow, appGrid;
     TextView info;
+    Button floatingPickButton;
     String selectedPackage=null;
     String selectedName=null;
 
@@ -304,6 +305,18 @@ public class MainActivity extends AppCompatActivity {
         prefs.edit().putString(PRESETS,a.toString()).apply();
     }
 
+    @Override protected void onResume(){
+        super.onResume();
+        refreshFloatingPermissionVisibility();
+    }
+
+    void refreshFloatingPermissionVisibility(){
+        boolean allowed=hasOverlayPermission();
+        if(floatingPickButton!=null){
+            floatingPickButton.setVisibility(allowed?View.VISIBLE:View.GONE);
+        }
+    }
+
     void buildUI(){
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
@@ -341,11 +354,12 @@ public class MainActivity extends AppCompatActivity {
 
         // 直接通过悬浮选位器创建/修改窗口预设：拖动红框到目标位置，
         // 在红框中央填写宽高，确认后自动回填到“新建窗口预设”。
-        Button floatingPick=button("悬浮窗选位");
-        floatingPick.setTextSize(12);
-        floatingPick.setContentDescription("悬浮窗选位");
-        floatingPick.setOnClickListener(v->showFloatingPresetPicker());
-        presetHeader.addView(floatingPick,new LinearLayout.LayoutParams(dp(120),dp(44)));
+        floatingPickButton=button("悬浮窗选位");
+        floatingPickButton.setTextSize(12);
+        floatingPickButton.setContentDescription("悬浮窗选位");
+        floatingPickButton.setOnClickListener(v->showFloatingPresetPicker());
+        floatingPickButton.setVisibility(hasOverlayPermission()?View.VISIBLE:View.GONE);
+        presetHeader.addView(floatingPickButton,new LinearLayout.LayoutParams(dp(120),dp(44)));
         root.addView(presetHeader,new LinearLayout.LayoutParams(-1,dp(44)));
 
         ScrollView presetScroll=new ScrollView(this);
@@ -701,6 +715,12 @@ public class MainActivity extends AppCompatActivity {
     void showDialogBelowTop(AlertDialog dialog){
         if(dialog==null) return;
         dialog.show();
+        try{
+            GradientDrawable bg=new GradientDrawable();
+            bg.setColor(0xF51A1A1A);
+            bg.setCornerRadius(dp(22));
+            dialog.getWindow().setBackgroundDrawable(bg);
+        }catch(Exception ignored){}
         styleDialogActionButtons(dialog);
         placeDialogBelowTop(dialog);
     }
@@ -731,11 +751,13 @@ public class MainActivity extends AppCompatActivity {
         autoButton.setOnClickListener(v->showAutoStartEditor());
         box.addView(autoButton,new LinearLayout.LayoutParams(-1,dp(52)));
 
-        Button floatSettings=button("悬浮窗口设置  ›");
-        floatSettings.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
-        floatSettings.setPadding(dp(14),0,dp(14),0);
-        floatSettings.setOnClickListener(v->showFloatingWindowSettingsDialog());
-        box.addView(floatSettings,new LinearLayout.LayoutParams(-1,dp(52)));
+        if(hasOverlayPermission()){
+            Button floatSettings=button("悬浮窗口设置  ›");
+            floatSettings.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+            floatSettings.setPadding(dp(14),0,dp(14),0);
+            floatSettings.setOnClickListener(v->showFloatingWindowSettingsDialog());
+            box.addView(floatSettings,new LinearLayout.LayoutParams(-1,dp(52)));
+        }
 
         Button permissions=button("权限与诊断");
         permissions.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
