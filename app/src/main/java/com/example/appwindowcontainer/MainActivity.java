@@ -166,9 +166,48 @@ public class MainActivity extends AppCompatActivity {
         catch(Exception ex){return fallback;}
     }
 
+    /** 根据“全屏运行”设置，在下一次启动时应用全屏/半透明模式。
+     * 关闭时保持原来的非全屏、不透明界面。
+     */
+    void applyStartupWindowMode(){
+        Window w=getWindow();
+        boolean fullscreen=prefs.getBoolean("fullscreen_run",false);
+        if(fullscreen){
+            w.setStatusBarColor(Color.TRANSPARENT);
+            w.setNavigationBarColor(Color.TRANSPARENT);
+            if(Build.VERSION.SDK_INT>=30){
+                w.setDecorFitsSystemWindows(false);
+                w.getInsetsController().hide(
+                        android.view.WindowInsets.Type.statusBars() |
+                        android.view.WindowInsets.Type.navigationBars());
+                w.getInsetsController().setSystemBarsBehavior(
+                        android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            }else{
+                w.getDecorView().setSystemUiVisibility(
+                        View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+            }
+            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        }else{
+            w.setStatusBarColor(Color.BLACK);
+            w.setNavigationBarColor(Color.BLACK);
+            if(Build.VERSION.SDK_INT>=30){
+                w.setDecorFitsSystemWindows(true);
+                w.getInsetsController().show(
+                        android.view.WindowInsets.Type.statusBars() |
+                        android.view.WindowInsets.Type.navigationBars());
+            }else{
+                w.getDecorView().setSystemUiVisibility(0);
+            }
+            w.setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+        }
+    }
+
     @Override protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
         prefs=getSharedPreferences(PREF,0);
+        applyStartupWindowMode();
         loadData();
         buildUI();
         requestRuntimePermissions();
@@ -295,8 +334,9 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.BLACK);
-        root.setPadding(dp(12),TOP_BLANK,dp(12),dp(BOTTOM_BLANK));
+        boolean translucent=prefs.getBoolean("fullscreen_run",false);
+        root.setBackgroundColor(translucent ? Color.argb(178,0,0,0) : Color.BLACK);
+        root.setPadding(dp(12),translucent ? dp(12) : TOP_BLANK,dp(12),dp(BOTTOM_BLANK));
 
         // “+”统一放在最左边
         LinearLayout presetHeader=new LinearLayout(this);
@@ -407,9 +447,11 @@ public class MainActivity extends AppCompatActivity {
             lp.height=WindowManager.LayoutParams.MATCH_PARENT;
             w.setAttributes(lp);
 
-            // Window 原点保持 0,0；仅把实际 Dialog 内容留出顶部 80px。
+            // Window 原点保持 0,0；视觉内容避开顶部状态栏，并限制左右宽度，
+            // 这样不会出现菜单弹窗横向铺满整个超宽车机屏幕。
             View decor=w.getDecorView();
-            decor.setPadding(0,dp(TOP_BLANK),0,0);
+            int side=(int)(getRealScreenSize().x*0.05f);
+            decor.setPadding(side,dp(TOP_BLANK),side,dp(24));
         }catch(Exception ignored){}
     }
 
@@ -492,79 +534,64 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * 窗口位置测试直接在 MainActivity 内显示，不创建悬浮窗、不申请 SYSTEM_ALERT_WINDOW。
+     * 测试区域使用当前 APP 可用内容区作为坐标系，点击“显示测试窗口”后，
+     * 会在本 APP 页面里按 X/Y/宽/高绘制一个测试框。
+     */
     void showPositionSampleWindow(int top,int left,int width,int height){
         final android.graphics.Point screen=getRealScreenSize();
-        top=Math.max(0,top);
-        left=Math.max(0,left);
-        width=Math.max(180,Math.min(width,Math.max(180,screen.x-left)));
-        height=Math.max(120,Math.min(height,Math.max(120,screen.y-top)));
-        final int finalTop=top;
-        final int finalLeft=left;
-        final int finalWidth=width;
-        final int finalHeight=height;
-        final int bottom=Math.max(0,screen.y-finalTop-finalHeight);
+        final int rawTop=Math.max(0,top), rawLeft=Math.max(0,left);
+        final int rawWidth=Math.max(80,width), rawHeight=Math.max(60,height);
 
-        if(Build.VERSION.SDK_INT>=23 && !android.provider.Settings.canDrawOverlays(this)){
-            Toast.makeText(this,"请先允许本APP显示在其他应用上层，测试窗口才能覆盖整个屏幕",Toast.LENGTH_LONG).show();
-            try{
-                Intent intent=new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION);
-                intent.setData(android.net.Uri.parse("package:"+getPackageName()));
-                startActivity(intent);
-            }catch(Exception ignored){
-                try{startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION));}catch(Exception ignored2){}
-            }
-            return;
-        }
+        final LinearLayout page=new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setBackgroundColor(Color.BLACK);
+        page.setPadding(dp(12),dp(12),dp(12),dp(12));
 
-        final WindowManager wm=(WindowManager)getSystemService(WINDOW_SERVICE);
-        if(wm==null) return;
+        LinearLayout header=new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title=text("窗口位置测试",18); title.setTypeface(null,1);
+        header.addView(title,new LinearLayout.LayoutParams(0,dp(48),1));
+        Button back=button("返回");
+        header.addView(back,new LinearLayout.LayoutParams(dp(90),dp(44)));
+        page.addView(header);
 
-        LinearLayout box=new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(12),dp(8),dp(12),dp(8));
-        box.setBackgroundColor(Color.rgb(25,25,25));
-        box.setElevation(dp(8));
+        TextView screenInfo=text("当前物理屏幕："+screen.x+" × "+screen.y+"\n测试窗口直接显示在本 APP 内，不创建悬浮窗，也不需要悬浮窗权限。",13);
+        screenInfo.setTextColor(Color.LTGRAY);
+        page.addView(screenInfo,new LinearLayout.LayoutParams(-1,dp(58)));
 
-        TextView title=text("全屏窗口位置测试",18);
-        title.setTypeface(null,1);
-        box.addView(title,new LinearLayout.LayoutParams(-1,dp(38)));
+        FrameLayout canvas=new FrameLayout(this);
+        canvas.setBackgroundColor(Color.rgb(18,18,18));
+        page.addView(canvas,new LinearLayout.LayoutParams(-1,0,1));
 
-        TextView info=text(
-                "屏幕："+screen.x+" × "+screen.y+
-                "\n离上："+finalTop+" px   离下："+bottom+" px"+
-                "\n离左："+finalLeft+" px   离右："+Math.max(0,screen.x-finalLeft-finalWidth)+" px"+
-                "\n窗口大小："+finalWidth+" × "+finalHeight+" px",15);
-        info.setTextColor(Color.WHITE);
-        box.addView(info,new LinearLayout.LayoutParams(-1,0,1));
+        TextView sampleText=text("测试窗口\n离上："+rawTop+" px\n离左："+rawLeft+" px\n宽："+rawWidth+" px\n高："+rawHeight+" px",14);
+        sampleText.setGravity(Gravity.CENTER);
+        sampleText.setTextColor(Color.WHITE);
+        sampleText.setBackgroundResource(R.drawable.card_selected);
+        canvas.addView(sampleText,new FrameLayout.LayoutParams(10,10));
 
-        Button close=button("关闭测试窗口");
-        box.addView(close,new LinearLayout.LayoutParams(-1,dp(46)));
-
-        final WindowManager.LayoutParams lp=new WindowManager.LayoutParams();
-        lp.width=finalWidth;
-        lp.height=finalHeight;
-        lp.x=finalLeft;
-        lp.y=finalTop;
-        lp.gravity=Gravity.TOP | Gravity.LEFT;
-        lp.format=android.graphics.PixelFormat.TRANSLUCENT;
-        lp.flags=WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN |
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-        if(Build.VERSION.SDK_INT>=26){
-            lp.type=WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-        }else{
-            lp.type=WindowManager.LayoutParams.TYPE_PHONE;
-        }
-
-        try{
-            wm.addView(box,lp);
-        }catch(Exception e){
-            Toast.makeText(this,"无法创建全屏测试窗口："+e.getMessage(),Toast.LENGTH_LONG).show();
-            return;
-        }
-
-        close.setOnClickListener(v->{
-            try{wm.removeView(box);}catch(Exception ignored){}
+        // 输入参数以“整块物理屏幕像素”为单位；显示时按当前 APP 测试画布与物理屏幕比例缩放，
+        // 这样超宽车机也能在 APP 自己的中间区域完整预览，而不会再触发悬浮窗权限。
+        canvas.post(()->{
+            float sx=screen.x>0 ? canvas.getWidth()/(float)screen.x : 1f;
+            float sy=screen.y>0 ? canvas.getHeight()/(float)screen.y : 1f;
+            int cw=Math.max(dp(80),(int)(rawWidth*sx));
+            int ch=Math.max(dp(60),(int)(rawHeight*sy));
+            int cx=Math.max(0,(int)(rawLeft*sx));
+            int cy=Math.max(0,(int)(rawTop*sy));
+            FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(cw,ch);
+            lp.leftMargin=Math.min(cx,Math.max(0,canvas.getWidth()-cw));
+            lp.topMargin=Math.min(cy,Math.max(0,canvas.getHeight()-ch));
+            sampleText.setLayoutParams(lp);
         });
+
+        Button copy=button("复制当前参数");
+        copy.setOnClickListener(v->copyPositionTestToClipboard(rawTop,rawLeft,rawWidth,rawHeight));
+        page.addView(copy,new LinearLayout.LayoutParams(-1,dp(48)));
+
+        back.setOnClickListener(v->buildUI());
+        setContentView(page);
     }
 
     void showSettingsMenu(){
@@ -631,6 +658,23 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         box.addView(saveSize,new LinearLayout.LayoutParams(-1,dp(48)));
+
+        // 全屏运行：只保存设置，下次启动 APP 时生效；关闭时恢复原来的不透明非全屏。
+        LinearLayout fullscreenRow=new LinearLayout(this);
+        fullscreenRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView fullscreenLabel=text("全屏运行",15);
+        fullscreenRow.addView(fullscreenLabel,new LinearLayout.LayoutParams(0,dp(52),1));
+        TextView fullscreenHint=text("下次启动以全屏半透明运行",11);
+        fullscreenHint.setTextColor(Color.GRAY);
+        fullscreenRow.addView(fullscreenHint,new LinearLayout.LayoutParams(0,dp(52),1));
+        Switch fullscreenSwitch=new Switch(this);
+        fullscreenSwitch.setChecked(prefs.getBoolean("fullscreen_run",false));
+        fullscreenSwitch.setOnCheckedChangeListener((v,checked)->{
+            prefs.edit().putBoolean("fullscreen_run",checked).apply();
+            Toast.makeText(this,checked?"已开启，下次启动将全屏半透明":"已关闭，下次启动恢复默认不透明",Toast.LENGTH_SHORT).show();
+        });
+        fullscreenRow.addView(fullscreenSwitch,new LinearLayout.LayoutParams(dp(58),dp(52)));
+        box.addView(fullscreenRow,new LinearLayout.LayoutParams(-1,dp(58)));
 
         // 悬浮窗口：方向按钮放在开关左边
         LinearLayout floatRow=new LinearLayout(this);
