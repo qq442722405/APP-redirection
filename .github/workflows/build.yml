@@ -30,30 +30,55 @@ jobs:
           gradle-version: '8.7'
           cache-cleanup: always
 
-      - name: 构建前检查工程
+      - name: 强制清理旧工程残留
         shell: bash
         run: |
           set -e
-          echo '=== 检查资源 ==='
-          find app/src/main/res -type f | sort
-          if find app/src/main/res -type f -name 'shortcuts.xml' | grep -q .; then
-            echo '发现旧 shortcuts.xml，删除'
-            find app/src/main/res -type f -name 'shortcuts.xml' -delete
+          echo "=== 清理历史包名/资源残留 ==="
+
+          # 如果仓库仍存在旧 Java 包目录，先迁移到新包目录；若新目录已存在，
+          # 删除旧目录，避免同名类重复编译。
+          OLD_DIR="app/src/main/java/com/example/carappjump"
+          NEW_DIR="app/src/main/java/com/example/appwindowcontainer"
+          if [ -d "$OLD_DIR" ]; then
+            mkdir -p "$NEW_DIR"
+            if [ -z "$(find "$NEW_DIR" -type f -name "*.java" -print -quit)" ]; then
+              cp -f "$OLD_DIR"/*.java "$NEW_DIR"/ 2>/dev/null || true
+            fi
+            rm -rf "$OLD_DIR"
           fi
 
-          echo '=== 检查 Java 包名 ==='
-          if grep -R "com.example.carappjump" -n app/src/main/java; then
-            echo '错误：工程中残留旧包名 com.example.carappjump'
+          # 全工程 Java/Kotlin/XML/Gradle 文本统一替换历史包名。
+          find app/src/main -type f \( -name "*.java" -o -name "*.kt" -o -name "*.xml" \) -print0 | \
+            xargs -0 -r sed -i 's/com\.example\.carappjump/com.example.appwindowcontainer/g'
+
+          # 旧快捷方式资源不是本版本功能，直接删除，避免 AAPT 引用历史字符串。
+          rm -f app/src/main/res/xml/shortcuts.xml
+
+          echo "=== 当前 Java 文件 ==="
+          find app/src/main/java -type f -name "*.java" -print | sort
+
+          echo "=== 检查是否仍存在旧包名 ==="
+          if grep -R -n --exclude-dir=build 'com\.example\.carappjump' app/src/main 2>/dev/null; then
+            echo "错误：源码仍存在旧包名"
             exit 1
           fi
-          grep -R '^package com.example.appwindowcontainer;' -n app/src/main/java
 
-          echo '=== 检查资源引用 ==='
+          echo "=== 检查新包名 ==="
+          grep -R -n '^package com.example.appwindowcontainer;' app/src/main/java
+
+          echo "=== 检查关键资源 ==="
           test -f app/src/main/res/values/strings.xml
           test -f app/src/main/res/xml/accessibility_service_config.xml
           grep -q 'name="selector_title"' app/src/main/res/values/strings.xml
           grep -q 'name="search_hint"' app/src/main/res/values/strings.xml
           grep -q 'name="accessibility_desc"' app/src/main/res/values/strings.xml
+
+          echo "=== 检查 shortcuts.xml ==="
+          if [ -e app/src/main/res/xml/shortcuts.xml ]; then
+            echo "错误：shortcuts.xml 未删除"
+            exit 1
+          fi
 
       - name: 构建 Debug APK
         run: |
