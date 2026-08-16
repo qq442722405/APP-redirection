@@ -35,7 +35,9 @@ jobs:
 
       - name: 严格检查包名
         run: |
-          test "$(grep -c '^package com.acc.acc;' app/src/main/java/com/acc/acc/*.java)" -ge 1
+          count=$(grep -Rhs '^package com.acc.acc;' app/src/main/java/com/acc/acc/*.java | wc -l)
+          echo "检测到 $count 个 com.acc.acc Java 文件"
+          test "$count" -ge 1
           if grep -RInE 'com\.example\.|package[[:space:]]*=|package com\.example' app/src/main/java app/src/main/AndroidManifest.xml app/build.gradle; then
             echo '错误：发现旧包名或旧 Manifest package 残留'
             exit 1
