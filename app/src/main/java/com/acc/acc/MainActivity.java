@@ -428,18 +428,17 @@ public class MainActivity extends AppCompatActivity {
             appGrid.removeAllViews();
             if(apps.isEmpty()){
                 TextView empty=text("点击“+”添加 APP",14);
-                empty.setTextColor(Color.GRAY);
-                empty.setGravity(Gravity.CENTER);
+                empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER);
                 appGrid.addView(empty,new LinearLayout.LayoutParams(-1,dp(90)));
                 return;
             }
-
             PackageManager pm=getPackageManager();
-            // APP 数量不再限制为三列：根据真实屏幕宽度自动计算一排可容纳的数量。
-            // 例如超宽车机可以一排放很多个，普通手机则自动适配。
-            int screenWidth=getRealScreenSize().x;
-            int tileWidth=dp(122);
-            int columns=Math.max(1,(screenWidth-dp(10))/tileWidth);
+            // 根据当前真实屏幕宽度自适应列数：不再固定“三列”，也不让最后一列被裁切。
+            float density=getResources().getDisplayMetrics().density;
+            int availableDp=Math.max(240,(int)(getRealScreenSize().x/density/uiScale())-16);
+            int minTileDp=108;
+            int columns=Math.max(1,availableDp/minTileDp);
+            int tileDp=Math.max(minTileDp,availableDp/columns);
             for(int base=0;base<apps.size();base+=columns){
                 LinearLayout row=new LinearLayout(this);
                 row.setOrientation(LinearLayout.HORIZONTAL);
@@ -452,46 +451,29 @@ public class MainActivity extends AppCompatActivity {
                     LinearLayout tile=new LinearLayout(this);
                     tile.setOrientation(LinearLayout.VERTICAL);
                     tile.setGravity(Gravity.CENTER);
-                    tile.setPadding(dp(6),dp(6),dp(6),dp(6));
-                    tile.setBackgroundResource(R.drawable.card);
-
+                    tile.setPadding(dp(4),dp(4),dp(4),dp(4));
+                    tile.setBackgroundResource(item.pkg.equals(selectedPackage)?R.drawable.card_selected:R.drawable.card);
                     ImageView icon=new ImageView(this);
                     icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                    try{ icon.setImageDrawable(pm.getApplicationIcon(item.pkg)); }catch(Exception ignored){}
-                    tile.addView(icon,new LinearLayout.LayoutParams(dp(60),dp(60)));
-
+                    try{icon.setImageDrawable(pm.getApplicationIcon(item.pkg));}catch(Exception ignored){}
+                    int iconDp=Math.min(64,Math.max(44,tileDp-52));
+                    tile.addView(icon,new LinearLayout.LayoutParams(dp(iconDp),dp(iconDp)));
                     TextView name=text(item.name,12);
                     name.setGravity(Gravity.CENTER);
                     name.setMaxLines(2);
                     name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                    name.setPadding(0,0,0,dp(2));
-                    tile.addView(name,new LinearLayout.LayoutParams(-1,dp(34)));
-
-                    if(item.pkg.equals(selectedPackage)) tile.setBackgroundResource(R.drawable.card_selected);
-                    tile.setOnClickListener(v->{
-                        selectedPackage=item.pkg;
-                        selectedName=item.name;
-                        info.setText("当前 APP："+item.name);
-                        refresh();
-                    });
+                    tile.addView(name,new LinearLayout.LayoutParams(-1,dp(36)));
+                    tile.setOnClickListener(v->{selectedPackage=item.pkg;selectedName=item.name;info.setText("当前 APP："+item.name);refresh();});
                     tile.setOnLongClickListener(v->{
                         new AlertDialog.Builder(this).setTitle(item.name)
-                                .setItems(new String[]{"选择","删除"},(d,w)->{
-                                    if(w==0){
-                                        selectedPackage=item.pkg; selectedName=item.name;
-                                        info.setText("当前 APP："+item.name); refresh();
-                                    }else{
-                                        if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;}
-                                        apps.remove(itemIndex); saveApps(); refresh();
-                                    }
-                                }).show();
+                            .setItems(new String[]{"删除 APP"},(d,w)->{if(w==0){if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;}apps.remove(itemIndex);saveApps();refresh();}}).show();
                         return true;
                     });
-                    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(tileWidth,dp(112));
-                    lp.setMargins(dp(5),dp(5),dp(5),dp(5));
+                    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(tileDp),dp(112));
+                    lp.setMargins(dp(2),dp(3),dp(2),dp(3));
                     row.addView(tile,lp);
                 }
-                appGrid.addView(row,new LinearLayout.LayoutParams(-1,dp(122)));
+                appGrid.addView(row,new LinearLayout.LayoutParams(-1,dp(118)));
             }
         }
     }
@@ -640,34 +622,11 @@ public class MainActivity extends AppCompatActivity {
         autoButton.setOnClickListener(v->showAutoStartEditor());
         box.addView(autoButton,new LinearLayout.LayoutParams(-1,dp(52)));
 
-        LinearLayout floatRow=new LinearLayout(this); floatRow.setGravity(Gravity.CENTER_VERTICAL);
-        Button floatSettings=button("悬浮窗口设置");
+        Button floatSettings=button("悬浮窗口设置  ›");
         floatSettings.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
         floatSettings.setPadding(dp(14),0,dp(14),0);
         floatSettings.setOnClickListener(v->showFloatingWindowSettingsDialog());
-        floatRow.addView(floatSettings,new LinearLayout.LayoutParams(0,dp(52),1));
-        Switch fswitch=new Switch(this); fswitch.setChecked(prefs.getBoolean("floating_enabled",false));
-        floatRow.addView(fswitch,new LinearLayout.LayoutParams(dp(58),dp(52)));
-        box.addView(floatRow,new LinearLayout.LayoutParams(-1,dp(58)));
-        fswitch.setOnCheckedChangeListener((v,checked)->{
-            if(checked){
-                if(Build.VERSION.SDK_INT>=23 && !android.provider.Settings.canDrawOverlays(this)){
-                    fswitch.setChecked(false);
-                    Toast.makeText(this,"请先允许本 APP 显示在其他应用上层",Toast.LENGTH_LONG).show();
-                    try{
-                        Intent pi=new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION);
-                        pi.setData(android.net.Uri.parse("package:"+getPackageName()));
-                        startActivity(pi);
-                    }catch(Exception ignored){}
-                    return;
-                }
-                prefs.edit().putBoolean("floating_enabled",true).apply();
-                startFloatingService();
-            }else{
-                prefs.edit().putBoolean("floating_enabled",false).apply();
-                stopFloatingService();
-            }
-        });
+        box.addView(floatSettings,new LinearLayout.LayoutParams(-1,dp(52)));
 
         Button permissions=button("权限与诊断"); permissions.setOnClickListener(v->{if(settingsDialog[0]!=null)settingsDialog[0].dismiss();showScreenDiagnostics();});
         box.addView(permissions,new LinearLayout.LayoutParams(-1,dp(48)));
@@ -679,6 +638,13 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout box=new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(24),dp(8),dp(24),dp(12));
+
+        LinearLayout enableRow=new LinearLayout(this); enableRow.setGravity(Gravity.CENTER_VERTICAL);
+        enableRow.addView(text("悬浮窗口开关",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        Switch enable=new Switch(this);
+        enable.setChecked(prefs.getBoolean("floating_enabled",false));
+        enableRow.addView(enable,new LinearLayout.LayoutParams(dp(58),dp(52)));
+        box.addView(enableRow,new LinearLayout.LayoutParams(-1,dp(58)));
 
         LinearLayout direction=new LinearLayout(this); direction.setGravity(Gravity.CENTER_VERTICAL);
         direction.addView(text("排列方向",14),new LinearLayout.LayoutParams(0,dp(52),1));
@@ -696,29 +662,44 @@ public class MainActivity extends AppCompatActivity {
         EditText icon=numberField("44",String.valueOf(prefs.getInt("floating_icon_size_px",44)));
         box.addView(labeledNumberField("按钮图标大小",icon),new LinearLayout.LayoutParams(-1,dp(54)));
 
-        TextView hint=text("保存后重新打开悬浮窗口即可生效。横向/竖向决定按钮排列方向。",11);
+        EditText posX=numberField("30",String.valueOf(prefs.getInt("floating_position_x",30)));
+        box.addView(labeledNumberField("悬浮窗口左位置",posX),new LinearLayout.LayoutParams(-1,dp(54)));
+        EditText posY=numberField("180",String.valueOf(prefs.getInt("floating_position_y",180)));
+        box.addView(labeledNumberField("悬浮窗口上位置",posY),new LinearLayout.LayoutParams(-1,dp(54)));
+
+        TextView hint=text("悬浮窗口支持拖动。拖动左侧“☰”按钮即可移动位置；保存后窗口不会关闭，可以继续调整。",11);
         hint.setTextColor(Color.GRAY); hint.setPadding(0,dp(4),0,dp(6));
-        box.addView(hint,new LinearLayout.LayoutParams(-1,dp(36)));
+        box.addView(hint,new LinearLayout.LayoutParams(-1,dp(48)));
+
+        Button save=button("保存设置");
+        box.addView(save,new LinearLayout.LayoutParams(-1,dp(50)));
 
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("悬浮窗口设置").setView(box).setNegativeButton("返回",null).create();
-        dialog.setOnShowListener(d->{
-            Button save=dialog.getButton(AlertDialog.BUTTON_POSITIVE);
-            if(save!=null) return;
-        });
-        dialog.setButton(AlertDialog.BUTTON_POSITIVE,"保存",(d,w)->{});
-        dialog.setOnShowListener(d->{
-            Button save=dialog.getButton(AlertDialog.BUTTON_POSITIVE);
-            if(save!=null) save.setOnClickListener(v->{
-                int ww=number(width,420), hh=number(height,72), sp=number(spacing,6), ic=number(icon,44);
-                if(ww<120||ww>1600||hh<52||hh>1000||sp<0||sp>80||ic<20||ic>200){
-                    Toast.makeText(this,"范围：宽120-1600，高52-1000，间距0-80，图标20-200 px",Toast.LENGTH_LONG).show(); return;
+        save.setOnClickListener(v->{
+            int ww=number(width,420), hh=number(height,72), sp=number(spacing,6), ic=number(icon,44);
+            int px=number(posX,30), py=number(posY,180);
+            if(ww<120||ww>1600||hh<52||hh>1000||sp<0||sp>80||ic<20||ic>200||px<-10000||py<-10000){
+                Toast.makeText(this,"范围：宽120-1600，高52-1000，间距0-80，图标20-200",Toast.LENGTH_LONG).show(); return;
+            }
+            boolean oldEnabled=prefs.getBoolean("floating_enabled",false);
+            prefs.edit().putBoolean("floating_enabled",enable.isChecked())
+                    .putInt("floating_window_width_px",ww).putInt("floating_window_height_px",hh)
+                    .putInt("floating_button_spacing_px",sp).putInt("floating_icon_size_px",ic)
+                    .putInt("floating_position_x",px).putInt("floating_position_y",py).apply();
+            if(enable.isChecked()){
+                if(Build.VERSION.SDK_INT>=23 && !Settings.canDrawOverlays(this)){
+                    enable.setChecked(false);
+                    prefs.edit().putBoolean("floating_enabled",false).apply();
+                    Toast.makeText(this,"请先允许本 APP 显示在其他应用上层",Toast.LENGTH_LONG).show();
+                    openOverlaySettings();
+                    return;
                 }
-                prefs.edit().putInt("floating_window_width_px",ww).putInt("floating_window_height_px",hh)
-                        .putInt("floating_button_spacing_px",sp).putInt("floating_icon_size_px",ic).apply();
-                if(prefs.getBoolean("floating_enabled",false)){ stopFloatingService(); startFloatingService(); }
-                Toast.makeText(this,"悬浮窗口设置已保存",Toast.LENGTH_SHORT).show();
-                dialog.dismiss();
-            });
+                stopFloatingService(); startFloatingService();
+            }else if(oldEnabled){
+                stopFloatingService();
+            }
+            Toast.makeText(this,"悬浮窗口设置已保存，可继续调整",Toast.LENGTH_SHORT).show();
+            // 故意不 dismiss：用户可以继续修改参数。
         });
         showDialogBelowTop(dialog);
     }
@@ -842,7 +823,7 @@ public class MainActivity extends AppCompatActivity {
 
         ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true); scroll.setVerticalScrollBarEnabled(true);
         GridLayout grid=new GridLayout(this);
-        int columns=Math.max(1,(getRealScreenSize().x-dp(20))/dp(126));
+        int columns=Math.max(1,(int)(getRealScreenSize().x/getResources().getDisplayMetrics().density/uiScale()/112));
         grid.setColumnCount(columns); grid.setUseDefaultMargins(false);
         scroll.addView(grid,new ScrollView.LayoutParams(-1,-2));
         box.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
@@ -850,7 +831,9 @@ public class MainActivity extends AppCompatActivity {
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("添加 APP").setView(box).setNegativeButton("关闭",null).create();
         Runnable refreshAppPicker=()->{
             grid.removeAllViews(); String q=search.getText().toString().trim().toLowerCase(Locale.ROOT); int count=0;
-            int tileW=dp(122), tileH=dp(124);
+            int availableDp=Math.max(240,(int)(getRealScreenSize().x/getResources().getDisplayMetrics().density/uiScale())-28);
+            int tileW=Math.max(dp(104),dp(availableDp/Math.max(1,columns)));
+            int tileH=dp(124);
             for(ApplicationInfo ai:list){
                 boolean system=(ai.flags & ApplicationInfo.FLAG_SYSTEM)!=0 || (ai.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)!=0;
                 if(selectedAppCategory[0]==1 && system) continue;
@@ -863,7 +846,7 @@ public class MainActivity extends AppCompatActivity {
                 try{icon.setImageDrawable(pm.getApplicationIcon(ai));}catch(Exception ignored){}
                 tile.addView(icon,new LinearLayout.LayoutParams(dp(64),dp(64)));
                 TextView nv=text(name,11); nv.setGravity(Gravity.CENTER); nv.setMaxLines(2); nv.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                tile.addView(nv,new LinearLayout.LayoutParams(dp(106),dp(38)));
+                tile.addView(nv,new LinearLayout.LayoutParams(Math.max(dp(96),tileW-dp(12)),dp(38)));
                 tile.setOnClickListener(v->{
                     boolean exists=false; for(AppItem a:apps) if(a.pkg.equals(ai.packageName)){exists=true;break;}
                     if(!exists){apps.add(new AppItem(ai.packageName,name));saveApps();}
@@ -1039,29 +1022,33 @@ public class MainActivity extends AppCompatActivity {
          .append("rotation: ").append(d.getRotation()).append("\n\n")
          .append("=== 权限情况 ===\n");
 
-        String[] perms={
-                "android.permission.CAMERA","android.permission.RECORD_AUDIO",
-                "android.permission.ACCESS_FINE_LOCATION","android.permission.ACCESS_COARSE_LOCATION",
-                "android.permission.BLUETOOTH_SCAN","android.permission.BLUETOOTH_CONNECT","android.permission.BLUETOOTH_ADVERTISE",
-                "android.permission.READ_PHONE_STATE","android.permission.CALL_PHONE",
-                "android.permission.ANSWER_PHONE_CALLS","android.permission.READ_CALL_LOG","android.permission.WRITE_CALL_LOG",
-                "android.permission.READ_CONTACTS","android.permission.WRITE_CONTACTS",
-                "android.permission.READ_CALENDAR","android.permission.WRITE_CALENDAR",
-                "android.permission.ACTIVITY_RECOGNITION","android.permission.BODY_SENSORS",
-                "android.permission.SEND_SMS","android.permission.RECEIVE_SMS","android.permission.READ_SMS",
-                "android.permission.RECEIVE_MMS","android.permission.RECEIVE_WAP_PUSH",
-                "android.permission.NFC","android.permission.POST_NOTIFICATIONS",
-                "android.permission.READ_EXTERNAL_STORAGE","android.permission.WRITE_EXTERNAL_STORAGE",
-                "android.permission.READ_MEDIA_IMAGES","android.permission.READ_MEDIA_VIDEO","android.permission.READ_MEDIA_AUDIO",
-                "android.permission.INTERNET","android.permission.ACCESS_NETWORK_STATE","android.permission.ACCESS_WIFI_STATE",
-                "android.permission.WAKE_LOCK","android.permission.RECEIVE_BOOT_COMPLETED","android.permission.REQUEST_INSTALL_PACKAGES"
+        String[][] perms={
+                {"相机","android.permission.CAMERA"},{"麦克风/录音","android.permission.RECORD_AUDIO"},
+                {"精确定位","android.permission.ACCESS_FINE_LOCATION"},{"大致定位","android.permission.ACCESS_COARSE_LOCATION"},
+                {"蓝牙扫描","android.permission.BLUETOOTH_SCAN"},{"蓝牙连接","android.permission.BLUETOOTH_CONNECT"},{"蓝牙广播","android.permission.BLUETOOTH_ADVERTISE"},
+                {"读取电话状态","android.permission.READ_PHONE_STATE"},{"拨打电话","android.permission.CALL_PHONE"},{"接听电话","android.permission.ANSWER_PHONE_CALLS"},
+                {"读取通话记录","android.permission.READ_CALL_LOG"},{"写入通话记录","android.permission.WRITE_CALL_LOG"},
+                {"读取联系人","android.permission.READ_CONTACTS"},{"写入联系人","android.permission.WRITE_CONTACTS"},
+                {"读取日历","android.permission.READ_CALENDAR"},{"写入日历","android.permission.WRITE_CALENDAR"},
+                {"活动识别","android.permission.ACTIVITY_RECOGNITION"},{"身体传感器","android.permission.BODY_SENSORS"},
+                {"发送短信","android.permission.SEND_SMS"},{"接收短信","android.permission.RECEIVE_SMS"},{"读取短信","android.permission.READ_SMS"},
+                {"接收彩信","android.permission.RECEIVE_MMS"},{"接收 WAP 推送","android.permission.RECEIVE_WAP_PUSH"},
+                {"NFC","android.permission.NFC"},{"通知","android.permission.POST_NOTIFICATIONS"},
+                {"读取外部存储","android.permission.READ_EXTERNAL_STORAGE"},{"写入外部存储","android.permission.WRITE_EXTERNAL_STORAGE"},
+                {"读取图片","android.permission.READ_MEDIA_IMAGES"},{"读取视频","android.permission.READ_MEDIA_VIDEO"},{"读取音频","android.permission.READ_MEDIA_AUDIO"},
+                {"互联网","android.permission.INTERNET"},{"网络状态","android.permission.ACCESS_NETWORK_STATE"},{"Wi-Fi 状态","android.permission.ACCESS_WIFI_STATE"},
+                {"保持唤醒","android.permission.WAKE_LOCK"},{"开机广播","android.permission.RECEIVE_BOOT_COMPLETED"},{"安装应用包","android.permission.REQUEST_INSTALL_PACKAGES"},
+                {"查询所有应用","android.permission.QUERY_ALL_PACKAGES"},{"后台定位","android.permission.ACCESS_BACKGROUND_LOCATION"},
+                {"修改 Wi-Fi","android.permission.CHANGE_WIFI_STATE"},{"修改网络","android.permission.CHANGE_NETWORK_STATE"},{"修改音频设置","android.permission.MODIFY_AUDIO_SETTINGS"},
+                {"请求忽略电池优化","android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"}
         };
-        for(String perm:perms){
+        for(String[] item:perms){
+            String label=item[0], perm=item[1];
             try{
                 int state=Build.VERSION.SDK_INT<23?PackageManager.PERMISSION_GRANTED:checkSelfPermission(perm);
-                s.append(state==PackageManager.PERMISSION_GRANTED?"✓ ":"✗ ").append(perm.substring(perm.lastIndexOf('.')+1)).append("\n");
+                s.append(state==PackageManager.PERMISSION_GRANTED?"✓ ":"✗ ").append(label).append("（").append(perm.substring(perm.lastIndexOf('.')+1)).append("）\n");
             }catch(Exception e){
-                s.append("— ").append(perm.substring(perm.lastIndexOf('.')+1)).append("（系统不支持/不可查询）\n");
+                s.append("— ").append(label).append("（系统不支持/不可查询）\n");
             }
         }
         s.append("\n特殊权限：\n")
