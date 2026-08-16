@@ -222,24 +222,22 @@ public class MainActivity extends AppCompatActivity {
      * 在 ADB 仍可用时由系统/ADB 进行预授权。
      */
     void requestRuntimePermissions(){
-        ArrayList<String> req=new ArrayList<>();
+        // 启动阶段不要一次性申请媒体、存储等权限。部分 Android 模拟器
+        // /定制车机 ROM 对 READ_MEDIA_* 的运行时请求处理不完整，可能导致
+        // Activity 刚启动就闪退。真正需要时再由具体功能主动申请。
         if(Build.VERSION.SDK_INT>=33){
-            if(checkSelfPermission("android.permission.POST_NOTIFICATIONS")!=PackageManager.PERMISSION_GRANTED)
-                req.add("android.permission.POST_NOTIFICATIONS");
-            // 媒体权限仅用于用户主动选择/读取媒体；不在 Android 12 上请求。
-            if(checkSelfPermission("android.permission.READ_MEDIA_IMAGES")!=PackageManager.PERMISSION_GRANTED)
-                req.add("android.permission.READ_MEDIA_IMAGES");
-            if(checkSelfPermission("android.permission.READ_MEDIA_VIDEO")!=PackageManager.PERMISSION_GRANTED)
-                req.add("android.permission.READ_MEDIA_VIDEO");
-            if(checkSelfPermission("android.permission.READ_MEDIA_AUDIO")!=PackageManager.PERMISSION_GRANTED)
-                req.add("android.permission.READ_MEDIA_AUDIO");
-        }else if(Build.VERSION.SDK_INT>=23){
-            if(checkSelfPermission("android.permission.READ_EXTERNAL_STORAGE")!=PackageManager.PERMISSION_GRANTED)
-                req.add("android.permission.READ_EXTERNAL_STORAGE");
-            if(checkSelfPermission("android.permission.WRITE_EXTERNAL_STORAGE")!=PackageManager.PERMISSION_GRANTED)
-                req.add("android.permission.WRITE_EXTERNAL_STORAGE");
+            try{
+                if(checkSelfPermission("android.permission.POST_NOTIFICATIONS")
+                        !=PackageManager.PERMISSION_GRANTED){
+                    new Handler(Looper.getMainLooper()).postDelayed(()->{
+                        try{
+                            requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"},REQ_RUNTIME_PERMS);
+                        }catch(SecurityException ignored){}
+                        catch(Exception ignored){}
+                    },800);
+                }
+            }catch(Exception ignored){}
         }
-        if(!req.isEmpty()) requestPermissions(req.toArray(new String[0]),REQ_RUNTIME_PERMS);
     }
 
     boolean hasOverlayPermission(){
