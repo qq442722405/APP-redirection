@@ -128,7 +128,7 @@ public class FloatingService extends Service {
         panel.setGravity(Gravity.CENTER);
         panel.setPadding(dp(5),dp(4),dp(5),dp(4));
         GradientDrawable bg=new GradientDrawable();
-        bg.setColor(0xDD202020);
+        bg.setColor(0xFF202020);
         bg.setCornerRadius(dp(18));
         panel.setBackground(bg);
 
@@ -144,7 +144,7 @@ public class FloatingService extends Service {
 
         lp=new WindowManager.LayoutParams(-2,-2,overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                PixelFormat.TRANSLUCENT);
+                PixelFormat.OPAQUE);
         lp.gravity=Gravity.TOP|Gravity.LEFT;
         lp.x=30; lp.y=180;
 
@@ -233,7 +233,7 @@ public class FloatingService extends Service {
 
         FrameLayout root=new FrameLayout(this);
         GradientDrawable bg=new GradientDrawable();
-        bg.setColor(0xF0202020);
+        bg.setColor(0xFF202020);
         bg.setCornerRadius(dp(16));
         root.setBackground(bg);
         root.setPadding(dp(10),dp(10),dp(10),dp(10));
@@ -268,7 +268,7 @@ public class FloatingService extends Service {
         overlayView=root;
         overlayLp=new WindowManager.LayoutParams(dp(320),dp(330),overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                PixelFormat.TRANSLUCENT);
+                PixelFormat.OPAQUE);
         overlayLp.gravity=Gravity.TOP|Gravity.LEFT;
         overlayLp.x=30; overlayLp.y=240;
         try{wm.addView(overlayView,overlayLp);}catch(Exception e){overlayView=null;}
@@ -322,7 +322,7 @@ public class FloatingService extends Service {
 
         FrameLayout root=new FrameLayout(this);
         GradientDrawable bg=new GradientDrawable();
-        bg.setColor(0xF0202020); bg.setCornerRadius(dp(16));
+        bg.setColor(0xFF202020); bg.setCornerRadius(dp(16));
         root.setBackground(bg); root.setPadding(dp(10),dp(10),dp(10),dp(10));
 
         LinearLayout box=new LinearLayout(this);
@@ -423,7 +423,7 @@ public class FloatingService extends Service {
         overlayView=root;
         overlayLp=new WindowManager.LayoutParams(dp(420),dp(560),overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                PixelFormat.TRANSLUCENT);
+                PixelFormat.OPAQUE);
         overlayLp.gravity=Gravity.CENTER;
         overlayLp.softInputMode=WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
         try{

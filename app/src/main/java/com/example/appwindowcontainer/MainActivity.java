@@ -390,18 +390,29 @@ public class MainActivity extends AppCompatActivity {
         Window w=dialog.getWindow();
         try{
             w.clearFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
-            w.setGravity(Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            // 所有系统弹窗统一使用不透明窗口，避免车机 ROM 对透明 Dialog
+            // 的坐标/触摸区域进行特殊处理。
+            w.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+            w.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
+            w.setBackgroundDrawable(new ColorDrawable(Color.rgb(24,24,24)));
             if(Build.VERSION.SDK_INT>=19){
                 w.getDecorView().setSystemUiVisibility(0);
             }
             android.graphics.Point screen=getRealScreenSize();
-            int maxW=Math.max(dp(280), (int)(screen.x*0.90f));
+            int left=Math.max(0,prefs.getInt("dialog_left_margin_px",40));
+            int right=Math.max(0,prefs.getInt("dialog_right_margin_px",40));
+            int available=screen.x-left-right;
+            int minW=Math.min(dp(280),Math.max(dp(160),screen.x));
+            int width=Math.max(minW,available);
+            if(width>screen.x) width=screen.x;
+            if(left+width>screen.x-right){
+                width=Math.max(dp(160),screen.x-left-right);
+            }
             WindowManager.LayoutParams lp=w.getAttributes();
-            lp.gravity=Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-            lp.x=0;
+            lp.gravity=Gravity.TOP | Gravity.LEFT;
+            lp.x=left;
             lp.y=dp(TOP_BLANK);
-            lp.width=maxW;
+            lp.width=width;
             lp.height=WindowManager.LayoutParams.WRAP_CONTENT;
             lp.dimAmount=0.55f;
             w.setAttributes(lp);
@@ -464,14 +475,41 @@ public class MainActivity extends AppCompatActivity {
         sizeRow.addView(uiPct,new LinearLayout.LayoutParams(dp(24),dp(52)));
         box.addView(sizeRow,new LinearLayout.LayoutParams(-1,dp(58)));
 
+        // 所有弹窗/菜单的左右位置：直接按屏幕像素设置。
+        // 左边距决定弹窗左边缘，右边距决定弹窗右边缘，保存后新弹窗立即生效。
+        LinearLayout dialogMarginRow=new LinearLayout(this);
+        dialogMarginRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView leftMarginLabel=text("弹窗左边距",14);
+        dialogMarginRow.addView(leftMarginLabel,new LinearLayout.LayoutParams(0,dp(52),1));
+        EditText leftMarginInput=numberField("40",String.valueOf(prefs.getInt("dialog_left_margin_px",40)));
+        dialogMarginRow.addView(leftMarginInput,new LinearLayout.LayoutParams(dp(82),dp(52)));
+        TextView px1=text("px",13);
+        dialogMarginRow.addView(px1,new LinearLayout.LayoutParams(dp(28),dp(52)));
+        TextView rightMarginLabel=text("弹窗右边距",14);
+        LinearLayout.LayoutParams rightMarginLabelLp=new LinearLayout.LayoutParams(0,dp(52),1);
+        rightMarginLabelLp.setMargins(dp(12),0,0,0);
+        dialogMarginRow.addView(rightMarginLabel,rightMarginLabelLp);
+        EditText rightMarginInput=numberField("40",String.valueOf(prefs.getInt("dialog_right_margin_px",40)));
+        dialogMarginRow.addView(rightMarginInput,new LinearLayout.LayoutParams(dp(82),dp(52)));
+        TextView px2=text("px",13);
+        dialogMarginRow.addView(px2,new LinearLayout.LayoutParams(dp(28),dp(52)));
+        box.addView(dialogMarginRow,new LinearLayout.LayoutParams(-1,dp(58)));
+
+        TextView dialogHint=text("所有弹出菜单统一使用此左右边距，避免铺满超宽车机屏幕。",11);
+        dialogHint.setTextColor(Color.GRAY);
+        box.addView(dialogHint,new LinearLayout.LayoutParams(-1,dp(30)));
+
         Button saveSize=button("保存设置");
         saveSize.setOnClickListener(v->{
             try{
                 float fs=Float.parseFloat(fontInput.getText().toString().trim());
                 float us=Float.parseFloat(uiInput.getText().toString().trim());
-                if(fs<80 || fs>130 || us<80 || us>120) throw new Exception();
-                prefs.edit().putFloat("font_scale",fs/100f).putFloat("ui_scale",us/100f).apply();
-                Toast.makeText(this,"字体大小和界面大小已保存并生效",Toast.LENGTH_SHORT).show();
+                int lm=Integer.parseInt(leftMarginInput.getText().toString().trim());
+                int rm=Integer.parseInt(rightMarginInput.getText().toString().trim());
+                if(fs<80 || fs>130 || us<80 || us>120 || lm<0 || rm<0 || lm>2000 || rm>2000) throw new Exception();
+                prefs.edit().putFloat("font_scale",fs/100f).putFloat("ui_scale",us/100f)
+                        .putInt("dialog_left_margin_px",lm).putInt("dialog_right_margin_px",rm).apply();
+                Toast.makeText(this,"设置已保存并生效",Toast.LENGTH_SHORT).show();
                 if(settingsDialog[0]!=null) settingsDialog[0].dismiss();
                 buildUI();
             }catch(Exception e){
