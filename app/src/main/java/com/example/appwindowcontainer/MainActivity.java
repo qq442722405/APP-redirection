@@ -53,8 +53,8 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    float uiScale(){ return Math.max(0.80f, Math.min(1.25f, prefs==null?1.0f:prefs.getFloat("ui_scale",1.0f))); }
-    float fontScale(){ return Math.max(0.80f, Math.min(1.30f, prefs==null?1.0f:prefs.getFloat("font_scale",1.0f))); }
+    float uiScale(){ return Math.max(0.50f, Math.min(3.00f, prefs==null?1.0f:prefs.getFloat("ui_scale",1.0f))); }
+    float fontScale(){ return Math.max(0.50f, Math.min(3.00f, prefs==null?1.0f:prefs.getFloat("font_scale",1.0f))); }
 
     int dp(int v){
         return (int)(v*getResources().getDisplayMetrics().density*uiScale()+.5f);
@@ -329,9 +329,11 @@ public class MainActivity extends AppCompatActivity {
         root.addView(appHeader,new LinearLayout.LayoutParams(-1,dp(44)));
 
         ScrollView appScroll=new ScrollView(this);
+        appScroll.setFillViewport(true);
+        appScroll.setVerticalScrollBarEnabled(true);
         appGrid=new LinearLayout(this);
         appGrid.setOrientation(LinearLayout.VERTICAL);
-        appScroll.addView(appGrid);
+        appScroll.addView(appGrid,new ScrollView.LayoutParams(-1,-2));
         root.addView(appScroll,new LinearLayout.LayoutParams(-1,0,1));
 
         // 底部：状态信息 + 当前屏幕分辨率/DPI + 设置图标。
@@ -429,67 +431,65 @@ public class MainActivity extends AppCompatActivity {
             }
 
             PackageManager pm=getPackageManager();
-            for(int i=0;i<apps.size();i++){
-                final int index=i;
-                AppItem item=apps.get(i);
-
+            // 已添加 APP 固定三列排列；超过三行后由外层 ScrollView 上下滚动。
+            for(int base=0;base<apps.size();base+=3){
                 LinearLayout row=new LinearLayout(this);
                 row.setOrientation(LinearLayout.HORIZONTAL);
                 row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setPadding(dp(12),dp(6),dp(12),dp(6));
-                row.setBackgroundResource(R.drawable.card);
+                for(int col=0;col<3;col++){
+                    int index=base+col;
+                    if(index>=apps.size()){
+                        Space space=new Space(this);
+                        row.addView(space,new LinearLayout.LayoutParams(0,dp(112),1));
+                        continue;
+                    }
+                    final int itemIndex=index;
+                    AppItem item=apps.get(index);
+                    LinearLayout tile=new LinearLayout(this);
+                    tile.setOrientation(LinearLayout.VERTICAL);
+                    tile.setGravity(Gravity.CENTER);
+                    tile.setPadding(dp(6),dp(6),dp(6),dp(6));
+                    tile.setBackgroundResource(R.drawable.card);
 
-                ImageView icon=new ImageView(this);
-                icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                try{
-                    icon.setImageDrawable(pm.getApplicationIcon(item.pkg));
-                }catch(Exception ignored){}
-                row.addView(icon,new LinearLayout.LayoutParams(dp(58),dp(58)));
+                    ImageView icon=new ImageView(this);
+                    icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+                    try{ icon.setImageDrawable(pm.getApplicationIcon(item.pkg)); }catch(Exception ignored){}
+                    tile.addView(icon,new LinearLayout.LayoutParams(dp(60),dp(60)));
 
-                TextView name=text(item.name,15);
-                name.setPadding(dp(14),0,dp(8),0);
-                name.setMaxLines(1);
-                name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                row.addView(name,new LinearLayout.LayoutParams(0,dp(70),1));
+                    TextView name=text(item.name,12);
+                    name.setGravity(Gravity.CENTER);
+                    name.setMaxLines(2);
+                    name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                    name.setPadding(0,0,0,dp(2));
+                    tile.addView(name,new LinearLayout.LayoutParams(-1,dp(34)));
 
-                TextView state=text(item.pkg.equals(selectedPackage)?"已选择":"选择",12);
-                state.setGravity(Gravity.CENTER);
-                row.addView(state,new LinearLayout.LayoutParams(dp(70),dp(50)));
-
-                row.setOnClickListener(v->{
-                    selectedPackage=item.pkg;
-                    selectedName=item.name;
-                    info.setText("当前 APP："+item.name);
-                    refresh();
-                });
-                row.setOnLongClickListener(v->{
-                    new AlertDialog.Builder(this)
-                            .setTitle(item.name)
-                            .setItems(new String[]{"选择","删除"},(d,w)->{
-                                if(w==0){
-                                    selectedPackage=item.pkg;
-                                    selectedName=item.name;
-                                    info.setText("当前 APP："+item.name);
-                                    refresh();
-                                }else{
-                                    if(item.pkg.equals(selectedPackage)){
-                                        selectedPackage=null;
-                                        selectedName=null;
+                    if(item.pkg.equals(selectedPackage)) tile.setBackgroundResource(R.drawable.card_selected);
+                    tile.setOnClickListener(v->{
+                        selectedPackage=item.pkg;
+                        selectedName=item.name;
+                        info.setText("当前 APP："+item.name);
+                        refresh();
+                    });
+                    tile.setOnLongClickListener(v->{
+                        new AlertDialog.Builder(this).setTitle(item.name)
+                                .setItems(new String[]{"选择","删除"},(d,w)->{
+                                    if(w==0){
+                                        selectedPackage=item.pkg; selectedName=item.name;
+                                        info.setText("当前 APP："+item.name); refresh();
+                                    }else{
+                                        if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;}
+                                        apps.remove(itemIndex); saveApps(); refresh();
                                     }
-                                    apps.remove(index);
-                                    saveApps();
-                                    refresh();
-                                }
-                            }).show();
-                    return true;
-                });
-
-                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(76));
-                lp.setMargins(dp(5),dp(4),dp(5),dp(4));
-                appGrid.addView(row,lp);
+                                }).show();
+                        return true;
+                    });
+                    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(112),1);
+                    lp.setMargins(dp(5),dp(5),dp(5),dp(5));
+                    row.addView(tile,lp);
+                }
+                appGrid.addView(row,new LinearLayout.LayoutParams(-1,dp(122)));
             }
         }
-    }
 
     void updateScreenInfo(TextView view){
         android.util.DisplayMetrics dm=getResources().getDisplayMetrics();
@@ -556,7 +556,6 @@ public class MainActivity extends AppCompatActivity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(24),dp(10),dp(24),dp(12));
 
-        // 第一排：APP 开机启动。其余参数统一归入“界面选项”。
         LinearLayout bootRow=new LinearLayout(this); bootRow.setGravity(Gravity.CENTER_VERTICAL);
         bootRow.addView(text("开机启动",15),new LinearLayout.LayoutParams(0,dp(52),1));
         Switch appBoot=new Switch(this);
@@ -565,63 +564,12 @@ public class MainActivity extends AppCompatActivity {
         bootRow.addView(appBoot,new LinearLayout.LayoutParams(dp(58),dp(52)));
         box.addView(bootRow,new LinearLayout.LayoutParams(-1,dp(58)));
 
-        TextView sectionTitle=text("界面选项",16); sectionTitle.setTypeface(null,1);
-        sectionTitle.setPadding(0,dp(8),0,dp(4));
-        box.addView(sectionTitle,new LinearLayout.LayoutParams(-1,dp(40)));
+        Button interfaceButton=button("界面选项  ›");
+        interfaceButton.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+        interfaceButton.setPadding(dp(14),0,dp(14),0);
+        interfaceButton.setOnClickListener(v->showInterfaceOptionsDialog());
+        box.addView(interfaceButton,new LinearLayout.LayoutParams(-1,dp(52)));
 
-        LinearLayout delayRow=new LinearLayout(this); delayRow.setGravity(Gravity.CENTER_VERTICAL);
-        delayRow.addView(text("开机延迟启动（秒）",14),new LinearLayout.LayoutParams(0,dp(52),1));
-        EditText bootDelay=numberField("0",String.valueOf(prefs.getInt("boot_delay_seconds",0)));
-        delayRow.addView(bootDelay,new LinearLayout.LayoutParams(dp(90),dp(52)));
-        box.addView(delayRow,new LinearLayout.LayoutParams(-1,dp(56)));
-
-        LinearLayout fontRow=new LinearLayout(this); fontRow.setGravity(Gravity.CENTER_VERTICAL);
-        fontRow.addView(text("主界面字体大小",14),new LinearLayout.LayoutParams(0,dp(52),1));
-        EditText fontInput=numberField("100",String.valueOf(Math.round(prefs.getFloat("font_scale",1.0f)*100)));
-        fontInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        fontRow.addView(fontInput,new LinearLayout.LayoutParams(dp(82),dp(52))); fontRow.addView(text("%",14),new LinearLayout.LayoutParams(dp(28),dp(52)));
-        box.addView(fontRow,new LinearLayout.LayoutParams(-1,dp(56)));
-
-        LinearLayout uiRow=new LinearLayout(this); uiRow.setGravity(Gravity.CENTER_VERTICAL);
-        uiRow.addView(text("主界面界面大小",14),new LinearLayout.LayoutParams(0,dp(52),1));
-        EditText uiInput=numberField("100",String.valueOf(Math.round(prefs.getFloat("ui_scale",1.0f)*100)));
-        uiInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        uiRow.addView(uiInput,new LinearLayout.LayoutParams(dp(82),dp(52))); uiRow.addView(text("%",14),new LinearLayout.LayoutParams(dp(28),dp(52)));
-        box.addView(uiRow,new LinearLayout.LayoutParams(-1,dp(56)));
-
-        LinearLayout leftRow=new LinearLayout(this); leftRow.setGravity(Gravity.CENTER_VERTICAL);
-        leftRow.addView(text("弹窗左边距",14),new LinearLayout.LayoutParams(0,dp(52),1));
-        EditText leftMarginInput=numberField("40",String.valueOf(prefs.getInt("dialog_left_margin_px",40)));
-        leftRow.addView(leftMarginInput,new LinearLayout.LayoutParams(dp(90),dp(52))); leftRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
-        box.addView(leftRow,new LinearLayout.LayoutParams(-1,dp(56)));
-
-        LinearLayout rightRow=new LinearLayout(this); rightRow.setGravity(Gravity.CENTER_VERTICAL);
-        rightRow.addView(text("弹窗右边距",14),new LinearLayout.LayoutParams(0,dp(52),1));
-        EditText rightMarginInput=numberField("40",String.valueOf(prefs.getInt("dialog_right_margin_px",40)));
-        rightRow.addView(rightMarginInput,new LinearLayout.LayoutParams(dp(90),dp(52))); rightRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
-        box.addView(rightRow,new LinearLayout.LayoutParams(-1,dp(56)));
-
-        TextView hint=text("修改后点击“保存设置”统一生效。",11); hint.setTextColor(Color.GRAY);
-        box.addView(hint,new LinearLayout.LayoutParams(-1,dp(32)));
-
-        Button saveSize=button("保存设置");
-        saveSize.setOnClickListener(v->{
-            try{
-                int delay=Integer.parseInt(bootDelay.getText().toString().trim());
-                float fs=Float.parseFloat(fontInput.getText().toString().trim());
-                float us=Float.parseFloat(uiInput.getText().toString().trim());
-                int lm=Integer.parseInt(leftMarginInput.getText().toString().trim());
-                int rm=Integer.parseInt(rightMarginInput.getText().toString().trim());
-                if(delay<0||delay>3600||fs<80||fs>130||us<80||us>120||lm<0||rm<0||lm>3000||rm>3000) throw new Exception();
-                prefs.edit().putInt("boot_delay_seconds",delay).putFloat("font_scale",fs/100f).putFloat("ui_scale",us/100f)
-                        .putInt("dialog_left_margin_px",lm).putInt("dialog_right_margin_px",rm).apply();
-                Toast.makeText(this,"设置已保存并生效",Toast.LENGTH_SHORT).show();
-                if(settingsDialog[0]!=null) settingsDialog[0].dismiss(); buildUI();
-            }catch(Exception e){Toast.makeText(this,"请输入有效数值：延迟0-3600秒，字体80-130%，界面80-120%",Toast.LENGTH_LONG).show();}
-        });
-        box.addView(saveSize,new LinearLayout.LayoutParams(-1,dp(50)));
-
-        // 悬浮窗口方向按钮仍在开关左侧。
         LinearLayout floatRow=new LinearLayout(this); floatRow.setGravity(Gravity.CENTER_VERTICAL);
         floatRow.addView(text("悬浮窗口",15),new LinearLayout.LayoutParams(0,dp(52),1));
         Button floatLayout=button(prefs.getBoolean("floating_vertical",false)?"竖向":"横向");
@@ -637,6 +585,75 @@ public class MainActivity extends AppCompatActivity {
         box.addView(permissions,new LinearLayout.LayoutParams(-1,dp(48)));
         settingsDialog[0]=new AlertDialog.Builder(this).setTitle("设置").setView(box).setNegativeButton("关闭",null).create();
         showDialogBelowTop(settingsDialog[0]);
+    }
+
+    void showInterfaceOptionsDialog(){
+        final AlertDialog[] dialogRef={null};
+        LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(24),dp(8),dp(24),dp(12));
+
+        LinearLayout delayRow=new LinearLayout(this); delayRow.setGravity(Gravity.CENTER_VERTICAL);
+        delayRow.addView(text("开机延迟启动（秒）",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        EditText bootDelay=numberField("0",String.valueOf(prefs.getInt("boot_delay_seconds",0)));
+        delayRow.addView(bootDelay,new LinearLayout.LayoutParams(dp(90),dp(52)));
+        box.addView(delayRow,new LinearLayout.LayoutParams(-1,dp(56)));
+
+        LinearLayout fontRow=new LinearLayout(this); fontRow.setGravity(Gravity.CENTER_VERTICAL);
+        fontRow.addView(text("主界面字体大小",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        EditText fontInput=numberField("100",String.valueOf(Math.round(prefs.getFloat("font_scale",1.0f)*100)));
+        fontRow.addView(fontInput,new LinearLayout.LayoutParams(dp(82),dp(52)));
+        fontRow.addView(text("%",14),new LinearLayout.LayoutParams(dp(28),dp(52)));
+        box.addView(fontRow,new LinearLayout.LayoutParams(-1,dp(56)));
+
+        LinearLayout uiRow=new LinearLayout(this); uiRow.setGravity(Gravity.CENTER_VERTICAL);
+        uiRow.addView(text("主界面界面大小",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        EditText uiInput=numberField("100",String.valueOf(Math.round(prefs.getFloat("ui_scale",1.0f)*100)));
+        uiRow.addView(uiInput,new LinearLayout.LayoutParams(dp(82),dp(52)));
+        uiRow.addView(text("%",14),new LinearLayout.LayoutParams(dp(28),dp(52)));
+        box.addView(uiRow,new LinearLayout.LayoutParams(-1,dp(56)));
+
+        LinearLayout leftRow=new LinearLayout(this); leftRow.setGravity(Gravity.CENTER_VERTICAL);
+        leftRow.addView(text("弹窗左边距",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        EditText leftMarginInput=numberField("40",String.valueOf(prefs.getInt("dialog_left_margin_px",40)));
+        leftRow.addView(leftMarginInput,new LinearLayout.LayoutParams(dp(90),dp(52)));
+        leftRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
+        box.addView(leftRow,new LinearLayout.LayoutParams(-1,dp(56)));
+
+        LinearLayout rightRow=new LinearLayout(this); rightRow.setGravity(Gravity.CENTER_VERTICAL);
+        rightRow.addView(text("弹窗右边距",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        EditText rightMarginInput=numberField("40",String.valueOf(prefs.getInt("dialog_right_margin_px",40)));
+        rightRow.addView(rightMarginInput,new LinearLayout.LayoutParams(dp(90),dp(52)));
+        rightRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
+        box.addView(rightRow,new LinearLayout.LayoutParams(-1,dp(56)));
+
+        TextView hint=text("字体大小、界面大小支持 50-300%，保存后返回主界面生效。",11);
+        hint.setTextColor(Color.GRAY);
+        hint.setPadding(0,dp(4),0,dp(6));
+        box.addView(hint,new LinearLayout.LayoutParams(-1,dp(38)));
+
+        Button save=button("保存设置");
+        save.setOnClickListener(v->{
+            try{
+                int delay=Integer.parseInt(bootDelay.getText().toString().trim());
+                float fs=Float.parseFloat(fontInput.getText().toString().trim());
+                float us=Float.parseFloat(uiInput.getText().toString().trim());
+                int lm=Integer.parseInt(leftMarginInput.getText().toString().trim());
+                int rm=Integer.parseInt(rightMarginInput.getText().toString().trim());
+                if(delay<0||delay>3600||fs<50||fs>300||us<50||us>300||lm<0||rm<0||lm>3000||rm>3000) throw new Exception();
+                prefs.edit().putInt("boot_delay_seconds",delay)
+                        .putFloat("font_scale",fs/100f).putFloat("ui_scale",us/100f)
+                        .putInt("dialog_left_margin_px",lm).putInt("dialog_right_margin_px",rm).apply();
+                Toast.makeText(this,"设置已保存并生效",Toast.LENGTH_SHORT).show();
+                if(dialogRef[0]!=null) dialogRef[0].dismiss();
+                buildUI();
+            }catch(Exception e){
+                Toast.makeText(this,"请输入有效数值：延迟0-3600秒，字体50-300%，界面50-300%",Toast.LENGTH_LONG).show();
+            }
+        });
+        box.addView(save,new LinearLayout.LayoutParams(-1,dp(50)));
+        dialogRef[0]=new AlertDialog.Builder(this).setTitle("界面选项").setView(box).setNegativeButton("返回",null).create();
+        showDialogBelowTop(dialogRef[0]);
     }
 
     /** 添加 APP：全部/用户/系统分类，正方形图标+名称；APP 很多时可上下滚动。 */
@@ -672,7 +689,7 @@ public class MainActivity extends AppCompatActivity {
 
         ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true); scroll.setVerticalScrollBarEnabled(true);
         GridLayout grid=new GridLayout(this);
-        int columns=Math.max(4,Math.min(10,getRealScreenSize().x/Math.max(1,dp(130))));
+        int columns=3;
         grid.setColumnCount(columns); grid.setUseDefaultMargins(false);
         scroll.addView(grid,new ScrollView.LayoutParams(-1,-2));
         box.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
