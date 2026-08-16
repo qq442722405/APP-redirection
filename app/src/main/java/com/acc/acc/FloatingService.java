@@ -31,7 +31,13 @@ public class FloatingService extends Service {
     boolean vertical;
     int buttonSpacingPx=6, iconSizePx=44, backgroundOpacity=80;
     boolean addBack=false, addHome=false, addMenu=false;
+    boolean singleIconMode=false, positionLocked=false;
+    String singleIconPkg="";
     final int ACTION_BACK=1,ACTION_HOME=2,ACTION_MENU=3;
+    Handler gestureHandler=new Handler(Looper.getMainLooper());
+    Runnable longPressRunnable;
+    int touchDownX,touchDownY; long touchDownTime; boolean moved; int tapCount;
+    Runnable singleTapRunnable;
 
     View overlayView;
     WindowManager.LayoutParams overlayLp;
@@ -54,6 +60,9 @@ public class FloatingService extends Service {
         addBack=p.getBoolean("floating_back",false);
         addHome=p.getBoolean("floating_home",false);
         addMenu=p.getBoolean("floating_menu",false);
+        singleIconMode=p.getBoolean("floating_single_icon_mode",false);
+        positionLocked=p.getBoolean("floating_position_locked",false);
+        singleIconPkg=p.getString("floating_single_icon_pkg","");
 
         if(Build.VERSION.SDK_INT>=26){
             NotificationChannel c=new NotificationChannel("float","悬浮窗口",NotificationManager.IMPORTANCE_LOW);
@@ -148,11 +157,20 @@ public class FloatingService extends Service {
         drag.setTextSize(20);
         TextView plus=baseButton("＋");
         plus.setTextSize(22);
-        addView(drag,iconSizePx,iconSizePx);
-        addView(plus,iconSizePx,iconSizePx);
-        plus.setContentDescription("添加悬浮项目");
-        plus.setOnClickListener(v->showAddMenu());
-        rebuildButtons();
+        if(singleIconMode && !singleIconPkg.isEmpty()) {
+            ImageButton single=iconButton(android.R.drawable.sym_def_app_icon);
+            single.clearColorFilter();
+            try{single.setImageDrawable(getPackageManager().getApplicationIcon(singleIconPkg));}catch(Exception ignored){}
+            single.setContentDescription("单图标："+singleIconPkg);
+            addView(single,iconSizePx,iconSizePx);
+            installSingleIconGesture(single);
+        } else {
+            addView(drag,iconSizePx,iconSizePx);
+            addView(plus,iconSizePx,iconSizePx);
+            plus.setContentDescription("添加悬浮项目");
+            plus.setOnClickListener(v->showAddMenu());
+            rebuildButtons();
+        }
 
         lp=new WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.WRAP_CONTENT,overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
@@ -168,6 +186,7 @@ public class FloatingService extends Service {
                 return true;
             }
             if(e.getAction()==MotionEvent.ACTION_MOVE){
+                if(positionLocked)return true;
                 int dx=(int)e.getRawX()-downX;
                 int dy=(int)e.getRawY()-downY;
                 lp.x=startX+dx; lp.y=startY+dy;
@@ -175,6 +194,7 @@ public class FloatingService extends Service {
                 return true;
             }
             if(e.getAction()==MotionEvent.ACTION_UP || e.getAction()==MotionEvent.ACTION_CANCEL){
+                if(positionLocked)return true;
                 getSharedPreferences(MainActivity.PREF,0).edit()
                         .putInt("floating_position_x",lp.x)
                         .putInt("floating_position_y",lp.y).apply();
@@ -183,6 +203,65 @@ public class FloatingService extends Service {
             return true;
         });
         try{wm.addView(panel,lp);}catch(Exception e){stopSelf();}
+    }
+
+    void installSingleIconGesture(View v){
+        v.setOnTouchListener((view,event)->{
+            switch(event.getActionMasked()){
+                case MotionEvent.ACTION_DOWN:
+                    touchDownX=(int)event.getRawX(); touchDownY=(int)event.getRawY(); touchDownTime=System.currentTimeMillis(); moved=false;
+                    if(longPressRunnable!=null)gestureHandler.removeCallbacks(longPressRunnable);
+                    longPressRunnable=()->{ if(!moved)performConfiguredGesture("long"); };
+                    gestureHandler.postDelayed(longPressRunnable,550);
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    int dx=(int)event.getRawX()-touchDownX, dy=(int)event.getRawY()-touchDownY;
+                    if(Math.abs(dx)>24||Math.abs(dy)>24){moved=true; if(longPressRunnable!=null)gestureHandler.removeCallbacks(longPressRunnable);}
+                    return true;
+                case MotionEvent.ACTION_UP:
+                    if(longPressRunnable!=null)gestureHandler.removeCallbacks(longPressRunnable);
+                    int ux=(int)event.getRawX()-touchDownX, uy=(int)event.getRawY()-touchDownY;
+                    if(Math.abs(ux)>70||Math.abs(uy)>70){
+                        if(Math.abs(ux)>=Math.abs(uy)) performConfiguredGesture(ux<0?"left":"right");
+                        else performConfiguredGesture(uy<0?"up":"down");
+                        return true;
+                    }
+                    if(!moved){
+                        tapCount++;
+                        if(tapCount==1){
+                            singleTapRunnable=()->{ if(tapCount==1)performConfiguredGesture("tap"); tapCount=0; };
+                            gestureHandler.postDelayed(singleTapRunnable,280);
+                        } else if(tapCount>=2){
+                            if(singleTapRunnable!=null)gestureHandler.removeCallbacks(singleTapRunnable);
+                            tapCount=0; performConfiguredGesture("double");
+                        }
+                    } else if(!positionLocked){
+                        // 非锁定状态下，小范围拖动移动单图标；明显滑动则执行手势功能。
+                        movePanelBy(ux,uy);
+                    }
+                    return true;
+            }
+            return true;
+        });
+    }
+
+    void movePanelBy(int dx,int dy){
+        if(panel==null||lp==null||positionLocked)return;
+        lp.x+=dx; lp.y+=dy;
+        try{wm.updateViewLayout(panel,lp);}catch(Exception ignored){}
+        getSharedPreferences(MainActivity.PREF,0).edit().putInt("floating_position_x",lp.x).putInt("floating_position_y",lp.y).apply();
+    }
+
+    void performConfiguredGesture(String key){
+        String action=getSharedPreferences(MainActivity.PREF,0).getString("floating_gesture_"+key,"none");
+        if(action==null||"none".equals(action))return;
+        if("back".equals(action)){globalAction(ACTION_BACK);return;}
+        if("home".equals(action)){globalAction(ACTION_HOME);return;}
+        if("menu".equals(action)){globalAction(ACTION_MENU);return;}
+        if(action.startsWith("app:")){
+            String pkg=action.substring(4); Intent in=getPackageManager().getLaunchIntentForPackage(pkg);
+            if(in!=null){in.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED); try{startActivity(in);}catch(Exception ignored){}}
+        }
     }
 
     int downX,downY,startX,startY;

@@ -724,6 +724,46 @@ public class MainActivity extends AppCompatActivity {
         opacityHint.setTextColor(Color.GRAY);
         box.addView(opacityHint,new LinearLayout.LayoutParams(-1,dp(36)));
 
+        // 单图标模式：整个悬浮窗口只显示一个可配置 APP 图标。
+        LinearLayout singleRow=new LinearLayout(this); singleRow.setGravity(Gravity.CENTER_VERTICAL);
+        singleRow.addView(text("单图标模式",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        Switch singleMode=new Switch(this);
+        singleMode.setChecked(prefs.getBoolean("floating_single_icon_mode",false));
+        singleRow.addView(singleMode,new LinearLayout.LayoutParams(dp(58),dp(52)));
+        box.addView(singleRow,new LinearLayout.LayoutParams(-1,dp(58)));
+
+        LinearLayout singleAppRow=new LinearLayout(this); singleAppRow.setGravity(Gravity.CENTER_VERTICAL);
+        singleAppRow.addView(text("单图标 APP",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        String singlePkg=prefs.getString("floating_single_icon_pkg","");
+        String singleName=singlePkg.isEmpty()?"未选择":getAppLabelSafe(singlePkg);
+        Button singleAppBtn=button(singleName);
+        singleAppBtn.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+        singleAppBtn.setPadding(dp(10),0,dp(10),0);
+        singleAppRow.addView(singleAppBtn,new LinearLayout.LayoutParams(dp(150),dp(48)));
+        singleAppBtn.setOnClickListener(v->showSingleIconAppChooser(singleAppBtn));
+        box.addView(singleAppRow,new LinearLayout.LayoutParams(-1,dp(58)));
+
+        LinearLayout lockRow=new LinearLayout(this); lockRow.setGravity(Gravity.CENTER_VERTICAL);
+        lockRow.addView(text("锁定悬浮窗口位置",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        Switch lockSwitch=new Switch(this); lockSwitch.setChecked(prefs.getBoolean("floating_position_locked",false));
+        lockRow.addView(lockSwitch,new LinearLayout.LayoutParams(dp(58),dp(52)));
+        box.addView(lockRow,new LinearLayout.LayoutParams(-1,dp(58)));
+
+        TextView gestureTitle=text("单图标手势功能",14); gestureTitle.setTypeface(null,android.graphics.Typeface.BOLD);
+        box.addView(gestureTitle,new LinearLayout.LayoutParams(-1,dp(42)));
+        String[] gestureKeys={"tap","double","long","left","right","up","down"};
+        String[] gestureNames={"点击","双击","长按","左滑","右滑","上滑","下滑"};
+        for(int gi=0;gi<gestureKeys.length;gi++){
+            final String gk=gestureKeys[gi], gn=gestureNames[gi];
+            LinearLayout gr=new LinearLayout(this); gr.setGravity(Gravity.CENTER_VERTICAL);
+            gr.addView(text(gn,13),new LinearLayout.LayoutParams(0,dp(48),1));
+            Button gb=button(getGestureLabel(prefs.getString("floating_gesture_"+gk,"none")));
+            gb.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT); gb.setPadding(dp(10),0,dp(8),0);
+            gr.addView(gb,new LinearLayout.LayoutParams(dp(190),dp(46)));
+            gb.setOnClickListener(v->showGestureChooser(gk,gn,gb));
+            box.addView(gr,new LinearLayout.LayoutParams(-1,dp(50)));
+        }
+
         TextView hint=text("悬浮窗口大小自动适应内容，不需要设置宽度和高度。悬浮窗口可以直接拖动位置。保存后本窗口不会关闭，可以继续调整。",11);
         hint.setTextColor(Color.GRAY); hint.setPadding(0,dp(4),0,dp(8));
         box.addView(hint,new LinearLayout.LayoutParams(-1,dp(58)));
@@ -757,6 +797,8 @@ public class MainActivity extends AppCompatActivity {
                     .putInt("floating_button_spacing_px",sp)
                     .putInt("floating_icon_size_px",ic)
                     .putInt("floating_background_opacity",op)
+                    .putBoolean("floating_single_icon_mode",singleMode.isChecked())
+                    .putBoolean("floating_position_locked",lockSwitch.isChecked())
                     .apply();
 
             if(enable.isChecked()){
@@ -776,6 +818,55 @@ public class MainActivity extends AppCompatActivity {
             // 不 dismiss，保持设置窗口。
         });
         showDialogBelowTop(dialog);
+    }
+
+    String getAppLabelSafe(String pkg){
+        try{return getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(pkg,0)).toString();}
+        catch(Exception e){return pkg;}
+    }
+
+    String getGestureLabel(String value){
+        if(value==null||value.isEmpty()||"none".equals(value))return "无操作";
+        if("back".equals(value))return "返回按钮";
+        if("home".equals(value))return "首页按钮";
+        if("menu".equals(value))return "菜单按钮";
+        if(value.startsWith("app:"))return getAppLabelSafe(value.substring(4));
+        return value;
+    }
+
+    void showSingleIconAppChooser(Button target){
+        PackageManager pm=getPackageManager(); ArrayList<ApplicationInfo> list=new ArrayList<>();
+        for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){
+            if(ai.packageName.equals(getPackageName()))continue;
+            if(pm.getLaunchIntentForPackage(ai.packageName)==null)continue;
+            list.add(ai);
+        }
+        Collections.sort(list,(a,b)->getAppLabelSafe(a.packageName).compareToIgnoreCase(getAppLabelSafe(b.packageName)));
+        String[] names=new String[list.size()]; for(int i=0;i<list.size();i++)names[i]=getAppLabelSafe(list.get(i).packageName);
+        new AlertDialog.Builder(this).setTitle("选择单图标 APP").setItems(names,(d,w)->{
+            String pkg=list.get(w).packageName;
+            prefs.edit().putString("floating_single_icon_pkg",pkg).apply();
+            target.setText(names[w]);
+        }).setNegativeButton("取消",null).show();
+    }
+
+    void showGestureChooser(String key,String title,Button target){
+        ArrayList<String> values=new ArrayList<>(); ArrayList<String> labels=new ArrayList<>();
+        values.add("none"); labels.add("无操作");
+        values.add("back"); labels.add("返回按钮");
+        values.add("home"); labels.add("首页按钮");
+        values.add("menu"); labels.add("菜单按钮");
+        try{
+            JSONArray a=new JSONArray(prefs.getString("floating_apps","[]"));
+            for(int i=0;i<a.length();i++){
+                String pkg=a.getJSONObject(i).optString("pkg",""); if(!pkg.isEmpty()&&getPackageManager().getLaunchIntentForPackage(pkg)!=null){values.add("app:"+pkg); labels.add(getAppLabelSafe(pkg));}
+            }
+        }catch(Exception ignored){}
+        String[] arr=labels.toArray(new String[0]);
+        new AlertDialog.Builder(this).setTitle(title+"功能").setItems(arr,(d,w)->{
+            prefs.edit().putString("floating_gesture_"+key,values.get(w)).apply();
+            target.setText(arr[w]);
+        }).setNegativeButton("取消",null).show();
     }
 
     void showInterfaceOptionsDialog(){
