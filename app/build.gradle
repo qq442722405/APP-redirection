@@ -24,8 +24,8 @@ defaultConfig {
         applicationId "com.acc.acc"
         minSdk 26
         targetSdk 34
-        versionCode 18
-        versionName '2.3-build-85-permissions-fixed'
+        versionCode 19
+        versionName '2.4-build-86-single-icon-shapes-gestures'
         signingConfig signingConfigs.acc
     }
 

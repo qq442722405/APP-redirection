@@ -743,6 +743,18 @@ public class MainActivity extends AppCompatActivity {
         singleAppBtn.setOnClickListener(v->showSingleIconAppChooser(singleAppBtn));
         box.addView(singleAppRow,new LinearLayout.LayoutParams(-1,dp(58)));
 
+        LinearLayout shapeRow=new LinearLayout(this); shapeRow.setGravity(Gravity.CENTER_VERTICAL);
+        shapeRow.addView(text("单图标形状",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        Button shapeBtn=button("圆角正方形".equals(prefs.getString("floating_single_icon_shape","rounded"))?"圆角正方形":"圆形");
+        shapeBtn.setGravity(Gravity.CENTER);
+        shapeRow.addView(shapeBtn,new LinearLayout.LayoutParams(dp(140),dp(48)));
+        shapeBtn.setOnClickListener(v->{
+            String next="rounded".equals(prefs.getString("floating_single_icon_shape","rounded"))?"circle":"rounded";
+            prefs.edit().putString("floating_single_icon_shape",next).apply();
+            shapeBtn.setText("circle".equals(next)?"圆形":"圆角正方形");
+        });
+        box.addView(shapeRow,new LinearLayout.LayoutParams(-1,dp(58)));
+
         LinearLayout lockRow=new LinearLayout(this); lockRow.setGravity(Gravity.CENTER_VERTICAL);
         lockRow.addView(text("锁定悬浮窗口位置",14),new LinearLayout.LayoutParams(0,dp(52),1));
         Switch lockSwitch=new Switch(this); lockSwitch.setChecked(prefs.getBoolean("floating_position_locked",false));
@@ -856,17 +868,63 @@ public class MainActivity extends AppCompatActivity {
         values.add("back"); labels.add("返回按钮");
         values.add("home"); labels.add("首页按钮");
         values.add("menu"); labels.add("菜单按钮");
+
+        // 已加入悬浮窗口的 APP
         try{
             JSONArray a=new JSONArray(prefs.getString("floating_apps","[]"));
             for(int i=0;i<a.length();i++){
-                String pkg=a.getJSONObject(i).optString("pkg",""); if(!pkg.isEmpty()&&getPackageManager().getLaunchIntentForPackage(pkg)!=null){values.add("app:"+pkg); labels.add(getAppLabelSafe(pkg));}
+                String pkg=a.getJSONObject(i).optString("pkg","");
+                if(!pkg.isEmpty() && getPackageManager().getLaunchIntentForPackage(pkg)!=null
+                        && !values.contains("app:"+pkg)){
+                    values.add("app:"+pkg);
+                    labels.add(getAppLabelSafe(pkg));
+                }
             }
         }catch(Exception ignored){}
-        String[] arr=labels.toArray(new String[0]);
-        new AlertDialog.Builder(this).setTitle(title+"功能").setItems(arr,(d,w)->{
-            prefs.edit().putString("floating_gesture_"+key,values.get(w)).apply();
-            target.setText(arr[w]);
-        }).setNegativeButton("取消",null).show();
+
+        final String[] actionLabels=labels.toArray(new String[0]);
+        AlertDialog dlg=new AlertDialog.Builder(this)
+                .setTitle(title+"功能")
+                .setItems(actionLabels,(d,w)->{
+                    prefs.edit().putString("floating_gesture_"+key,values.get(w)).apply();
+                    target.setText(actionLabels[w]);
+                })
+                .setNegativeButton("取消",null)
+                .create();
+
+        dlg.setOnShowListener(x->{
+            // 在列表底部提供“增加APP操作”，不要求 APP 必须先加入悬浮窗口。
+            Button add=dlg.getButton(AlertDialog.BUTTON_NEGATIVE);
+            if(add!=null){
+                add.setText("＋增加APP操作");
+                add.setOnClickListener(v->showGestureAppChooser(key,title,target,dlg));
+            }
+        });
+        dlg.show();
+    }
+
+    void showGestureAppChooser(String key,String title,Button target,AlertDialog parent){
+        PackageManager pm=getPackageManager();
+        ArrayList<ApplicationInfo> list=new ArrayList<>();
+        for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){
+            if(ai.packageName.equals(getPackageName()))continue;
+            if(pm.getLaunchIntentForPackage(ai.packageName)==null)continue;
+            list.add(ai);
+        }
+        Collections.sort(list,(a,b)->getAppLabelSafe(a.packageName).compareToIgnoreCase(getAppLabelSafe(b.packageName)));
+        String[] labels=new String[list.size()];
+        for(int i=0;i<list.size();i++)labels[i]=getAppLabelSafe(list.get(i).packageName);
+
+        new AlertDialog.Builder(this)
+                .setTitle("为“"+title+"”增加 APP 操作")
+                .setItems(labels,(d,w)->{
+                    String pkg=list.get(w).packageName;
+                    prefs.edit().putString("floating_gesture_"+key,"app:"+pkg).apply();
+                    target.setText(labels[w]);
+                    if(parent!=null)parent.dismiss();
+                })
+                .setNegativeButton("取消",null)
+                .show();
     }
 
     void showInterfaceOptionsDialog(){

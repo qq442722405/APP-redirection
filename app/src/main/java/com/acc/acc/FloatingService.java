@@ -33,6 +33,7 @@ public class FloatingService extends Service {
     boolean addBack=false, addHome=false, addMenu=false;
     boolean singleIconMode=false, positionLocked=false;
     String singleIconPkg="";
+    String singleIconShape="rounded";
     final int ACTION_BACK=1,ACTION_HOME=2,ACTION_MENU=3;
     Handler gestureHandler=new Handler(Looper.getMainLooper());
     Runnable longPressRunnable;
@@ -63,6 +64,7 @@ public class FloatingService extends Service {
         singleIconMode=p.getBoolean("floating_single_icon_mode",false);
         positionLocked=p.getBoolean("floating_position_locked",false);
         singleIconPkg=p.getString("floating_single_icon_pkg","");
+        singleIconShape=p.getString("floating_single_icon_shape","rounded");
 
         if(Build.VERSION.SDK_INT>=26){
             NotificationChannel c=new NotificationChannel("float","悬浮窗口",NotificationManager.IMPORTANCE_LOW);
@@ -162,6 +164,17 @@ public class FloatingService extends Service {
             single.clearColorFilter();
             try{single.setImageDrawable(getPackageManager().getApplicationIcon(singleIconPkg));}catch(Exception ignored){}
             single.setContentDescription("单图标："+singleIconPkg);
+            GradientDrawable singleBg=new GradientDrawable();
+            singleBg.setColor(0xFF343434);
+            singleBg.setStroke(dp(1),0x55666666);
+            if("circle".equals(singleIconShape)){
+                singleBg.setShape(GradientDrawable.OVAL);
+            }else{
+                singleBg.setShape(GradientDrawable.RECTANGLE);
+                singleBg.setCornerRadius(dp(Math.max(8,iconSizePx/4)));
+            }
+            single.setBackground(singleBg);
+            single.setPadding(dp(2),dp(2),dp(2),dp(2));
             addView(single,iconSizePx,iconSizePx);
             installSingleIconGesture(single);
         } else {
