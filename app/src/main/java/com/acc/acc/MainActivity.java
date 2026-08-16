@@ -7,6 +7,7 @@ import android.content.*;
 import android.content.pm.*;
 import android.graphics.*;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Build;
 import android.os.Environment;
