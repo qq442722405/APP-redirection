@@ -21,37 +21,52 @@ jobs:
 
       - name: 安装 Android SDK
         run: |
-          yes | sdkmanager --licenses || true
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: 设置 Gradle 8.7
         uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: '8.7'
+          cache-cleanup: always
 
-      - name: 清理旧版资源并检查工程
+      - name: 构建前检查工程
         shell: bash
         run: |
-          # 旧提交曾经存在 shortcuts.xml，可能引用不存在的 string/reselect。
-          # 当前版本不使用该资源，构建前主动删除，避免 AAPT 读取旧文件。
-          find app/src/main/res -type f -name 'shortcuts.xml' -print -delete || true
-          if [ -f app/src/main/res/xml/accessibility_service_config.xml ]; then
-            echo '=== accessibility_service_config.xml ==='
-            cat app/src/main/res/xml/accessibility_service_config.xml
+          set -e
+          echo '=== 检查资源 ==='
+          find app/src/main/res -type f | sort
+          if find app/src/main/res -type f -name 'shortcuts.xml' | grep -q .; then
+            echo '发现旧 shortcuts.xml，删除'
+            find app/src/main/res -type f -name 'shortcuts.xml' -delete
           fi
-          echo '=== Java source ==='
-          find app/src/main/java -type f -name '*.java' -print
-          echo '=== XML resources ==='
-          find app/src/main/res -type f -name '*.xml' -print
+
+          echo '=== 检查 Java 包名 ==='
+          if grep -R "com.example.carappjump" -n app/src/main/java; then
+            echo '错误：工程中残留旧包名 com.example.carappjump'
+            exit 1
+          fi
+          grep -R '^package com.example.appwindowcontainer;' -n app/src/main/java
+
+          echo '=== 检查资源引用 ==='
+          test -f app/src/main/res/values/strings.xml
+          test -f app/src/main/res/xml/accessibility_service_config.xml
+          grep -q 'name="selector_title"' app/src/main/res/values/strings.xml
+          grep -q 'name="search_hint"' app/src/main/res/values/strings.xml
+          grep -q 'name="accessibility_desc"' app/src/main/res/values/strings.xml
 
       - name: 构建 Debug APK
-        run: gradle clean :app:assembleDebug --no-daemon --stacktrace
+        run: |
+          gradle --version
+          gradle clean :app:assembleDebug --no-daemon --stacktrace --console=plain
 
       - name: 准备 APK
         run: |
+          set -e
           mkdir -p output
+          test -f app/build/outputs/apk/debug/app-debug.apk
           cp app/build/outputs/apk/debug/app-debug.apk "output/APP窗口启动器.apk"
-          ls -lh output/
+          ls -lh output/APP窗口启动器.apk
 
       - name: 上传 APK
         uses: actions/upload-artifact@v4
