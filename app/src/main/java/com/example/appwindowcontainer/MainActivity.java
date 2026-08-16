@@ -571,6 +571,12 @@ public class MainActivity extends AppCompatActivity {
         interfaceButton.setOnClickListener(v->showInterfaceOptionsDialog());
         box.addView(interfaceButton,new LinearLayout.LayoutParams(-1,dp(52)));
 
+        Button autoButton=button("自动启动任务  ›");
+        autoButton.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+        autoButton.setPadding(dp(14),0,dp(14),0);
+        autoButton.setOnClickListener(v->showAutoStartEditor());
+        box.addView(autoButton,new LinearLayout.LayoutParams(-1,dp(52)));
+
         LinearLayout floatRow=new LinearLayout(this); floatRow.setGravity(Gravity.CENTER_VERTICAL);
         floatRow.addView(text("悬浮窗口",15),new LinearLayout.LayoutParams(0,dp(52),1));
         Button floatLayout=button(prefs.getBoolean("floating_vertical",false)?"竖向":"横向");
@@ -580,7 +586,25 @@ public class MainActivity extends AppCompatActivity {
         floatRow.addView(fswitch,new LinearLayout.LayoutParams(dp(58),dp(52)));
         box.addView(floatRow,new LinearLayout.LayoutParams(-1,dp(58)));
         floatLayout.setOnClickListener(v->{boolean vertical=!prefs.getBoolean("floating_vertical",false);prefs.edit().putBoolean("floating_vertical",vertical).apply();floatLayout.setText(vertical?"竖向":"横向");if(fswitch.isChecked()){stopFloatingService();startFloatingService();}});
-        fswitch.setOnCheckedChangeListener((v,checked)->{prefs.edit().putBoolean("floating_enabled",checked).apply();if(checked)startFloatingService();else stopFloatingService();});
+        fswitch.setOnCheckedChangeListener((v,checked)->{
+            if(checked){
+                if(Build.VERSION.SDK_INT>=23 && !android.provider.Settings.canDrawOverlays(this)){
+                    fswitch.setChecked(false);
+                    Toast.makeText(this,"请先允许本 APP 显示在其他应用上层",Toast.LENGTH_LONG).show();
+                    try{
+                        Intent pi=new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION);
+                        pi.setData(android.net.Uri.parse("package:"+getPackageName()));
+                        startActivity(pi);
+                    }catch(Exception ignored){}
+                    return;
+                }
+                prefs.edit().putBoolean("floating_enabled",true).apply();
+                startFloatingService();
+            }else{
+                prefs.edit().putBoolean("floating_enabled",false).apply();
+                stopFloatingService();
+            }
+        });
 
         Button permissions=button("权限与诊断"); permissions.setOnClickListener(v->{if(settingsDialog[0]!=null)settingsDialog[0].dismiss();showScreenDiagnostics();});
         box.addView(permissions,new LinearLayout.LayoutParams(-1,dp(48)));

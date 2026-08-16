@@ -39,6 +39,10 @@ public class FloatingService extends Service {
     @Override public void onCreate(){
         super.onCreate();
         wm=(WindowManager)getSystemService(WINDOW_SERVICE);
+        if(Build.VERSION.SDK_INT>=23 && !Settings.canDrawOverlays(this)){
+            stopSelf();
+            return;
+        }
         loadFloatingApps();
         SharedPreferences p=getSharedPreferences(MainActivity.PREF,0);
         vertical=p.getBoolean("floating_vertical",false);
