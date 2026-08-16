@@ -97,7 +97,7 @@ jobs:
       - name: 构建 Debug APK
         run: |
           gradle --version
-          gradle clean :app:assembleDebug --no-daemon --stacktrace --console=plain
+          gradle clean :app:assembleDebug --no-daemon --stacktrace --info --console=plain
 
       - name: 准备 APK
         run: |
