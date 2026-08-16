@@ -32,7 +32,6 @@ public class FloatingService extends Service {
     int buttonSpacingPx=6, iconSizePx=44, backgroundOpacity=80;
     boolean addBack=false, addHome=false, addMenu=false;
     boolean singleIconMode=false, positionLocked=false;
-    String singleIconPkg="";
     String singleIconShape="rounded";
     final int ACTION_BACK=1,ACTION_HOME=2,ACTION_MENU=3;
     Handler gestureHandler=new Handler(Looper.getMainLooper());
@@ -63,7 +62,6 @@ public class FloatingService extends Service {
         addMenu=p.getBoolean("floating_menu",false);
         singleIconMode=p.getBoolean("floating_single_icon_mode",false);
         positionLocked=p.getBoolean("floating_position_locked",false);
-        singleIconPkg=p.getString("floating_single_icon_pkg","");
         singleIconShape=p.getString("floating_single_icon_shape","rounded");
 
         if(Build.VERSION.SDK_INT>=26){
@@ -159,11 +157,11 @@ public class FloatingService extends Service {
         drag.setTextSize(20);
         TextView plus=baseButton("＋");
         plus.setTextSize(22);
-        if(singleIconMode && !singleIconPkg.isEmpty()) {
+        if(singleIconMode) {
             ImageButton single=iconButton(android.R.drawable.sym_def_app_icon);
             single.clearColorFilter();
-            try{single.setImageDrawable(getPackageManager().getApplicationIcon(singleIconPkg));}catch(Exception ignored){}
-            single.setContentDescription("单图标："+singleIconPkg);
+            try{single.setImageDrawable(getPackageManager().getApplicationIcon(getPackageName()));}catch(Exception ignored){}
+            single.setContentDescription("APP窗口启动器单图标");
             GradientDrawable singleBg=new GradientDrawable();
             singleBg.setColor(0xFF343434);
             singleBg.setStroke(dp(1),0x55666666);

@@ -732,17 +732,6 @@ public class MainActivity extends AppCompatActivity {
         singleRow.addView(singleMode,new LinearLayout.LayoutParams(dp(58),dp(52)));
         box.addView(singleRow,new LinearLayout.LayoutParams(-1,dp(58)));
 
-        LinearLayout singleAppRow=new LinearLayout(this); singleAppRow.setGravity(Gravity.CENTER_VERTICAL);
-        singleAppRow.addView(text("单图标 APP",14),new LinearLayout.LayoutParams(0,dp(52),1));
-        String singlePkg=prefs.getString("floating_single_icon_pkg","");
-        String singleName=singlePkg.isEmpty()?"未选择":getAppLabelSafe(singlePkg);
-        Button singleAppBtn=button(singleName);
-        singleAppBtn.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
-        singleAppBtn.setPadding(dp(10),0,dp(10),0);
-        singleAppRow.addView(singleAppBtn,new LinearLayout.LayoutParams(dp(150),dp(48)));
-        singleAppBtn.setOnClickListener(v->showSingleIconAppChooser(singleAppBtn));
-        box.addView(singleAppRow,new LinearLayout.LayoutParams(-1,dp(58)));
-
         LinearLayout shapeRow=new LinearLayout(this); shapeRow.setGravity(Gravity.CENTER_VERTICAL);
         shapeRow.addView(text("单图标形状",14),new LinearLayout.LayoutParams(0,dp(52),1));
         Button shapeBtn=button("圆角正方形".equals(prefs.getString("floating_single_icon_shape","rounded"))?"圆角正方形":"圆形");
@@ -844,22 +833,6 @@ public class MainActivity extends AppCompatActivity {
         if("menu".equals(value))return "菜单按钮";
         if(value.startsWith("app:"))return getAppLabelSafe(value.substring(4));
         return value;
-    }
-
-    void showSingleIconAppChooser(Button target){
-        PackageManager pm=getPackageManager(); ArrayList<ApplicationInfo> list=new ArrayList<>();
-        for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){
-            if(ai.packageName.equals(getPackageName()))continue;
-            if(pm.getLaunchIntentForPackage(ai.packageName)==null)continue;
-            list.add(ai);
-        }
-        Collections.sort(list,(a,b)->getAppLabelSafe(a.packageName).compareToIgnoreCase(getAppLabelSafe(b.packageName)));
-        String[] names=new String[list.size()]; for(int i=0;i<list.size();i++)names[i]=getAppLabelSafe(list.get(i).packageName);
-        new AlertDialog.Builder(this).setTitle("选择单图标 APP").setItems(names,(d,w)->{
-            String pkg=list.get(w).packageName;
-            prefs.edit().putString("floating_single_icon_pkg",pkg).apply();
-            target.setText(names[w]);
-        }).setNegativeButton("取消",null).show();
     }
 
     void showGestureChooser(String key,String title,Button target){
