@@ -10,20 +10,36 @@ public class BootReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context context, Intent intent) {
         if (!Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) return;
         SharedPreferences p=context.getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE);
-        if(!p.getBoolean("auto_start_enabled",false)) return;
+        boolean appBoot=p.getBoolean("app_boot_enabled",false);
+        boolean taskBoot=p.getBoolean("auto_start_enabled",false);
         try{
             JSONArray arr=new JSONArray(p.getString("auto_start_items","[]"));
-            if(arr.length()==0)return;
             int interval=Math.max(1,p.getInt("auto_start_interval",1));
             int bootDelay=Math.max(0,p.getInt("boot_delay_seconds",0));
+            if(!appBoot && (!taskBoot || arr.length()==0)) return;
             PendingResult result=goAsync();
             Handler h=new Handler(Looper.getMainLooper());
-            for(int i=0;i<arr.length();i++){
-                final JSONObject item=arr.getJSONObject(i);
-                final long delay=(long)bootDelay*1000L+(long)i*interval*1000L;
-                h.postDelayed(()->launchOne(context,p,item),delay);
+
+            // 用户开启“本 APP 开机启动”时，先启动启动器自身。
+            if(appBoot){
+                h.postDelayed(()->{
+                    try{
+                        Intent main=new Intent(context,MainActivity.class);
+                        main.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED|Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                        context.startActivity(main);
+                    }catch(Exception ignored){}
+                },(long)bootDelay*1000L);
             }
-            h.postDelayed(result::finish,(long)bootDelay*1000L+(long)arr.length()*interval*1000L+3000L);
+
+            if(taskBoot && arr.length()>0){
+                for(int i=0;i<arr.length();i++){
+                    final JSONObject item=arr.getJSONObject(i);
+                    final long delay=(long)bootDelay*1000L+(long)i*interval*1000L;
+                    h.postDelayed(()->launchOne(context,p,item),delay);
+                }
+            }
+            long finishDelay=(long)bootDelay*1000L + (taskBoot?((long)arr.length()*interval*1000L):0L) + 3000L;
+            h.postDelayed(result::finish,finishDelay);
         }catch(Exception ignored){}
     }
     void launchOne(Context context,SharedPreferences p,JSONObject item){

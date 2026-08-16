@@ -52,8 +52,11 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    float uiScale(){ return Math.max(0.80f, Math.min(1.25f, prefs==null?1.0f:prefs.getFloat("ui_scale",1.0f))); }
+    float fontScale(){ return Math.max(0.80f, Math.min(1.30f, prefs==null?1.0f:prefs.getFloat("font_scale",1.0f))); }
+
     int dp(int v){
-        return (int)(v*getResources().getDisplayMetrics().density+.5f);
+        return (int)(v*getResources().getDisplayMetrics().density*uiScale()+.5f);
     }
 
     /**
@@ -86,14 +89,14 @@ public class MainActivity extends AppCompatActivity {
 
     TextView text(String s,float size){
         TextView t=new TextView(this);
-        t.setText(s); t.setTextColor(Color.WHITE); t.setTextSize(size);
+        t.setText(s); t.setTextColor(Color.WHITE); t.setTextSize(size*fontScale());
         t.setGravity(Gravity.CENTER_VERTICAL);
         return t;
     }
 
     Button button(String s){
         Button b=new Button(this);
-        b.setText(s); b.setTextColor(Color.WHITE); b.setTextSize(14);
+        b.setText(s); b.setTextColor(Color.WHITE); b.setTextSize(14*fontScale());
         b.setAllCaps(false); b.setBackgroundResource(R.drawable.button);
         return b;
     }
@@ -108,7 +111,7 @@ public class MainActivity extends AppCompatActivity {
 
     EditText numberField(String label,String value){
         EditText e=new EditText(this);
-        e.setHint(label); e.setText(value); e.setTextColor(Color.WHITE);
+        e.setHint(label); e.setText(value); e.setTextColor(Color.WHITE); e.setTextSize(14*fontScale()); e.setTextSize(14*fontScale());
         e.setHintTextColor(Color.GRAY); e.setSingleLine(true);
         e.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_SIGNED);
         return e;
@@ -371,9 +374,36 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void showSettingsMenu(){
+        final AlertDialog[] settingsDialog={null};
         LinearLayout box=new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(24),dp(8),dp(24),dp(8));
+
+        LinearLayout fontRow=new LinearLayout(this); fontRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView fontLabel=text("主界面字体大小",15); fontRow.addView(fontLabel,new LinearLayout.LayoutParams(0,dp(52),1));
+        float fsVal=prefs.getFloat("font_scale",1.0f);
+        Button fontBtn=button(Math.round(fsVal*100)+"%"); fontRow.addView(fontBtn,new LinearLayout.LayoutParams(dp(110),dp(46)));
+        fontBtn.setOnClickListener(v->{
+            float cur=prefs.getFloat("font_scale",1.0f); float next=cur+0.1f; if(next>1.3f) next=0.8f;
+            prefs.edit().putFloat("font_scale",next).apply();
+            Toast.makeText(this,"字体大小："+Math.round(next*100)+"%",Toast.LENGTH_SHORT).show();
+            if(settingsDialog[0]!=null) settingsDialog[0].dismiss();
+            buildUI();
+        });
+        box.addView(fontRow);
+
+        LinearLayout uiRow=new LinearLayout(this); uiRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView uiLabel=text("主界面界面大小",15); uiRow.addView(uiLabel,new LinearLayout.LayoutParams(0,dp(52),1));
+        float uiVal=prefs.getFloat("ui_scale",1.0f);
+        Button uiBtn=button(Math.round(uiVal*100)+"%"); uiRow.addView(uiBtn,new LinearLayout.LayoutParams(dp(110),dp(46)));
+        uiBtn.setOnClickListener(v->{
+            float cur=prefs.getFloat("ui_scale",1.0f); float next=cur+0.1f; if(next>1.2f) next=0.8f;
+            prefs.edit().putFloat("ui_scale",next).apply();
+            Toast.makeText(this,"界面大小："+Math.round(next*100)+"%",Toast.LENGTH_SHORT).show();
+            if(settingsDialog[0]!=null) settingsDialog[0].dismiss();
+            buildUI();
+        });
+        box.addView(uiRow);
 
         LinearLayout floatRow=new LinearLayout(this); floatRow.setGravity(Gravity.CENTER_VERTICAL);
         TextView fl=text("悬浮窗口",15); floatRow.addView(fl,new LinearLayout.LayoutParams(0,dp(52),1));
@@ -390,6 +420,12 @@ public class MainActivity extends AppCompatActivity {
         Switch as=new Switch(this); as.setChecked(prefs.getBoolean("auto_start_enabled",false));
         as.setOnCheckedChangeListener((v,checked)->prefs.edit().putBoolean("auto_start_enabled",checked).apply());
         autoRow.addView(as); box.addView(autoRow);
+
+        LinearLayout appBootRow=new LinearLayout(this); appBootRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView appBootLabel=text("本 APP 开机启动",15); appBootRow.addView(appBootLabel,new LinearLayout.LayoutParams(0,dp(52),1));
+        Switch appBoot=new Switch(this); appBoot.setChecked(prefs.getBoolean("app_boot_enabled",false));
+        appBoot.setOnCheckedChangeListener((v,checked)->prefs.edit().putBoolean("app_boot_enabled",checked).apply());
+        appBootRow.addView(appBoot); box.addView(appBootRow);
 
         Button add=button("管理自动启动项目（支持多个任务）"); add.setOnClickListener(v->showAutoStartEditor());
         box.addView(add,new LinearLayout.LayoutParams(-1,dp(50)));
@@ -430,7 +466,8 @@ public class MainActivity extends AppCompatActivity {
 
         Button perm=button("权限与诊断"); perm.setOnClickListener(v->showPermissionPreparation());
         box.addView(perm,new LinearLayout.LayoutParams(-1,dp(50)));
-        new AlertDialog.Builder(this).setTitle("设置").setView(box).setNegativeButton("关闭",null).show();
+        settingsDialog[0]=new AlertDialog.Builder(this).setTitle("设置").setView(box).setNegativeButton("关闭",null).create();
+        settingsDialog[0].show();
     }
 
     void showPermissionPreparation(){
@@ -607,6 +644,45 @@ public class MainActivity extends AppCompatActivity {
         showPresetEditor(index,old);
     }
 
+    String presetClipboardText(EditText name,EditText x,EditText y,EditText width,EditText height,int mode){
+        try{
+            JSONObject o=new JSONObject();
+            o.put("name",name.getText().toString());
+            o.put("x",number(x,0)); o.put("y",number(y,0));
+            o.put("w",number(width,0)); o.put("h",number(height,0));
+            o.put("mode",mode);
+            return o.toString();
+        }catch(Exception e){ return ""; }
+    }
+
+    void copyPresetToClipboard(EditText name,EditText x,EditText y,EditText width,EditText height,int mode){
+        String data=presetClipboardText(name,x,y,width,height,mode);
+        try{
+            android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("窗口预设参数",data));
+            Toast.makeText(this,"面板参数已复制",Toast.LENGTH_SHORT).show();
+        }catch(Exception e){ Toast.makeText(this,"复制失败",Toast.LENGTH_SHORT).show(); }
+    }
+
+    boolean pastePresetFromClipboard(EditText name,EditText x,EditText y,EditText width,EditText height, int[] modeHolder, Button[] modeButtons){
+        try{
+            android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+            if(!cm.hasPrimaryClip()) { Toast.makeText(this,"剪贴板没有窗口参数",Toast.LENGTH_SHORT).show(); return false; }
+            CharSequence cs=cm.getPrimaryClip().getItemAt(0).coerceToText(this);
+            JSONObject o=new JSONObject(cs.toString());
+            name.setText(o.optString("name",""));
+            x.setText(String.valueOf(o.optInt("x",0))); y.setText(String.valueOf(o.optInt("y",0)));
+            width.setText(String.valueOf(o.optInt("w",0))); height.setText(String.valueOf(o.optInt("h",0)));
+            int m=Math.max(1,Math.min(6,o.optInt("mode",1))); modeHolder[0]=m;
+            if(modeButtons!=null) for(int i=0;i<modeButtons.length;i++) modeButtons[i].setBackgroundResource(i==m-1?R.drawable.card_selected:R.drawable.button);
+            Toast.makeText(this,"面板参数已粘贴",Toast.LENGTH_SHORT).show();
+            return true;
+        }catch(Exception e){
+            Toast.makeText(this,"剪贴板不是有效的窗口预设参数",Toast.LENGTH_SHORT).show();
+            return false;
+        }
+    }
+
     void showPresetEditor(int index,Preset old){
         LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
         EditText name=textField("预设名称（支持中文）",old.name);
@@ -628,6 +704,7 @@ public class MainActivity extends AppCompatActivity {
         modeRow.setOrientation(LinearLayout.HORIZONTAL);
         modeRow.setPadding(dp(115),0,dp(4),dp(4));
         Button[] modeButtons=new Button[6];
+        final int[] modeHolder={old.mode};
         for(int m=1;m<=6;m++){
             final int mm=m;
             Button mb=button(m==6?"全屏模式":"模式"+m);
@@ -635,7 +712,7 @@ public class MainActivity extends AppCompatActivity {
             modeButtons[m-1]=mb;
             if(old.mode==mm) mb.setBackgroundResource(R.drawable.card_selected);
             mb.setOnClickListener(v->{
-                old.mode=mm;
+                old.mode=mm; modeHolder[0]=mm;
                 for(Button q:modeButtons) q.setBackgroundResource(q==v?R.drawable.card_selected:R.drawable.button);
                 if(mm==6){
                     x.setText("0"); y.setText("0");
@@ -646,10 +723,28 @@ public class MainActivity extends AppCompatActivity {
         }
         box.addView(modeRow,new LinearLayout.LayoutParams(-1,dp(48)));
 
+        // 自定义底部按钮：复制、粘贴放在“取消”左边，方便整套面板参数快速导入。
+        LinearLayout content=new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.addView(box,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout actionRow=new LinearLayout(this);
+        actionRow.setGravity(Gravity.CENTER_VERTICAL);
+        actionRow.setPadding(dp(8),dp(6),dp(8),dp(6));
+        Button copy=button("复制"); Button paste=button("粘贴"); Button cancel=button("取消"); Button save=button("保存");
+        actionRow.addView(copy,new LinearLayout.LayoutParams(0,dp(48),1));
+        actionRow.addView(paste,new LinearLayout.LayoutParams(0,dp(48),1));
+        actionRow.addView(cancel,new LinearLayout.LayoutParams(0,dp(48),1));
+        actionRow.addView(save,new LinearLayout.LayoutParams(0,dp(48),1));
+        content.addView(actionRow,new LinearLayout.LayoutParams(-1,dp(62)));
+
+        final Button[] modeButtonsHolder=modeButtons;
         AlertDialog dialog=new AlertDialog.Builder(this)
                 .setTitle(index<0?"新建窗口预设":"编辑窗口预设")
-                .setView(box).setNegativeButton("取消",null).create();
-        dialog.setButton(AlertDialog.BUTTON_POSITIVE,"保存",(d,w)->{
+                .setView(content).create();
+        copy.setOnClickListener(v->copyPresetToClipboard(name,x,y,width,height,modeHolder[0]));
+        paste.setOnClickListener(v->pastePresetFromClipboard(name,x,y,width,height,modeHolder,modeButtonsHolder));
+        cancel.setOnClickListener(v->dialog.dismiss());
+        save.setOnClickListener(v->{
             String n=name.getText().toString().trim();
             if(n.isEmpty()){Toast.makeText(this,"请输入预设名称",Toast.LENGTH_SHORT).show();return;}
             Preset p=new Preset(n,
@@ -657,9 +752,9 @@ public class MainActivity extends AppCompatActivity {
                     Math.max(0,number(y,old.y)),
                     Math.max(0,number(width,old.w)),
                     Math.max(0,number(height,old.h)),
-                    -1,old.mode);
+                    -1,modeHolder[0]);
             if(index<0) presets.add(p); else presets.set(index,p);
-            savePresets(); refresh();
+            savePresets(); refresh(); dialog.dismiss();
         });
         dialog.show();
     }
