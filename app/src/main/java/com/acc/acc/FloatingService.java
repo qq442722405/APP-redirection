@@ -141,6 +141,8 @@ public class FloatingService extends Service {
         bg.setColor(0xFF202020);
         bg.setCornerRadius(dp(18));
         panel.setBackground(bg);
+        // 透明度作用于整个悬浮窗口（背景、按钮、APP图标等所有内容），而不是仅背景。
+        panel.setAlpha(Math.max(0f, Math.min(1f, backgroundOpacity / 100f)));
 
         TextView drag=baseButton("☰");
         drag.setTextSize(20);
@@ -404,7 +406,7 @@ public class FloatingService extends Service {
 
                 LinearLayout tile=new LinearLayout(this);
                 tile.setOrientation(LinearLayout.VERTICAL); tile.setGravity(Gravity.CENTER);
-                tile.setPadding(dp(5),dp(5),dp(5),dp(5)); tile.setBackgroundResource(R.drawable.card);
+                tile.setPadding(dp(6),dp(6),dp(6),dp(6)); tile.setBackgroundResource(R.drawable.floating_app_card);
                 ImageView icon=new ImageView(this);
                 try{icon.setImageDrawable(pm.getApplicationIcon(ai));}catch(Exception ignored){}
                 tile.addView(icon,new LinearLayout.LayoutParams(dp(52),dp(52)));

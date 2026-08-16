@@ -311,9 +311,9 @@ public class MainActivity extends AppCompatActivity {
         frame.setBackgroundColor(Color.BLACK);
 
         TextView accBg=new TextView(this);
-        accBg.setText("ACC");
+        accBg.setText("Acc");
         accBg.setTextColor(0x22FFFFFF);
-        accBg.setTextSize(190*fontScale());
+        accBg.setTextSize(380*fontScale());
         accBg.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
         accBg.setGravity(Gravity.CENTER);
         accBg.setSingleLine(true);
@@ -674,7 +674,10 @@ public class MainActivity extends AppCompatActivity {
         floatSettings.setOnClickListener(v->showFloatingWindowSettingsDialog());
         box.addView(floatSettings,new LinearLayout.LayoutParams(-1,dp(52)));
 
-        Button permissions=button("权限与诊断"); permissions.setOnClickListener(v->{if(settingsDialog[0]!=null)settingsDialog[0].dismiss();showScreenDiagnostics();});
+        Button permissions=button("权限与诊断");
+        permissions.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+        permissions.setPadding(dp(14),0,dp(14),0);
+        permissions.setOnClickListener(v->{if(settingsDialog[0]!=null)settingsDialog[0].dismiss();showScreenDiagnostics();});
         box.addView(permissions,new LinearLayout.LayoutParams(-1,dp(48)));
         settingsDialog[0]=new AlertDialog.Builder(this).setTitle("设置").setView(box).setNegativeButton("关闭",null).create();
         showDialogBelowTop(settingsDialog[0]);
@@ -732,13 +735,9 @@ public class MainActivity extends AppCompatActivity {
         actionBar.setGravity(Gravity.CENTER);
         actionBar.setPadding(dp(4),dp(8),dp(4),0);
 
-        Button close=button("关闭");
-        Button save=button("保存设置");
-        LinearLayout.LayoutParams closeLp=new LinearLayout.LayoutParams(0,dp(50),1);
-        closeLp.setMargins(dp(4),0,dp(4),0);
-        LinearLayout.LayoutParams saveLp=new LinearLayout.LayoutParams(0,dp(50),1);
+        Button save=button("保存");
+        LinearLayout.LayoutParams saveLp=new LinearLayout.LayoutParams(-1,dp(50));
         saveLp.setMargins(dp(4),0,dp(4),0);
-        actionBar.addView(close,closeLp);
         actionBar.addView(save,saveLp);
         root.addView(actionBar,new LinearLayout.LayoutParams(-1,dp(64)));
 
@@ -747,7 +746,6 @@ public class MainActivity extends AppCompatActivity {
                 .setView(root)
                 .create();
 
-        close.setOnClickListener(v->dialog.dismiss());
         save.setOnClickListener(v->{
             int sp=number(spacing,6), ic=number(icon,44), op=number(opacity,80);
             if(sp<0||sp>80||ic<20||ic>200||op<0||op>100){
@@ -839,7 +837,7 @@ public class MainActivity extends AppCompatActivity {
         hint.setPadding(0,dp(4),0,dp(6));
         box.addView(hint,new LinearLayout.LayoutParams(-1,dp(38)));
 
-        Button save=button("保存设置");
+        Button save=button("保存");
         save.setOnClickListener(v->{
             try{
                 int delay=Integer.parseInt(bootDelay.getText().toString().trim());
@@ -862,7 +860,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         box.addView(save,new LinearLayout.LayoutParams(-1,dp(50)));
-        dialogRef[0]=new AlertDialog.Builder(this).setTitle("界面选项").setView(box).setNegativeButton("返回",null).create();
+        dialogRef[0]=new AlertDialog.Builder(this).setTitle("界面选项").setView(box).create();
         showDialogBelowTop(dialogRef[0]);
     }
 
@@ -1225,7 +1223,7 @@ public class MainActivity extends AppCompatActivity {
         refreshTasks[0].run();
 
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("自动启动项目")
-                .setView(box).setNegativeButton("关闭",null).setPositiveButton("保存",null).create();
+                .setView(box).setPositiveButton("保存",null).create();
         dialog.setOnShowListener(x->{
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
                 int sec=Math.max(1,number(interval,1));
