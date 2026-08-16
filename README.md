@@ -1,13 +1,23 @@
-# APP窗口启动器 第74版
+# APP窗口启动器 - 触控坐标修正版
 
-本版在第73版基础上增加启动稳定性修复：
-1. 启动时不再一次性申请 READ_MEDIA_IMAGES / VIDEO / AUDIO 等媒体权限，避免部分 Android 模拟器和定制 ROM 在 Activity 启动阶段因权限请求闪退。
-2. 通知权限改为 UI 启动完成后延迟申请，并增加异常保护。
-3. AccessibilityService 在 Manifest 中改为 exported=true，便于 Android 系统正常绑定无障碍服务。
-4. 保留第73版的全屏运行开关、半透明启动、弹窗左右边距、APP 内位置测试、复制参数、全部 APP 分类等功能。
+本版本以第74版工程为基础，专门先解决车机/手机上的弹出窗口触控偏移问题。
 
-如果仍然闪退，请在模拟器执行：
-adb logcat -c
-adb logcat AndroidRuntime:E *:S
+## 本版调整
 
-然后启动 APP，把从 `FATAL EXCEPTION` 开始的内容发回来。
+1. 删除“全屏运行/全屏半透明启动”功能。
+2. 删除“窗口位置测试”功能及相关页面。
+3. 主界面固定从顶部 80px 以下开始，继续避让车机状态栏区域。
+4. 所有 AlertDialog 弹窗统一改为普通应用窗口：窗口自身位于顶部 80px 以下，不再使用 `FLAG_LAYOUT_IN_SCREEN`、`LAYOUT_FULLSCREEN` 或整屏 DecorView padding。
+5. 所有弹窗限制最大宽度为屏幕约 90%，避免超宽车机横向铺满。
+6. APP Theme 改为普通不透明窗口，降低 Android 12+ 模拟器/手机启动兼容问题。
+7. 保留已有悬浮窗、自动启动、多任务、预设、添加 APP、全部分类、字体/界面大小等功能。
+
+## 构建
+
+```bash
+gradle clean :app:assembleDebug --no-daemon --stacktrace
+```
+
+APK 输出：
+
+`app/build/outputs/apk/debug/app-debug.apk`

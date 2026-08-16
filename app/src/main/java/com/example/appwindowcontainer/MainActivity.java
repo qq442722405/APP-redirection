@@ -167,48 +167,9 @@ public class MainActivity extends AppCompatActivity {
         catch(Exception ex){return fallback;}
     }
 
-    /** 根据“全屏运行”设置，在下一次启动时应用全屏/半透明模式。
-     * 关闭时保持原来的非全屏、不透明界面。
-     */
-    void applyStartupWindowMode(){
-        Window w=getWindow();
-        boolean fullscreen=prefs.getBoolean("fullscreen_run",false);
-        if(fullscreen){
-            w.setStatusBarColor(Color.TRANSPARENT);
-            w.setNavigationBarColor(Color.TRANSPARENT);
-            if(Build.VERSION.SDK_INT>=30){
-                w.setDecorFitsSystemWindows(false);
-                w.getInsetsController().hide(
-                        android.view.WindowInsets.Type.statusBars() |
-                        android.view.WindowInsets.Type.navigationBars());
-                w.getInsetsController().setSystemBarsBehavior(
-                        android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-            }else{
-                w.getDecorView().setSystemUiVisibility(
-                        View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
-                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
-            }
-            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        }else{
-            w.setStatusBarColor(Color.BLACK);
-            w.setNavigationBarColor(Color.BLACK);
-            if(Build.VERSION.SDK_INT>=30){
-                w.setDecorFitsSystemWindows(true);
-                w.getInsetsController().show(
-                        android.view.WindowInsets.Type.statusBars() |
-                        android.view.WindowInsets.Type.navigationBars());
-            }else{
-                w.getDecorView().setSystemUiVisibility(0);
-            }
-            w.setBackgroundDrawable(new ColorDrawable(Color.BLACK));
-        }
-    }
-
     @Override protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
         prefs=getSharedPreferences(PREF,0);
-        applyStartupWindowMode();
         loadData();
         buildUI();
         requestRuntimePermissions();
@@ -333,9 +294,9 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        boolean translucent=prefs.getBoolean("fullscreen_run",false);
-        root.setBackgroundColor(translucent ? Color.argb(178,0,0,0) : Color.BLACK);
-        root.setPadding(dp(12),translucent ? dp(12) : TOP_BLANK,dp(12),dp(BOTTOM_BLANK));
+        root.setBackgroundColor(Color.BLACK);
+        // 主界面固定从顶部 80px 以下开始，避开车机状态栏/触控保留区。
+        root.setPadding(dp(12),dp(TOP_BLANK),dp(12),dp(BOTTOM_BLANK));
 
         // “+”统一放在最左边
         LinearLayout presetHeader=new LinearLayout(this);
@@ -413,44 +374,38 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * 统一修正弹出窗口位置：车机顶部约 80px 为状态栏/触控映射保留区。
-     * 将所有 AlertDialog 放到屏幕顶部 80px 以下，避免车机触控坐标落到左上角。
-     */
-    /**
-     * 车机触控兼容：不要把 Dialog Window 本身移动到 y=80。
-     * 很多车机的触摸坐标仍按整块物理屏幕映射，Dialog Window 如果 y=80，
-     * 就会出现“视觉在这里、点击跑到左上/上方”的现象。
+     * 统一处理所有弹出窗口的坐标。
      *
-     * 正确做法：让 Dialog Window 永远从物理屏幕 (0,0) 开始、占满整屏，
-     * 再把 Dialog 的内容区域向下留 80px。这样视觉避开状态栏，同时触摸
-     * 坐标系与主 Activity 保持一致。
+     * 车机触控偏移的核心问题是：之前把 Dialog Window 做成整屏
+     * FLAG_LAYOUT_IN_SCREEN，并把内容通过 DecorView padding 向下推。
+     * 在部分车机 ROM 上，视觉坐标与触摸坐标因此不在同一个窗口坐标系。
+     *
+     * 现在改成普通应用 Dialog：窗口本身直接位于顶部 80px 以下，
+     * 不再使用 FLAG_LAYOUT_IN_SCREEN / LAYOUT_FULLSCREEN。这样窗口的
+     * 左上角就是它实际接收触摸事件的左上角，视觉位置和点击位置保持一致。
+     * 同时限制左右宽度，避免超宽车机上弹窗铺满整个屏幕。
      */
     void placeDialogBelowTop(Dialog dialog){
         if(dialog==null || dialog.getWindow()==null) return;
         Window w=dialog.getWindow();
         try{
-            w.setGravity(Gravity.TOP | Gravity.LEFT);
-            w.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
-            if(Build.VERSION.SDK_INT>=19){
-                w.getDecorView().setSystemUiVisibility(
-                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
-                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
-            }
+            w.clearFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
+            w.setGravity(Gravity.TOP | Gravity.CENTER_HORIZONTAL);
             w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            w.setLayout(WindowManager.LayoutParams.MATCH_PARENT,WindowManager.LayoutParams.MATCH_PARENT);
+            if(Build.VERSION.SDK_INT>=19){
+                w.getDecorView().setSystemUiVisibility(0);
+            }
+            android.graphics.Point screen=getRealScreenSize();
+            int maxW=Math.max(dp(280), (int)(screen.x*0.90f));
             WindowManager.LayoutParams lp=w.getAttributes();
+            lp.gravity=Gravity.TOP | Gravity.CENTER_HORIZONTAL;
             lp.x=0;
-            lp.y=0;
-            lp.width=WindowManager.LayoutParams.MATCH_PARENT;
-            lp.height=WindowManager.LayoutParams.MATCH_PARENT;
+            lp.y=dp(TOP_BLANK);
+            lp.width=maxW;
+            lp.height=WindowManager.LayoutParams.WRAP_CONTENT;
+            lp.dimAmount=0.55f;
             w.setAttributes(lp);
-
-            // Window 原点保持 0,0；视觉内容避开顶部状态栏，并限制左右宽度，
-            // 这样不会出现菜单弹窗横向铺满整个超宽车机屏幕。
-            View decor=w.getDecorView();
-            int side=(int)(getRealScreenSize().x*0.05f);
-            decor.setPadding(side,dp(TOP_BLANK),side,dp(24));
+            w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         }catch(Exception ignored){}
     }
 
@@ -458,139 +413,6 @@ public class MainActivity extends AppCompatActivity {
         if(dialog==null) return;
         dialog.show();
         placeDialogBelowTop(dialog);
-    }
-
-    void showWindowPositionTest(){
-        final android.graphics.Point screen=getRealScreenSize();
-        LinearLayout box=new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(12),dp(4),dp(12),dp(4));
-
-        EditText top=numberField("离顶部",String.valueOf(TOP_BLANK));
-        EditText left=numberField("离左边", "0");
-        EditText width=numberField("窗口宽度", "600");
-        EditText height=numberField("窗口高度", "300");
-        box.addView(labeledNumberField("离顶部(px)",top));
-        box.addView(labeledNumberField("离左边(px)",left));
-        box.addView(labeledNumberField("宽度(px)",width));
-        box.addView(labeledNumberField("高度(px)",height));
-
-        TextView hint=text("屏幕："+screen.x+" × "+screen.y+"\n测试窗口会直接出现在屏幕指定位置。窗口内会实时显示离上、离下和窗口大小。",13);
-        hint.setTextColor(Color.LTGRAY);
-        hint.setPadding(0,dp(6),0,dp(6));
-        box.addView(hint,new LinearLayout.LayoutParams(-1,dp(58)));
-
-        LinearLayout actionRow=new LinearLayout(this);
-        actionRow.setOrientation(LinearLayout.HORIZONTAL);
-        actionRow.setGravity(Gravity.CENTER_VERTICAL);
-        Button test=button("窗口位置测试");
-        Button copy=button("复制参数");
-        actionRow.addView(test,new LinearLayout.LayoutParams(0,dp(50),1));
-        LinearLayout.LayoutParams copyLp=new LinearLayout.LayoutParams(dp(110),dp(50));
-        copyLp.setMargins(dp(8),0,0,0);
-        actionRow.addView(copy,copyLp);
-        box.addView(actionRow,new LinearLayout.LayoutParams(-1,dp(54)));
-
-        AlertDialog config=new AlertDialog.Builder(this)
-                .setTitle("窗口位置测试")
-                .setView(box)
-                .setNegativeButton("关闭",null)
-                .create();
-        test.setOnClickListener(v->showPositionSampleWindow(number(top,TOP_BLANK),number(left,0),number(width,600),number(height,300)));
-        copy.setOnClickListener(v->copyPositionTestToClipboard(number(top,TOP_BLANK),number(left,0),number(width,600),number(height,300)));
-        showDialogBelowTop(config);
-    }
-
-    /**
-     * 全屏窗口位置测试。
-     *
-     * 这里不能使用 Dialog：Dialog 属于当前 Activity 的应用窗口层，
-     * 当车机把 MainActivity 限制在屏幕中间区域时，Dialog 也会被限制在
-     * 那个区域，所以看起来无论怎么设置都跑不到整块物理屏幕的左右区域。
-     *
-     * 改为 SYSTEM_ALERT_WINDOW / TYPE_APPLICATION_OVERLAY 后，窗口直接交给
-     * 系统 WindowManager 管理，坐标以整个物理 Display 左上角为原点，
-     * 可以真正测试超宽车机的任意 X/Y/宽/高。
-     */
-    /**
-     * 把“窗口位置测试”的参数复制成新建/编辑预设可直接粘贴的 JSON。
-     * 测试窗口的“离顶部”对应预设 Y，“离左边”对应预设 X。
-     */
-    void copyPositionTestToClipboard(int top,int left,int width,int height){
-        try{
-            JSONObject o=new JSONObject();
-            o.put("name","");
-            o.put("x",Math.max(0,left));
-            o.put("y",Math.max(0,top));
-            o.put("w",Math.max(1,width));
-            o.put("h",Math.max(1,height));
-            o.put("mode",1);
-            android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
-            cm.setPrimaryClip(android.content.ClipData.newPlainText("窗口预设参数",o.toString()));
-            Toast.makeText(this,"参数已复制，进入“新建窗口预设”点击“粘贴”即可导入",Toast.LENGTH_LONG).show();
-        }catch(Exception e){
-            Toast.makeText(this,"复制参数失败",Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    /**
-     * 窗口位置测试直接在 MainActivity 内显示，不创建悬浮窗、不申请 SYSTEM_ALERT_WINDOW。
-     * 测试区域使用当前 APP 可用内容区作为坐标系，点击“显示测试窗口”后，
-     * 会在本 APP 页面里按 X/Y/宽/高绘制一个测试框。
-     */
-    void showPositionSampleWindow(int top,int left,int width,int height){
-        final android.graphics.Point screen=getRealScreenSize();
-        final int rawTop=Math.max(0,top), rawLeft=Math.max(0,left);
-        final int rawWidth=Math.max(80,width), rawHeight=Math.max(60,height);
-
-        final LinearLayout page=new LinearLayout(this);
-        page.setOrientation(LinearLayout.VERTICAL);
-        page.setBackgroundColor(Color.BLACK);
-        page.setPadding(dp(12),dp(12),dp(12),dp(12));
-
-        LinearLayout header=new LinearLayout(this);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title=text("窗口位置测试",18); title.setTypeface(null,1);
-        header.addView(title,new LinearLayout.LayoutParams(0,dp(48),1));
-        Button back=button("返回");
-        header.addView(back,new LinearLayout.LayoutParams(dp(90),dp(44)));
-        page.addView(header);
-
-        TextView screenInfo=text("当前物理屏幕："+screen.x+" × "+screen.y+"\n测试窗口直接显示在本 APP 内，不创建悬浮窗，也不需要悬浮窗权限。",13);
-        screenInfo.setTextColor(Color.LTGRAY);
-        page.addView(screenInfo,new LinearLayout.LayoutParams(-1,dp(58)));
-
-        FrameLayout canvas=new FrameLayout(this);
-        canvas.setBackgroundColor(Color.rgb(18,18,18));
-        page.addView(canvas,new LinearLayout.LayoutParams(-1,0,1));
-
-        TextView sampleText=text("测试窗口\n离上："+rawTop+" px\n离左："+rawLeft+" px\n宽："+rawWidth+" px\n高："+rawHeight+" px",14);
-        sampleText.setGravity(Gravity.CENTER);
-        sampleText.setTextColor(Color.WHITE);
-        sampleText.setBackgroundResource(R.drawable.card_selected);
-        canvas.addView(sampleText,new FrameLayout.LayoutParams(10,10));
-
-        // 输入参数以“整块物理屏幕像素”为单位；显示时按当前 APP 测试画布与物理屏幕比例缩放，
-        // 这样超宽车机也能在 APP 自己的中间区域完整预览，而不会再触发悬浮窗权限。
-        canvas.post(()->{
-            float sx=screen.x>0 ? canvas.getWidth()/(float)screen.x : 1f;
-            float sy=screen.y>0 ? canvas.getHeight()/(float)screen.y : 1f;
-            int cw=Math.max(dp(80),(int)(rawWidth*sx));
-            int ch=Math.max(dp(60),(int)(rawHeight*sy));
-            int cx=Math.max(0,(int)(rawLeft*sx));
-            int cy=Math.max(0,(int)(rawTop*sy));
-            FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(cw,ch);
-            lp.leftMargin=Math.min(cx,Math.max(0,canvas.getWidth()-cw));
-            lp.topMargin=Math.min(cy,Math.max(0,canvas.getHeight()-ch));
-            sampleText.setLayoutParams(lp);
-        });
-
-        Button copy=button("复制当前参数");
-        copy.setOnClickListener(v->copyPositionTestToClipboard(rawTop,rawLeft,rawWidth,rawHeight));
-        page.addView(copy,new LinearLayout.LayoutParams(-1,dp(48)));
-
-        back.setOnClickListener(v->buildUI());
-        setContentView(page);
     }
 
     void showSettingsMenu(){
@@ -657,23 +479,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         box.addView(saveSize,new LinearLayout.LayoutParams(-1,dp(48)));
-
-        // 全屏运行：只保存设置，下次启动 APP 时生效；关闭时恢复原来的不透明非全屏。
-        LinearLayout fullscreenRow=new LinearLayout(this);
-        fullscreenRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView fullscreenLabel=text("全屏运行",15);
-        fullscreenRow.addView(fullscreenLabel,new LinearLayout.LayoutParams(0,dp(52),1));
-        TextView fullscreenHint=text("下次启动以全屏半透明运行",11);
-        fullscreenHint.setTextColor(Color.GRAY);
-        fullscreenRow.addView(fullscreenHint,new LinearLayout.LayoutParams(0,dp(52),1));
-        Switch fullscreenSwitch=new Switch(this);
-        fullscreenSwitch.setChecked(prefs.getBoolean("fullscreen_run",false));
-        fullscreenSwitch.setOnCheckedChangeListener((v,checked)->{
-            prefs.edit().putBoolean("fullscreen_run",checked).apply();
-            Toast.makeText(this,checked?"已开启，下次启动将全屏半透明":"已关闭，下次启动恢复默认不透明",Toast.LENGTH_SHORT).show();
-        });
-        fullscreenRow.addView(fullscreenSwitch,new LinearLayout.LayoutParams(dp(58),dp(52)));
-        box.addView(fullscreenRow,new LinearLayout.LayoutParams(-1,dp(58)));
 
         // 悬浮窗口：方向按钮放在开关左边
         LinearLayout floatRow=new LinearLayout(this);
@@ -745,11 +550,6 @@ public class MainActivity extends AppCompatActivity {
 
         Button perm=button("权限与诊断"); perm.setOnClickListener(v->showPermissionPreparation());
         box.addView(perm,new LinearLayout.LayoutParams(-1,dp(50)));
-
-        // 设置最下面增加独立的窗口位置测试，方便在车机上提前校准触控/窗口坐标。
-        Button positionTest=button("窗口位置测试");
-        positionTest.setOnClickListener(v->showWindowPositionTest());
-        box.addView(positionTest,new LinearLayout.LayoutParams(-1,dp(50)));
 
         settingsDialog[0]=new AlertDialog.Builder(this).setTitle("设置").setView(box).setNegativeButton("关闭",null).create();
         showDialogBelowTop(settingsDialog[0]);
