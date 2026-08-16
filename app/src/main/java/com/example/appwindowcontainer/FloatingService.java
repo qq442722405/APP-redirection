@@ -71,9 +71,14 @@ public class FloatingService extends Service {
             for(int i=0;i<a.length();i++){
                 JSONObject o=a.getJSONObject(i);
                 String pkg=o.optString("pkg","");
-                if(!pkg.isEmpty() && getPackageManager().getLaunchIntentForPackage(pkg)!=null){
+                if(!pkg.isEmpty() && !floatingPkgs.contains(pkg) && getPackageManager().getLaunchIntentForPackage(pkg)!=null){
                     floatingPkgs.add(pkg);
-                    floatingNames.add(o.optString("name",pkg));
+                    String savedName=o.optString("name","");
+                    if(savedName.isEmpty()){
+                        try{savedName=getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(pkg,0)).toString();}
+                        catch(Exception ignored){savedName=pkg;}
+                    }
+                    floatingNames.add(savedName);
                 }
             }
         }catch(Exception ignored){}
@@ -171,9 +176,10 @@ public class FloatingService extends Service {
         // APP 只显示图标，不显示 APP 名称。
         for(int i=0;i<floatingPkgs.size();i++){
             final String pkg=floatingPkgs.get(i);
+            final String displayName=(i<floatingNames.size()?floatingNames.get(i):pkg);
             ImageButton b=iconButton(android.R.drawable.sym_def_app_icon);
             try{b.setImageDrawable(getPackageManager().getApplicationIcon(pkg));}catch(Exception ignored){}
-            b.setContentDescription(floatingNames.get(i));
+            b.setContentDescription(displayName);
             b.setOnClickListener(v->{
                 Intent in=getPackageManager().getLaunchIntentForPackage(pkg);
                 if(in!=null){
