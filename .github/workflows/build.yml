@@ -1,4 +1,4 @@
-name: 构建 Acc 安卓12权限增强版
+name: 构建 APP窗口启动器
 
 on:
   workflow_dispatch:
@@ -21,39 +21,26 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: 检查签名文件
+      - name: 检查工程
         run: |
           test -f Acc.jks
-          ls -lh Acc.jks
-
-      - name: 清理历史 Java 包目录
-        run: |
-          # 防止 GitHub 仓库里残留旧版本源码导致 R 不存在/包名冲突
-          rm -rf app/src/main/java/com/example
-          rm -rf app/src/main/java/com/old
-          find app/src/main/java -type f -name '*.java' -print
-
-      - name: 严格检查包名
-        run: |
-          count=$(grep -Rhs '^package com.acc.acc;' app/src/main/java/com/acc/acc/*.java | wc -l)
-          echo "检测到 $count 个 com.acc.acc Java 文件"
-          test "$count" -ge 1
-          if grep -RInE 'com\.example\.|package[[:space:]]*=|package com\.example' app/src/main/java app/src/main/AndroidManifest.xml app/build.gradle; then
-            echo '错误：发现旧包名或旧 Manifest package 残留'
+          test -f app/src/main/java/com/acc/acc/MainActivity.java
+          if find app/src/main/java -type f -name '*.java' -print0 | xargs -0 grep -nE '^package com\\.example\\.|^package com\\.example'; then
+            echo '错误：发现旧包名源码'
             exit 1
           fi
-          grep -n 'namespace' app/build.gradle
-          grep -n 'applicationId' app/build.gradle
-          echo '=== Java 源文件 ==='
-          find app/src/main/java -type f -name '*.java' -print
+          grep -q 'namespace "com.acc.acc"' app/build.gradle
+          grep -q 'applicationId "com.acc.acc"' app/build.gradle
 
-      - name: 构建 Debug APK
-        run: gradle clean :app:assembleDebug --no-daemon --stacktrace
+      - name: 构建并生成指定文件名 APK
+        run: |
+          gradle clean :app:assembleDebug --no-daemon --stacktrace
+          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/APP窗口启动器.apk
 
       - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
-          name: Acc-Android12
-          path: app/build/outputs/apk/debug/*.apk
+          name: APP窗口启动器
+          path: app/build/outputs/apk/debug/APP窗口启动器.apk
           if-no-files-found: error
           retention-days: 30
