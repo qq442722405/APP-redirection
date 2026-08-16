@@ -836,7 +836,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void showGestureChooser(String key,String title,Button target){
-        ArrayList<String> values=new ArrayList<>(); ArrayList<String> labels=new ArrayList<>();
+        ArrayList<String> values=new ArrayList<>();
+        ArrayList<String> labels=new ArrayList<>();
         values.add("none"); labels.add("无操作");
         values.add("back"); labels.add("返回按钮");
         values.add("home"); labels.add("首页按钮");
@@ -855,24 +856,47 @@ public class MainActivity extends AppCompatActivity {
             }
         }catch(Exception ignored){}
 
-        final String[] actionLabels=labels.toArray(new String[0]);
+        final ArrayList<String> actionValues=values;
+        final ArrayList<String> actionLabels=labels;
+        final AlertDialog[] dialogRef={null};
+
+        LinearLayout content=new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(18),dp(8),dp(18),dp(12));
+
+        LinearLayout list=new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        for(int i=0;i<actionLabels.size();i++){
+            final int index=i;
+            Button item=button(actionLabels.get(i));
+            item.setGravity(Gravity.LEFT|Gravity.CENTER_VERTICAL);
+            item.setPadding(dp(16),0,dp(12),0);
+            LinearLayout.LayoutParams ilp=new LinearLayout.LayoutParams(-1,dp(48));
+            ilp.setMargins(0,dp(3),0,dp(3));
+            list.addView(item,ilp);
+            item.setOnClickListener(v->{
+                prefs.edit().putString("floating_gesture_"+key,actionValues.get(index)).apply();
+                target.setText(actionLabels.get(index));
+                dialogRef[0].dismiss();
+            });
+        }
+        content.addView(list,new LinearLayout.LayoutParams(-1,-2));
+
+        // “＋增加APP操作”使用与其它按钮完全一致的按钮样式，并靠左排列。
+        Button add=button("＋增加APP操作");
+        add.setGravity(Gravity.LEFT|Gravity.CENTER_VERTICAL);
+        add.setPadding(dp(16),0,dp(12),0);
+        LinearLayout.LayoutParams addLp=new LinearLayout.LayoutParams(-1,dp(48));
+        addLp.setMargins(0,dp(8),0,0);
+        content.addView(add,addLp);
+
         AlertDialog dlg=new AlertDialog.Builder(this)
                 .setTitle(title+"功能")
-                .setItems(actionLabels,(d,w)->{
-                    prefs.edit().putString("floating_gesture_"+key,values.get(w)).apply();
-                    target.setText(actionLabels[w]);
-                })
+                .setView(content)
                 .setNegativeButton("取消",null)
                 .create();
-
-        dlg.setOnShowListener(x->{
-            // 在列表底部提供“增加APP操作”，不要求 APP 必须先加入悬浮窗口。
-            Button add=dlg.getButton(AlertDialog.BUTTON_NEGATIVE);
-            if(add!=null){
-                add.setText("＋增加APP操作");
-                add.setOnClickListener(v->showGestureAppChooser(key,title,target,dlg));
-            }
-        });
+        dialogRef[0]=dlg;
+        add.setOnClickListener(v->showGestureAppChooser(key,title,target,dlg));
         dlg.show();
     }
 
