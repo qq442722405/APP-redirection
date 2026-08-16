@@ -330,7 +330,7 @@ public class MainActivity extends AppCompatActivity {
 
         ScrollView appScroll=new ScrollView(this);
         appGrid=new LinearLayout(this);
-        appGrid.setOrientation(LinearLayout.HORIZONTAL);
+        appGrid.setOrientation(LinearLayout.VERTICAL);
         appScroll.addView(appGrid);
         root.addView(appScroll,new LinearLayout.LayoutParams(-1,0,1));
 
@@ -365,6 +365,130 @@ public class MainActivity extends AppCompatActivity {
         root.addView(footer,new LinearLayout.LayoutParams(-1,dp(64)));
         setContentView(root);
         refresh();
+    }
+
+    /**
+     * 刷新主界面中的窗口预设和已添加 APP。
+     * 保持主界面控件对象不变，只重建两个列表，避免重新 setContentView
+     * 导致车机 ROM 出现焦点/触控坐标漂移。
+     */
+    void refresh(){
+        if(presetRow!=null){
+            presetRow.removeAllViews();
+            for(int i=0;i<presets.size();i++){
+                final int index=i;
+                Preset p=presets.get(i);
+
+                LinearLayout card=new LinearLayout(this);
+                card.setOrientation(LinearLayout.VERTICAL);
+                card.setGravity(Gravity.CENTER);
+                card.setPadding(dp(10),dp(8),dp(10),dp(8));
+                card.setBackgroundResource(R.drawable.card);
+
+                TextView title=text(p.name,14);
+                title.setGravity(Gravity.CENTER);
+                title.setMaxLines(2);
+                title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                card.addView(title,new LinearLayout.LayoutParams(dp(150),dp(42)));
+
+                TextView size=text(p.w+" × "+p.h,11);
+                size.setTextColor(Color.LTGRAY);
+                size.setGravity(Gravity.CENTER);
+                card.addView(size,new LinearLayout.LayoutParams(dp(150),dp(28)));
+
+                card.setOnClickListener(v->{
+                    if(selectedPackage!=null){
+                        launchApp(p);
+                    }else{
+                        presetMenu(index);
+                    }
+                });
+                card.setOnLongClickListener(v->{presetMenu(index);return true;});
+
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(170),dp(112));
+                lp.setMargins(dp(5),dp(5),dp(5),dp(5));
+                presetRow.addView(card,lp);
+            }
+
+            if(presets.isEmpty()){
+                TextView empty=text("点击左侧“+”新建窗口预设",13);
+                empty.setTextColor(Color.GRAY);
+                empty.setGravity(Gravity.CENTER);
+                presetRow.addView(empty,new LinearLayout.LayoutParams(-1,dp(112)));
+            }
+        }
+
+        if(appGrid!=null){
+            appGrid.removeAllViews();
+            if(apps.isEmpty()){
+                TextView empty=text("点击“+”添加 APP",14);
+                empty.setTextColor(Color.GRAY);
+                empty.setGravity(Gravity.CENTER);
+                appGrid.addView(empty,new LinearLayout.LayoutParams(-1,dp(90)));
+                return;
+            }
+
+            PackageManager pm=getPackageManager();
+            for(int i=0;i<apps.size();i++){
+                final int index=i;
+                AppItem item=apps.get(i);
+
+                LinearLayout row=new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(dp(12),dp(6),dp(12),dp(6));
+                row.setBackgroundResource(R.drawable.card);
+
+                ImageView icon=new ImageView(this);
+                icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+                try{
+                    icon.setImageDrawable(pm.getApplicationIcon(item.pkg));
+                }catch(Exception ignored){}
+                row.addView(icon,new LinearLayout.LayoutParams(dp(58),dp(58)));
+
+                TextView name=text(item.name,15);
+                name.setPadding(dp(14),0,dp(8),0);
+                name.setMaxLines(1);
+                name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                row.addView(name,new LinearLayout.LayoutParams(0,dp(70),1));
+
+                TextView state=text(item.pkg.equals(selectedPackage)?"已选择":"选择",12);
+                state.setGravity(Gravity.CENTER);
+                row.addView(state,new LinearLayout.LayoutParams(dp(70),dp(50)));
+
+                row.setOnClickListener(v->{
+                    selectedPackage=item.pkg;
+                    selectedName=item.name;
+                    info.setText("当前 APP："+item.name);
+                    refresh();
+                });
+                row.setOnLongClickListener(v->{
+                    new AlertDialog.Builder(this)
+                            .setTitle(item.name)
+                            .setItems(new String[]{"选择","删除"},(d,w)->{
+                                if(w==0){
+                                    selectedPackage=item.pkg;
+                                    selectedName=item.name;
+                                    info.setText("当前 APP："+item.name);
+                                    refresh();
+                                }else{
+                                    if(item.pkg.equals(selectedPackage)){
+                                        selectedPackage=null;
+                                        selectedName=null;
+                                    }
+                                    apps.remove(index);
+                                    saveApps();
+                                    refresh();
+                                }
+                            }).show();
+                    return true;
+                });
+
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(76));
+                lp.setMargins(dp(5),dp(4),dp(5),dp(4));
+                appGrid.addView(row,lp);
+            }
+        }
     }
 
     void updateScreenInfo(TextView view){
