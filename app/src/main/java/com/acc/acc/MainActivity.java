@@ -56,6 +56,9 @@ public class MainActivity extends AppCompatActivity {
     float uiScale(){ return Math.max(0.50f, Math.min(3.00f, prefs==null?1.0f:prefs.getFloat("ui_scale",1.0f))); }
     float fontScale(){ return Math.max(0.50f, Math.min(3.00f, prefs==null?1.0f:prefs.getFloat("font_scale",1.0f))); }
 
+    int touchOffsetLeft(){ return prefs==null?0:prefs.getInt("touch_offset_left_px",0); }
+    int touchOffsetTop(){ return prefs==null?0:prefs.getInt("touch_offset_top_px",0); }
+
     int dp(int v){
         return (int)(v*getResources().getDisplayMetrics().density*uiScale()+.5f);
     }
@@ -541,8 +544,10 @@ public class MainActivity extends AppCompatActivity {
             // 都由同一个 Window 管理，避免车机 ROM 造成上下/左右触控偏移。
             WindowManager.LayoutParams lp=w.getAttributes();
             lp.gravity=Gravity.CENTER;
-            lp.x=0;
-            lp.y=0;
+            // 车机弹窗触控纠正：主界面不使用此偏移，只对所有 Dialog 生效。
+            // 正值向右/向下移动弹窗，负值向左/向上移动弹窗。
+            lp.x=touchOffsetLeft();
+            lp.y=touchOffsetTop();
             lp.width=width;
             lp.height=WindowManager.LayoutParams.WRAP_CONTENT;
             lp.dimAmount=0.55f;
@@ -658,7 +663,21 @@ public class MainActivity extends AppCompatActivity {
         rightRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
         box.addView(rightRow,new LinearLayout.LayoutParams(-1,dp(56)));
 
-        TextView hint=text("字体大小、界面大小支持 50-300%，保存后返回主界面生效。",11);
+        LinearLayout touchTopRow=new LinearLayout(this); touchTopRow.setGravity(Gravity.CENTER_VERTICAL);
+        touchTopRow.addView(text("触控纠正位置上",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        EditText touchTopInput=numberField("0",String.valueOf(touchOffsetTop()));
+        touchTopRow.addView(touchTopInput,new LinearLayout.LayoutParams(dp(90),dp(52)));
+        touchTopRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
+        box.addView(touchTopRow,new LinearLayout.LayoutParams(-1,dp(56)));
+
+        LinearLayout touchLeftRow=new LinearLayout(this); touchLeftRow.setGravity(Gravity.CENTER_VERTICAL);
+        touchLeftRow.addView(text("触控纠正位置左",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        EditText touchLeftInput=numberField("0",String.valueOf(touchOffsetLeft()));
+        touchLeftRow.addView(touchLeftInput,new LinearLayout.LayoutParams(dp(90),dp(52)));
+        touchLeftRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
+        box.addView(touchLeftRow,new LinearLayout.LayoutParams(-1,dp(56)));
+
+        TextView hint=text("触控纠正只作用于弹窗，主界面不受影响。正值向下/向右，负值向上/向左。",11);
         hint.setTextColor(Color.GRAY);
         hint.setPadding(0,dp(4),0,dp(6));
         box.addView(hint,new LinearLayout.LayoutParams(-1,dp(38)));
@@ -671,10 +690,13 @@ public class MainActivity extends AppCompatActivity {
                 float us=Float.parseFloat(uiInput.getText().toString().trim());
                 int lm=Integer.parseInt(leftMarginInput.getText().toString().trim());
                 int rm=Integer.parseInt(rightMarginInput.getText().toString().trim());
-                if(delay<0||delay>3600||fs<50||fs>300||us<50||us>300||lm<0||rm<0||lm>3000||rm>3000) throw new Exception();
+                int touchTop=Integer.parseInt(touchTopInput.getText().toString().trim());
+                int touchLeft=Integer.parseInt(touchLeftInput.getText().toString().trim());
+                if(delay<0||delay>3600||fs<50||fs>300||us<50||us>300||lm<0||rm<0||lm>3000||rm>3000||touchTop<-2000||touchTop>2000||touchLeft<-2000||touchLeft>2000) throw new Exception();
                 prefs.edit().putInt("boot_delay_seconds",delay)
                         .putFloat("font_scale",fs/100f).putFloat("ui_scale",us/100f)
-                        .putInt("dialog_left_margin_px",lm).putInt("dialog_right_margin_px",rm).apply();
+                        .putInt("dialog_left_margin_px",lm).putInt("dialog_right_margin_px",rm)
+                        .putInt("touch_offset_top_px",touchTop).putInt("touch_offset_left_px",touchLeft).apply();
                 Toast.makeText(this,"设置已保存并生效",Toast.LENGTH_SHORT).show();
                 if(dialogRef[0]!=null) dialogRef[0].dismiss();
                 buildUI();
@@ -908,16 +930,52 @@ public class MainActivity extends AppCompatActivity {
         android.view.Display d=getWindow().getWindowManager().getDefaultDisplay();
         android.graphics.Point p=getRealScreenSize(d);
         android.util.DisplayMetrics m=new android.util.DisplayMetrics(); d.getRealMetrics(m);
-        String s="当前车机 Display\n\n"+
-                "Display ID: "+d.getDisplayId()+"\n"+
-                "真实分辨率: "+p.x+" × "+p.y+"\n"+
-                "densityDpi: "+m.densityDpi+"\n"+
-                "density: "+m.density+"\n"+
-                "rotation: "+d.getRotation()+"\n\n"+
-                "三区域按整块超宽屏坐标处理：\n"+
-                "左区约 X=0\n中区约 X=2160\n右区约 X=4320";
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("屏幕诊断")
-                .setMessage(s).setPositiveButton("新建预设",(x,w)->editPreset(-1))
+        StringBuilder s=new StringBuilder();
+        s.append("当前车机 Display\n\n")
+         .append("Display ID: ").append(d.getDisplayId()).append("\n")
+         .append("真实分辨率: ").append(p.x).append(" × ").append(p.y).append("\n")
+         .append("densityDpi: ").append(m.densityDpi).append("\n")
+         .append("density: ").append(m.density).append("\n")
+         .append("rotation: ").append(d.getRotation()).append("\n\n")
+         .append("=== 权限情况 ===\n");
+
+        String[] perms={
+                "android.permission.CAMERA","android.permission.RECORD_AUDIO",
+                "android.permission.ACCESS_FINE_LOCATION","android.permission.ACCESS_COARSE_LOCATION",
+                "android.permission.BLUETOOTH_SCAN","android.permission.BLUETOOTH_CONNECT","android.permission.BLUETOOTH_ADVERTISE",
+                "android.permission.READ_PHONE_STATE","android.permission.CALL_PHONE",
+                "android.permission.ANSWER_PHONE_CALLS","android.permission.READ_CALL_LOG","android.permission.WRITE_CALL_LOG",
+                "android.permission.READ_CONTACTS","android.permission.WRITE_CONTACTS",
+                "android.permission.READ_CALENDAR","android.permission.WRITE_CALENDAR",
+                "android.permission.ACTIVITY_RECOGNITION","android.permission.BODY_SENSORS",
+                "android.permission.SEND_SMS","android.permission.RECEIVE_SMS","android.permission.READ_SMS",
+                "android.permission.RECEIVE_MMS","android.permission.RECEIVE_WAP_PUSH",
+                "android.permission.NFC","android.permission.POST_NOTIFICATIONS",
+                "android.permission.READ_EXTERNAL_STORAGE","android.permission.WRITE_EXTERNAL_STORAGE",
+                "android.permission.READ_MEDIA_IMAGES","android.permission.READ_MEDIA_VIDEO","android.permission.READ_MEDIA_AUDIO",
+                "android.permission.INTERNET","android.permission.ACCESS_NETWORK_STATE","android.permission.ACCESS_WIFI_STATE",
+                "android.permission.WAKE_LOCK","android.permission.RECEIVE_BOOT_COMPLETED","android.permission.REQUEST_INSTALL_PACKAGES"
+        };
+        for(String perm:perms){
+            try{
+                int state=Build.VERSION.SDK_INT<23?PackageManager.PERMISSION_GRANTED:checkSelfPermission(perm);
+                s.append(state==PackageManager.PERMISSION_GRANTED?"✓ ":"✗ ").append(perm.substring(perm.lastIndexOf('.')+1)).append("\n");
+            }catch(Exception e){
+                s.append("— ").append(perm.substring(perm.lastIndexOf('.')+1)).append("（系统不支持/不可查询）\n");
+            }
+        }
+        s.append("\n特殊权限：\n")
+         .append(hasOverlayPermission()?"✓ 悬浮窗\n":"✗ 悬浮窗\n")
+         .append(hasUsageAccess()?"✓ 使用情况访问\n":"✗ 使用情况访问\n")
+         .append(hasAllFilesPermission()?"✓ 所有文件访问\n":"✗ 所有文件访问\n")
+         .append(Build.VERSION.SDK_INT<23 || Settings.System.canWrite(this)?"✓ 修改系统设置\n":"✗ 修改系统设置\n")
+         .append("\n触控纠正：上=").append(touchOffsetTop()).append("px，左=").append(touchOffsetLeft()).append("px");
+
+        TextView msg=text(s.toString(),11);
+        msg.setPadding(dp(4),dp(4),dp(4),dp(4));
+        ScrollView scroll=new ScrollView(this); scroll.addView(msg,new ScrollView.LayoutParams(-1,-2));
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("权限与诊断")
+                .setView(scroll).setPositiveButton("界面选项",(x,w)->showInterfaceOptionsDialog())
                 .setNegativeButton("关闭",null).create();
         showDialogBelowTop(dialog);
     }
