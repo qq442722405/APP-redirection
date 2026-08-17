@@ -176,10 +176,40 @@ public class FloatingService extends Service {
             addView(single,iconSizePx,iconSizePx);
             installSingleIconGesture(single);
         } else {
-            addView(drag,iconSizePx,iconSizePx);
+            // 删除独立的拖拽“☰”按钮；“＋”本身同时承担添加和拖动功能。
             addView(plus,iconSizePx,iconSizePx);
-            plus.setContentDescription("添加悬浮项目");
-            plus.setOnClickListener(v->showAddMenu());
+            plus.setContentDescription("添加悬浮项目（点击添加，拖动移动）");
+            final int[] plusDown={0,0};
+            final long[] plusDownTime={0};
+            final boolean[] plusMoved={false};
+            plus.setOnTouchListener((v,e)->{
+                switch(e.getActionMasked()){
+                    case MotionEvent.ACTION_DOWN:
+                        plusDown[0]=(int)e.getRawX(); plusDown[1]=(int)e.getRawY();
+                        plusDownTime[0]=System.currentTimeMillis(); plusMoved[0]=false;
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        int dx=(int)e.getRawX()-plusDown[0], dy=(int)e.getRawY()-plusDown[1];
+                        if(Math.abs(dx)>8 || Math.abs(dy)>8){
+                            plusMoved[0]=true;
+                            if(!positionLocked){
+                                lp.x += dx; lp.y += dy;
+                                plusDown[0]=(int)e.getRawX(); plusDown[1]=(int)e.getRawY();
+                                try{wm.updateViewLayout(panel,lp);}catch(Exception ignored){}
+                            }
+                        }
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                        if(!plusMoved[0]){
+                            showAddMenu();
+                        }else if(!positionLocked){
+                            getSharedPreferences(MainActivity.PREF,0).edit()
+                                    .putInt("floating_position_x",lp.x).putInt("floating_position_y",lp.y).apply();
+                        }
+                        return true;
+                }
+                return true;
+            });
             rebuildButtons();
         }
 
@@ -539,14 +569,21 @@ public class FloatingService extends Service {
                 LinearLayout tile=new LinearLayout(this);
                 tile.setOrientation(LinearLayout.VERTICAL); tile.setGravity(Gravity.CENTER);
                 tile.setPadding(dp(6),dp(6),dp(6),dp(6)); tile.setBackgroundResource(R.drawable.floating_app_card);
-                ImageView icon=new ImageView(this);
-                try{icon.setImageDrawable(pm.getApplicationIcon(ai));}catch(Exception ignored){}
-                tile.addView(icon,new LinearLayout.LayoutParams(dp(52),dp(52)));
+                // 悬浮窗添加 APP 选择器不再加载真实 APP 图标，只显示名称首字/首字母，
+                // 避免部分车机加载大量图标时卡顿。
+                TextView first=new TextView(this);
+                String firstChar=name.trim();
+                firstChar=firstChar.isEmpty()?"APP":firstChar.substring(0,1).toUpperCase(Locale.ROOT);
+                first.setText(firstChar); first.setTextColor(Color.WHITE); first.setTextSize(28);
+                first.setGravity(Gravity.CENTER);
+                GradientDrawable firstBg=new GradientDrawable();
+                firstBg.setColor(0xFF343434); firstBg.setCornerRadius(dp(14));
+                first.setBackground(firstBg);
+                tile.addView(first,new LinearLayout.LayoutParams(dp(52),dp(52)));
                 TextView nameView=new TextView(this);
                 nameView.setText(name); nameView.setTextColor(Color.WHITE); nameView.setTextSize(11);
                 nameView.setGravity(Gravity.CENTER); nameView.setMaxLines(2); nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);
                 tile.addView(nameView,new LinearLayout.LayoutParams(-1,dp(34)));
-                // 选择器只显示 APP 图标和名称，避免列表高度浪费。
                 final String selectedPkg=ai.packageName, selectedAppName=name;
                 tile.setOnClickListener(v->{
                     try{
