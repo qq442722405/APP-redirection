@@ -393,11 +393,12 @@ public class MainActivity extends AppCompatActivity {
         }
         root.addView(presetHeader,new LinearLayout.LayoutParams(-1,dp(44)));
 
-        ScrollView presetScroll=new ScrollView(this);
+        HorizontalScrollView presetScroll=new HorizontalScrollView(this);
+        presetScroll.setFillViewport(false);
         presetScroll.setHorizontalScrollBarEnabled(false);
         presetRow=new LinearLayout(this);
         presetRow.setOrientation(LinearLayout.HORIZONTAL);
-        presetScroll.addView(presetRow);
+        presetScroll.addView(presetRow,new HorizontalScrollView.LayoutParams(-2,-1));
         root.addView(presetScroll,new LinearLayout.LayoutParams(-1,dp(168)));
 
         LinearLayout appHeader=new LinearLayout(this);
@@ -411,12 +412,12 @@ public class MainActivity extends AppCompatActivity {
         appHeader.addView(at,new LinearLayout.LayoutParams(0,dp(44),1));
         root.addView(appHeader,new LinearLayout.LayoutParams(-1,dp(44)));
 
-        ScrollView appScroll=new ScrollView(this);
+        HorizontalScrollView appScroll=new HorizontalScrollView(this);
         appScroll.setFillViewport(true);
-        appScroll.setVerticalScrollBarEnabled(true);
+        appScroll.setHorizontalScrollBarEnabled(false);
         appGrid=new LinearLayout(this);
-        appGrid.setOrientation(LinearLayout.VERTICAL);
-        appScroll.addView(appGrid,new ScrollView.LayoutParams(-1,-2));
+        appGrid.setOrientation(LinearLayout.HORIZONTAL);
+        appScroll.addView(appGrid,new HorizontalScrollView.LayoutParams(-2,-1));
         root.addView(appScroll,new LinearLayout.LayoutParams(-1,0,1));
 
         // 底部：状态信息 + 当前屏幕分辨率/DPI + 设置图标。
@@ -467,21 +468,21 @@ public class MainActivity extends AppCompatActivity {
                 Preset p=presets.get(i);
 
                 LinearLayout card=new LinearLayout(this);
-                card.setOrientation(LinearLayout.VERTICAL);
-                card.setGravity(Gravity.CENTER);
-                card.setPadding(dp(10),dp(8),dp(10),dp(8));
+                card.setOrientation(LinearLayout.HORIZONTAL);
+                card.setGravity(Gravity.CENTER_VERTICAL);
+                card.setPadding(dp(8),0,dp(8),0);
                 card.setBackgroundResource(R.drawable.card);
 
-                TextView title=text(p.name,14);
+                TextView title=text(p.name,13);
                 title.setGravity(Gravity.CENTER);
-                title.setMaxLines(2);
+                title.setMaxLines(1);
                 title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                card.addView(title,new LinearLayout.LayoutParams(dp(150),dp(42)));
+                card.addView(title,new LinearLayout.LayoutParams(0,dp(30),1));
 
-                TextView size=text(p.w+" × "+p.h,11);
+                TextView size=text(p.w+" × "+p.h,10);
                 size.setTextColor(Color.LTGRAY);
                 size.setGravity(Gravity.CENTER);
-                card.addView(size,new LinearLayout.LayoutParams(dp(150),dp(28)));
+                card.addView(size,new LinearLayout.LayoutParams(dp(65),dp(30)));
 
                 card.setOnClickListener(v->{
                     if(selectedPackage!=null){
@@ -492,8 +493,9 @@ public class MainActivity extends AppCompatActivity {
                 });
                 card.setOnLongClickListener(v->{presetMenu(index);return true;});
 
-                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(170),dp(112));
-                lp.setMargins(dp(5),dp(5),dp(5),dp(5));
+                // 窗口预设选框固定为 200×30dp，超出屏幕后横向滑动选择。
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(200),dp(30));
+                lp.setMargins(dp(4),dp(4),dp(4),dp(4));
                 presetRow.addView(card,lp);
             }
 
@@ -501,7 +503,7 @@ public class MainActivity extends AppCompatActivity {
                 TextView empty=text("点击左侧“+”新建窗口预设",13);
                 empty.setTextColor(Color.GRAY);
                 empty.setGravity(Gravity.CENTER);
-                presetRow.addView(empty,new LinearLayout.LayoutParams(-1,dp(112)));
+                presetRow.addView(empty,new LinearLayout.LayoutParams(dp(200),dp(30)));
             }
         }
 
@@ -510,51 +512,44 @@ public class MainActivity extends AppCompatActivity {
             if(apps.isEmpty()){
                 TextView empty=text("点击“+”添加 APP",14);
                 empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER);
-                appGrid.addView(empty,new LinearLayout.LayoutParams(-1,dp(90)));
+                appGrid.addView(empty,new LinearLayout.LayoutParams(dp(200),dp(30)));
                 return;
             }
             PackageManager pm=getPackageManager();
-            // 根据当前真实屏幕宽度自适应列数：不再固定“三列”，也不让最后一列被裁切。
-            float density=getResources().getDisplayMetrics().density;
-            int availableDp=Math.max(240,(int)(getRealScreenSize().x/density/uiScale())-16);
-            int minTileDp=108;
-            int columns=Math.min(8,Math.max(1,availableDp/minTileDp));
-            int tileDp=Math.max(minTileDp,availableDp/columns);
-            for(int base=0;base<apps.size();base+=columns){
-                LinearLayout row=new LinearLayout(this);
-                row.setOrientation(LinearLayout.HORIZONTAL);
-                row.setGravity(Gravity.CENTER_VERTICAL);
-                for(int col=0;col<columns;col++){
-                    int index=base+col;
-                    if(index>=apps.size()) break;
-                    final int itemIndex=index;
-                    AppItem item=apps.get(index);
-                    LinearLayout tile=new LinearLayout(this);
-                    tile.setOrientation(LinearLayout.VERTICAL);
-                    tile.setGravity(Gravity.CENTER);
-                    tile.setPadding(dp(4),dp(4),dp(4),dp(4));
-                    tile.setBackgroundResource(item.pkg.equals(selectedPackage)?R.drawable.card_selected:R.drawable.card);
-                    ImageView icon=new ImageView(this);
-                    icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                    try{icon.setImageDrawable(pm.getApplicationIcon(item.pkg));}catch(Exception ignored){}
-                    int iconDp=Math.min(64,Math.max(44,tileDp-52));
-                    tile.addView(icon,new LinearLayout.LayoutParams(dp(iconDp),dp(iconDp)));
-                    TextView name=text(item.name,12);
-                    name.setGravity(Gravity.CENTER);
-                    name.setMaxLines(2);
-                    name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                    tile.addView(name,new LinearLayout.LayoutParams(-1,dp(36)));
-                    tile.setOnClickListener(v->{selectedPackage=item.pkg;selectedName=item.name;info.setText("当前 APP："+item.name);refresh();});
-                    tile.setOnLongClickListener(v->{
-                        new AlertDialog.Builder(this).setTitle(item.name)
-                            .setItems(new String[]{"删除 APP"},(d,w)->{if(w==0){if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;}apps.remove(itemIndex);saveApps();refresh();}}).show();
-                        return true;
-                    });
-                    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(tileDp),dp(112));
-                    lp.setMargins(dp(2),dp(3),dp(2),dp(3));
-                    row.addView(tile,lp);
-                }
-                appGrid.addView(row,new LinearLayout.LayoutParams(-1,dp(118)));
+            for(int index=0;index<apps.size();index++){
+                final int itemIndex=index;
+                AppItem item=apps.get(index);
+
+                // APP 选框固定为 200×30dp，多个 APP 横向排列，超出屏幕左右滑动。
+                LinearLayout tile=new LinearLayout(this);
+                tile.setOrientation(LinearLayout.HORIZONTAL);
+                tile.setGravity(Gravity.CENTER_VERTICAL);
+                tile.setPadding(dp(6),0,dp(6),0);
+                tile.setBackgroundResource(item.pkg.equals(selectedPackage)?R.drawable.card_selected:R.drawable.card);
+
+                ImageView icon=new ImageView(this);
+                icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+                try{icon.setImageDrawable(pm.getApplicationIcon(item.pkg));}catch(Exception ignored){}
+                tile.addView(icon,new LinearLayout.LayoutParams(dp(24),dp(24)));
+
+                TextView name=text(item.name,12);
+                name.setGravity(Gravity.CENTER_VERTICAL);
+                name.setMaxLines(1);
+                name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                LinearLayout.LayoutParams nameLp=new LinearLayout.LayoutParams(0,dp(30),1);
+                nameLp.setMargins(dp(5),0,dp(5),0);
+                tile.addView(name,nameLp);
+
+                tile.setOnClickListener(v->{selectedPackage=item.pkg;selectedName=item.name;info.setText("当前 APP："+item.name);refresh();});
+                tile.setOnLongClickListener(v->{
+                    new AlertDialog.Builder(this).setTitle(item.name)
+                        .setItems(new String[]{"删除 APP"},(d,w)->{if(w==0){if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;}apps.remove(itemIndex);saveApps();refresh();}}).show();
+                    return true;
+                });
+
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(200),dp(30));
+                lp.setMargins(dp(4),dp(4),dp(4),dp(4));
+                appGrid.addView(tile,lp);
             }
         }
     }
@@ -1793,7 +1788,7 @@ public class MainActivity extends AppCompatActivity {
     void showAddAutoTaskDialog(JSONArray[] tasks,Runnable refresh){
         LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(8),dp(4),dp(8),dp(4));
-        Button appPick=button("点击选择 APP");
+        Button appPick=button("点击选择 APP（图标 + 名称）");
         Button presetPick=button("直接启动（无窗口预设）");
         box.addView(appPick,new LinearLayout.LayoutParams(-1,dp(52)));
         box.addView(presetPick,new LinearLayout.LayoutParams(-1,dp(52)));
@@ -1829,7 +1824,29 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(12),dp(6),dp(12),dp(6));
         ScrollView scroll=new ScrollView(this); LinearLayout rows=new LinearLayout(this); rows.setOrientation(LinearLayout.VERTICAL); scroll.addView(rows,new ScrollView.LayoutParams(-1,-2));
         final AlertDialog[] dialogRef=new AlertDialog[1];
-        for(AppItem item:list){ Button b=button(item.name); b.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT); b.setPadding(dp(14),0,dp(8),0); b.setOnClickListener(v->{callback.onChoose(item); if(dialogRef[0]!=null) dialogRef[0].dismiss();}); rows.addView(b,new LinearLayout.LayoutParams(-1,dp(52))); }
+        for(AppItem item:list){
+            LinearLayout row=new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(12),0,dp(10),0);
+            row.setBackgroundResource(R.drawable.card);
+
+            ImageView icon=new ImageView(this);
+            icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            try{ icon.setImageDrawable(pm.getApplicationIcon(item.pkg)); }catch(Exception ignored){}
+            row.addView(icon,new LinearLayout.LayoutParams(dp(36),dp(36)));
+
+            TextView name=text(item.name,14);
+            name.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+            name.setMaxLines(1);
+            name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            LinearLayout.LayoutParams nameLp=new LinearLayout.LayoutParams(0,dp(52),1);
+            nameLp.setMargins(dp(10),0,0,0);
+            row.addView(name,nameLp);
+
+            row.setOnClickListener(v->{callback.onChoose(item); if(dialogRef[0]!=null) dialogRef[0].dismiss();});
+            rows.addView(row,new LinearLayout.LayoutParams(-1,dp(52)));
+        }
         box.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("选择 APP").setView(box).setNegativeButton("关闭",null).create();
         dialogRef[0]=dialog;

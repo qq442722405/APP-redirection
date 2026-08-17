@@ -21,7 +21,6 @@ import org.json.*;
  * 创建 AlertDialog，避免部分车机 Android 12 ROM 点击“添加 APP”直接崩溃。
  */
 public class FloatingService extends Service {
-    private SimoVoiceBridge simoVoiceBridge;
     WindowManager wm;
     LinearLayout panel;
     WindowManager.LayoutParams lp;
@@ -47,8 +46,6 @@ public class FloatingService extends Service {
 
     @Override public void onCreate(){
         super.onCreate();
-        simoVoiceBridge = new SimoVoiceBridge(this);
-        simoVoiceBridge.start();
         wm=(WindowManager)getSystemService(WINDOW_SERVICE);
         if(Build.VERSION.SDK_INT>=23 && !Settings.canDrawOverlays(this)){
             stopSelf();
@@ -597,7 +594,6 @@ public class FloatingService extends Service {
     }
 
     @Override public void onDestroy(){
-        if (simoVoiceBridge != null) { try { simoVoiceBridge.stop(); } catch (Exception ignored) {} }
         closeOverlay();
         removePanel();
         super.onDestroy();

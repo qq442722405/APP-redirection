@@ -74,7 +74,6 @@
 
     <!-- 网络/通知/基础 -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- SIMO/VISO 语音桥接：车机私有服务使用 Binder/Intent，不要求录音权限。 -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
@@ -101,12 +100,6 @@
             <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_service_config" />
         </service>
-
-        <receiver android:name=".SimoVoiceReceiver" android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.VISO"/>
-            </intent-filter>
-        </receiver>
 
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>
