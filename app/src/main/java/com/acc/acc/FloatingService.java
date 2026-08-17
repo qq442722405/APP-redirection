@@ -21,6 +21,7 @@ import org.json.*;
  * 创建 AlertDialog，避免部分车机 Android 12 ROM 点击“添加 APP”直接崩溃。
  */
 public class FloatingService extends Service {
+    private SimoVoiceBridge simoVoiceBridge;
     WindowManager wm;
     LinearLayout panel;
     WindowManager.LayoutParams lp;
@@ -36,7 +37,7 @@ public class FloatingService extends Service {
     final int ACTION_BACK=1,ACTION_HOME=2,ACTION_MENU=3;
     Handler gestureHandler=new Handler(Looper.getMainLooper());
     Runnable longPressRunnable;
-    int touchDownX,touchDownY; long touchDownTime; boolean moved; int tapCount;
+    int touchDownX,touchDownY; long touchDownTime; boolean moved; int tapCount; int lastDragDx,lastDragDy;
     Runnable singleTapRunnable;
 
     View overlayView;
@@ -46,6 +47,8 @@ public class FloatingService extends Service {
 
     @Override public void onCreate(){
         super.onCreate();
+        simoVoiceBridge = new SimoVoiceBridge(this);
+        simoVoiceBridge.start();
         wm=(WindowManager)getSystemService(WINDOW_SERVICE);
         if(Build.VERSION.SDK_INT>=23 && !Settings.canDrawOverlays(this)){
             stopSelf();
@@ -237,21 +240,38 @@ public class FloatingService extends Service {
         v.setOnTouchListener((view,event)->{
             switch(event.getActionMasked()){
                 case MotionEvent.ACTION_DOWN:
-                    touchDownX=(int)event.getRawX(); touchDownY=(int)event.getRawY(); touchDownTime=System.currentTimeMillis(); moved=false;
+                    touchDownX=(int)event.getRawX(); touchDownY=(int)event.getRawY(); touchDownTime=System.currentTimeMillis(); moved=false; lastDragDx=0; lastDragDy=0;
                     if(longPressRunnable!=null)gestureHandler.removeCallbacks(longPressRunnable);
                     longPressRunnable=()->{ if(!moved)performConfiguredGesture("long"); };
                     gestureHandler.postDelayed(longPressRunnable,550);
                     return true;
                 case MotionEvent.ACTION_MOVE:
                     int dx=(int)event.getRawX()-touchDownX, dy=(int)event.getRawY()-touchDownY;
-                    if(Math.abs(dx)>24||Math.abs(dy)>24){moved=true; if(longPressRunnable!=null)gestureHandler.removeCallbacks(longPressRunnable);}
+                    if(Math.abs(dx)>24||Math.abs(dy)>24){
+                        moved=true;
+                        if(longPressRunnable!=null)gestureHandler.removeCallbacks(longPressRunnable);
+                        // 单图标模式下，拖动要真正跟手移动，而不是等松手后才移动。
+                        // 慢速移动优先视为拖动；快速大幅移动仍保留左右/上下滑动手势。
+                        if(!positionLocked && System.currentTimeMillis()-touchDownTime>300){
+                            movePanelBy(dx-(lastDragDx),dy-(lastDragDy));
+                            lastDragDx=dx; lastDragDy=dy;
+                        }
+                    }
                     return true;
                 case MotionEvent.ACTION_UP:
                     if(longPressRunnable!=null)gestureHandler.removeCallbacks(longPressRunnable);
                     int ux=(int)event.getRawX()-touchDownX, uy=(int)event.getRawY()-touchDownY;
+                    long touchDuration=System.currentTimeMillis()-touchDownTime;
                     if(Math.abs(ux)>70||Math.abs(uy)>70){
-                        if(Math.abs(ux)>=Math.abs(uy)) performConfiguredGesture(ux<0?"left":"right");
-                        else performConfiguredGesture(uy<0?"up":"down");
+                        String swipeKey=Math.abs(ux)>=Math.abs(uy)?(ux<0?"left":"right"):(uy<0?"up":"down");
+                        String configured=getSharedPreferences(MainActivity.PREF,0).getString("floating_gesture_"+swipeKey,"none");
+                        // 快速滑动且配置了对应功能时执行手势；否则当作拖动。
+                        if(touchDuration<=300 && !"none".equals(configured)){
+                            performConfiguredGesture(swipeKey);
+                        } else if(!positionLocked){
+                            movePanelBy(ux-lastDragDx,uy-lastDragDy);
+                        }
+                        lastDragDx=lastDragDy=0;
                         return true;
                     }
                     if(!moved){
@@ -264,9 +284,9 @@ public class FloatingService extends Service {
                             tapCount=0; performConfiguredGesture("double");
                         }
                     } else if(!positionLocked){
-                        // 非锁定状态下，小范围拖动移动单图标；明显滑动则执行手势功能。
-                        movePanelBy(ux,uy);
+                        movePanelBy(ux-lastDragDx,uy-lastDragDy);
                     }
+                    lastDragDx=lastDragDy=0;
                     return true;
             }
             return true;
@@ -405,8 +425,8 @@ public class FloatingService extends Service {
         overlayLp=new WindowManager.LayoutParams(dp(320),dp(330),overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.OPAQUE);
-        overlayLp.gravity=Gravity.TOP|Gravity.LEFT;
-        overlayLp.x=30; overlayLp.y=240;
+        overlayLp.gravity=Gravity.CENTER;
+        overlayLp.x=0; overlayLp.y=0;
         try{wm.addView(overlayView,overlayLp);}catch(Exception e){overlayView=null;}
     }
 
@@ -577,6 +597,7 @@ public class FloatingService extends Service {
     }
 
     @Override public void onDestroy(){
+        if (simoVoiceBridge != null) { try { simoVoiceBridge.stop(); } catch (Exception ignored) {} }
         closeOverlay();
         removePanel();
         super.onDestroy();
