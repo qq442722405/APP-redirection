@@ -1111,39 +1111,52 @@ public class MainActivity extends AppCompatActivity {
         box.addView(tabs,new LinearLayout.LayoutParams(-1,dp(46)));
 
         ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true); scroll.setVerticalScrollBarEnabled(true);
-        GridLayout grid=new GridLayout(this);
-        int columns=Math.min(8,Math.max(1,(int)(getRealScreenSize().x/getResources().getDisplayMetrics().density/uiScale()/112)));
-        grid.setColumnCount(columns); grid.setUseDefaultMargins(false);
-        scroll.addView(grid,new ScrollView.LayoutParams(-1,-2));
+        LinearLayout appRows=new LinearLayout(this);
+        appRows.setOrientation(LinearLayout.VERTICAL);
+        appRows.setGravity(Gravity.CENTER_HORIZONTAL);
+        scroll.addView(appRows,new ScrollView.LayoutParams(-1,-2));
         box.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
 
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("添加 APP").setView(box).setNegativeButton("关闭",null).create();
         Runnable refreshAppPicker=()->{
-            grid.removeAllViews(); String q=search.getText().toString().trim().toLowerCase(Locale.ROOT); int count=0;
-            int availableDp=Math.max(240,(int)(getRealScreenSize().x/getResources().getDisplayMetrics().density/uiScale())-28);
-            int tileW=Math.max(dp(104),dp(availableDp/Math.max(1,columns)));
-            int tileH=dp(124);
+            appRows.removeAllViews();
+            String q=search.getText().toString().trim().toLowerCase(Locale.ROOT);
+            int count=0;
+            int availableDp=Math.max(560,(int)(getRealScreenSize().x/getResources().getDisplayMetrics().density/uiScale())-28);
+            int tileDp=Math.max(104,Math.min(150,(availableDp-48)/5));
+            LinearLayout row=null;
+            int inRow=0;
             for(ApplicationInfo ai:list){
                 boolean system=(ai.flags & ApplicationInfo.FLAG_SYSTEM)!=0 || (ai.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)!=0;
                 if(selectedAppCategory[0]==1 && system) continue;
                 if(selectedAppCategory[0]==2 && !system) continue;
                 String name=pm.getApplicationLabel(ai).toString();
                 if(!q.isEmpty() && !name.toLowerCase(Locale.ROOT).contains(q) && !ai.packageName.toLowerCase(Locale.ROOT).contains(q)) continue;
+                if(inRow==0){
+                    row=new LinearLayout(this);
+                    row.setOrientation(LinearLayout.HORIZONTAL);
+                    row.setGravity(Gravity.CENTER);
+                    appRows.addView(row,new LinearLayout.LayoutParams(-1,dp(124)));
+                }
                 LinearLayout tile=new LinearLayout(this); tile.setOrientation(LinearLayout.VERTICAL); tile.setGravity(Gravity.CENTER);
                 tile.setPadding(dp(6),dp(6),dp(6),dp(6)); tile.setBackgroundResource(R.drawable.card);
                 ImageView icon=new ImageView(this); icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
                 try{icon.setImageDrawable(pm.getApplicationIcon(ai));}catch(Exception ignored){}
-                tile.addView(icon,new LinearLayout.LayoutParams(dp(64),dp(64)));
+                tile.addView(icon,new LinearLayout.LayoutParams(dp(58),dp(58)));
                 TextView nv=text(name,11); nv.setGravity(Gravity.CENTER); nv.setMaxLines(2); nv.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                tile.addView(nv,new LinearLayout.LayoutParams(Math.max(dp(96),tileW-dp(12)),dp(38)));
+                tile.addView(nv,new LinearLayout.LayoutParams(dp(tileDp-12),dp(38)));
                 tile.setOnClickListener(v->{
                     boolean exists=false; for(AppItem a:apps) if(a.pkg.equals(ai.packageName)){exists=true;break;}
                     if(!exists){apps.add(new AppItem(ai.packageName,name));saveApps();}
                     selectedPackage=ai.packageName; selectedName=name; refresh(); dialog.dismiss();
                 });
-                GridLayout.LayoutParams lp=new GridLayout.LayoutParams(); lp.width=tileW; lp.height=tileH; lp.setMargins(dp(4),dp(4),dp(4),dp(4)); grid.addView(tile,lp); count++;
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(tileDp),dp(112));
+                lp.setMargins(dp(4),dp(4),dp(4),dp(4));
+                row.addView(tile,lp);
+                inRow++; count++;
+                if(inRow==5) inRow=0;
             }
-            if(count==0){ TextView empty=text("没有找到可启动的 APP",14); empty.setGravity(Gravity.CENTER); GridLayout.LayoutParams ep=new GridLayout.LayoutParams(); ep.width=Math.max(dp(300),getRealScreenSize().x-dp(40));ep.height=dp(100);grid.addView(empty,ep); }
+            if(count==0){ TextView empty=text("没有找到可启动的 APP",14); empty.setGravity(Gravity.CENTER); appRows.addView(empty,new LinearLayout.LayoutParams(-1,dp(100))); }
         };
         refreshHolder[0]=refreshAppPicker;
         search.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int b,int c){} public void onTextChanged(CharSequence s,int a,int b,int c){refreshHolder[0].run();} public void afterTextChanged(android.text.Editable e){}});
@@ -1230,7 +1243,7 @@ public class MainActivity extends AppCompatActivity {
         actionRow.addView(confirm,new LinearLayout.LayoutParams(0,dp(46),1));
         controls.addView(actionRow,new LinearLayout.LayoutParams(-1,dp(54)));
 
-        FrameLayout.LayoutParams cp=new FrameLayout.LayoutParams(dp(330),dp(210),Gravity.CENTER);
+        FrameLayout.LayoutParams cp=new FrameLayout.LayoutParams(dp(330),dp(300),Gravity.CENTER);
         picker.addView(controls,cp);
 
         android.graphics.Point screen=getRealScreenSize();
@@ -1255,6 +1268,27 @@ public class MainActivity extends AppCompatActivity {
         lp.gravity=Gravity.TOP|Gravity.LEFT;
         lp.x=Math.max(0,currentX); lp.y=Math.max(0,currentY);
         positionInfo.setText("上距离："+lp.y+" px    左距离："+lp.x+" px");
+
+        // 上下左右精准移动，每次 1px。拖动仍然可以进行大范围定位。
+        LinearLayout moveRow=new LinearLayout(this);
+        moveRow.setGravity(Gravity.CENTER);
+        Button left=button("←"), up=button("↑"), down=button("↓"), right=button("→");
+        int moveSize=50;
+        moveRow.addView(left,new LinearLayout.LayoutParams(dp(moveSize),dp(44)));
+        moveRow.addView(up,new LinearLayout.LayoutParams(dp(moveSize),dp(44)));
+        moveRow.addView(down,new LinearLayout.LayoutParams(dp(moveSize),dp(44)));
+        moveRow.addView(right,new LinearLayout.LayoutParams(dp(moveSize),dp(44)));
+        controls.addView(moveRow,new LinearLayout.LayoutParams(-1,dp(52)));
+        final Runnable updatePosition=()->{
+            lp.x=Math.max(0,Math.min(lp.x,Math.max(0,screen.x-lp.width)));
+            lp.y=Math.max(0,Math.min(lp.y,Math.max(0,screen.y-lp.height)));
+            try{pickerWm.updateViewLayout(picker,lp);}catch(Exception ignored){}
+            positionInfo.setText("上距离："+lp.y+" px    左距离："+lp.x+" px");
+        };
+        left.setOnClickListener(v->{lp.x--;updatePosition.run();});
+        right.setOnClickListener(v->{lp.x++;updatePosition.run();});
+        up.setOnClickListener(v->{lp.y--;updatePosition.run();});
+        down.setOnClickListener(v->{lp.y++;updatePosition.run();});
 
         saveSize.setOnClickListener(v->{
             int w=Math.max(180,number(widthInput,lp.width));

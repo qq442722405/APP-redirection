@@ -482,11 +482,13 @@ public class FloatingService extends Service {
         box.addView(search,new LinearLayout.LayoutParams(-1,dp(48)));
 
         ScrollView sv=new ScrollView(this);
-        GridLayout rows=new GridLayout(this);
+        LinearLayout rows=new LinearLayout(this);
+        rows.setOrientation(LinearLayout.VERTICAL);
+        rows.setGravity(Gravity.CENTER_HORIZONTAL);
         float density=getResources().getDisplayMetrics().density;
-        int availableDp=Math.max(300,(int)(getResources().getDisplayMetrics().widthPixels/density)-28);
-        int columns=Math.min(8,Math.max(2,availableDp/118));
-        rows.setColumnCount(columns);
+        int screenDp=(int)(getResources().getDisplayMetrics().widthPixels/density);
+        int availableDp=Math.max(280,Math.min(560,screenDp-28));
+        int columns=Math.max(3,Math.min(6,availableDp/96));
         sv.addView(rows,new ScrollView.LayoutParams(-1,-2));
         box.addView(sv,new LinearLayout.LayoutParams(-1,0,1));
 
@@ -494,17 +496,24 @@ public class FloatingService extends Service {
         ArrayList<ApplicationInfo> list=new ArrayList<>();
         try{
             for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){
-                if(pm.getLaunchIntentForPackage(ai.packageName)==null)continue;
+                // 显示所有已安装应用，包括系统 APP、服务型 APP 和本 APP。
                 list.add(ai);
             }
-            Collections.sort(list,(a,b)->String.valueOf(pm.getApplicationLabel(a)).compareToIgnoreCase(String.valueOf(pm.getApplicationLabel(b))));
+            Collections.sort(list,(a,b)->{
+                String an=String.valueOf(pm.getApplicationLabel(a));
+                String bn=String.valueOf(pm.getApplicationLabel(b));
+                int c=an.compareToIgnoreCase(bn);
+                return c!=0?c:a.packageName.compareToIgnoreCase(b.packageName);
+            });
         }catch(Exception ignored){}
 
         Runnable refresh=()->{
             rows.removeAllViews();
             String q=search.getText().toString().trim().toLowerCase(Locale.ROOT);
             int count=0;
-            int tileW=Math.max(dp(108),dp(availableDp/Math.max(1,columns)));
+            int tileW=Math.max(dp(88),dp(Math.max(88,(availableDp-16)/Math.max(1,columns))));
+            LinearLayout row=null;
+            int inRow=0;
             for(ApplicationInfo ai:list){
                 String name;
                 try{name=pm.getApplicationLabel(ai).toString();}catch(Exception e){name=ai.packageName;}
@@ -520,10 +529,7 @@ public class FloatingService extends Service {
                 nameView.setText(name); nameView.setTextColor(Color.WHITE); nameView.setTextSize(11);
                 nameView.setGravity(Gravity.CENTER); nameView.setMaxLines(2); nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);
                 tile.addView(nameView,new LinearLayout.LayoutParams(-1,dp(34)));
-                TextView state=new TextView(this);
-                state.setText(floatingPkgs.contains(ai.packageName)?"已添加":"添加"); state.setTextColor(0xFFB0BEC5); state.setGravity(Gravity.CENTER);
-                tile.addView(state,new LinearLayout.LayoutParams(-1,dp(22)));
-
+                // 选择器只显示 APP 图标和名称，避免列表高度浪费。
                 final String selectedPkg=ai.packageName, selectedAppName=name;
                 tile.setOnClickListener(v->{
                     try{
@@ -531,14 +537,21 @@ public class FloatingService extends Service {
                         closeOverlay(); showPanel();
                     }catch(Exception e){Toast.makeText(this,"添加 APP 失败",Toast.LENGTH_SHORT).show();}
                 });
-                GridLayout.LayoutParams glp=new GridLayout.LayoutParams();
-                glp.width=tileW; glp.height=dp(114); glp.setMargins(dp(3),dp(3),dp(3),dp(3));
-                rows.addView(tile,glp);
-                count++;
+                if(inRow==0){
+                    row=new LinearLayout(this);
+                    row.setOrientation(LinearLayout.HORIZONTAL);
+                    row.setGravity(Gravity.CENTER);
+                    rows.addView(row,new LinearLayout.LayoutParams(-1,dp(96)));
+                }
+                LinearLayout.LayoutParams glp=new LinearLayout.LayoutParams(tileW,dp(88));
+                glp.setMargins(dp(3),dp(3),dp(3),dp(3));
+                row.addView(tile,glp);
+                inRow++; count++;
+                if(inRow>=columns) inRow=0;
             }
             if(count==0){
-                TextView empty=new TextView(this); empty.setText("没有找到可启动的 APP"); empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER);
-                GridLayout.LayoutParams ep=new GridLayout.LayoutParams(); ep.width=Math.max(dp(300),dp(availableDp)); ep.height=dp(80); rows.addView(empty,ep);
+                TextView empty=new TextView(this); empty.setText("没有找到 APP"); empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER);
+                rows.addView(empty,new LinearLayout.LayoutParams(-1,dp(80)));
             }
         };
 
@@ -549,7 +562,7 @@ public class FloatingService extends Service {
         });
 
         overlayView=root;
-        overlayLp=new WindowManager.LayoutParams(dp(420),dp(560),overlayType(),
+        overlayLp=new WindowManager.LayoutParams(dp(Math.min(600,availableDp+20)),dp(560),overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.OPAQUE);
         overlayLp.gravity=Gravity.CENTER;
