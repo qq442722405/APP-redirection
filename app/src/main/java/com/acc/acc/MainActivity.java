@@ -210,8 +210,8 @@ public class MainActivity extends AppCompatActivity {
         prefs=getSharedPreferences(PREF,0);
         // 新安装默认界面参数；如果用户已经手动设置过，则保留用户设置。
         SharedPreferences.Editor defaults=prefs.edit();
-        if(!prefs.contains("font_scale")) defaults.putFloat("font_scale",1.50f);
-        if(!prefs.contains("ui_scale")) defaults.putFloat("ui_scale",1.40f);
+        if(!prefs.contains("font_scale")) defaults.putFloat("font_scale",1.00f);
+        if(!prefs.contains("ui_scale")) defaults.putFloat("ui_scale",1.00f);
         if(!prefs.contains("touch_offset_top_px")) defaults.putInt("touch_offset_top_px",50);
         if(!prefs.contains("touch_offset_left_px")) defaults.putInt("touch_offset_left_px",50);
         defaults.apply();
@@ -374,24 +374,25 @@ public class MainActivity extends AppCompatActivity {
         presetHeader.setOrientation(LinearLayout.HORIZONTAL);
         presetHeader.setGravity(Gravity.CENTER_VERTICAL);
         TextView addPreset=plusButton();
+        addPreset.setTextSize(42);
         addPreset.setContentDescription("新建窗口预设");
         addPreset.setOnClickListener(v->editPreset(-1));
-        presetHeader.addView(addPreset,new LinearLayout.LayoutParams(dp(52),dp(44)));
-        TextView pt=text("窗口预设",17); pt.setTypeface(null,1);
-        presetHeader.addView(pt,new LinearLayout.LayoutParams(-2,dp(44)));
+        presetHeader.addView(addPreset,new LinearLayout.LayoutParams(dp(60),dp(60)));
+        TextView pt=text("窗口预设",51); pt.setTypeface(null,1);
+        presetHeader.addView(pt,new LinearLayout.LayoutParams(-2,dp(60)));
 
         // 直接通过悬浮选位器创建/修改窗口预设：拖动红框到目标位置，
         // 在红框中央填写宽高，确认后自动回填到“新建窗口预设”。
         if(hasOverlayPermission()){
             Button floatingPick=button("悬浮窗选位");
-            floatingPick.setTextSize(11);
+            floatingPick.setTextSize(24);
             floatingPick.setContentDescription("悬浮窗选位");
             floatingPick.setOnClickListener(v->showFloatingPresetPicker());
-            LinearLayout.LayoutParams pickLp=new LinearLayout.LayoutParams(dp(92),dp(38));
+            LinearLayout.LayoutParams pickLp=new LinearLayout.LayoutParams(dp(92),dp(44));
             pickLp.setMargins(dp(18),0,0,0);
             presetHeader.addView(floatingPick,pickLp);
         }
-        root.addView(presetHeader,new LinearLayout.LayoutParams(-1,dp(44)));
+        root.addView(presetHeader,new LinearLayout.LayoutParams(-1,dp(64)));
 
         HorizontalScrollView presetScroll=new HorizontalScrollView(this);
         presetScroll.setFillViewport(false);
@@ -405,18 +406,19 @@ public class MainActivity extends AppCompatActivity {
         appHeader.setOrientation(LinearLayout.HORIZONTAL);
         appHeader.setGravity(Gravity.CENTER_VERTICAL);
         TextView addApp=plusButton();
+        addApp.setTextSize(42);
         addApp.setContentDescription("添加 APP");
         addApp.setOnClickListener(v->chooseApp());
-        appHeader.addView(addApp,new LinearLayout.LayoutParams(dp(52),dp(44)));
-        TextView at=text("已添加 APP",17); at.setTypeface(null,1);
-        appHeader.addView(at,new LinearLayout.LayoutParams(0,dp(44),1));
-        root.addView(appHeader,new LinearLayout.LayoutParams(-1,dp(44)));
+        appHeader.addView(addApp,new LinearLayout.LayoutParams(dp(60),dp(60)));
+        TextView at=text("已添加 APP",51); at.setTypeface(null,1);
+        appHeader.addView(at,new LinearLayout.LayoutParams(0,dp(60),1));
+        root.addView(appHeader,new LinearLayout.LayoutParams(-1,dp(64)));
 
         HorizontalScrollView appScroll=new HorizontalScrollView(this);
         appScroll.setFillViewport(true);
         appScroll.setHorizontalScrollBarEnabled(false);
         appGrid=new LinearLayout(this);
-        appGrid.setOrientation(LinearLayout.HORIZONTAL);
+        appGrid.setOrientation(LinearLayout.VERTICAL);
         appScroll.addView(appGrid,new HorizontalScrollView.LayoutParams(-2,-1));
         root.addView(appScroll,new LinearLayout.LayoutParams(-1,0,1));
 
@@ -424,32 +426,33 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout footer=new LinearLayout(this);
         footer.setOrientation(LinearLayout.HORIZONTAL);
         footer.setGravity(Gravity.CENTER_VERTICAL);
-        info=text("",12);
+        info=text("",36);
         info.setTextColor(Color.LTGRAY);
         info.setPadding(dp(8),dp(4),dp(4),dp(4));
         footer.addView(info,new LinearLayout.LayoutParams(0,dp(62),1));
-
-        TextView screenInfo=text("",10);
-        screenInfo.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
-        screenInfo.setTextColor(Color.WHITE);
-        screenInfo.setPadding(dp(6),0,dp(6),0);
-        screenInfo.setMaxLines(4);
-        footer.addView(screenInfo,new LinearLayout.LayoutParams(0,dp(62),1));
-        updateScreenInfo(screenInfo);
 
         TextView note=plusButton();
         note.setText("📝");
         note.setTextSize(22);
         note.setContentDescription("记事本");
         note.setOnClickListener(v->showNotes());
-        footer.addView(note,new LinearLayout.LayoutParams(dp(58),dp(58)));
+        // 右下角信息区：分辨率/包名/版本固定紧贴记事本左侧。
+        TextView screenInfo=text("",30);
+        screenInfo.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
+        screenInfo.setTextColor(Color.WHITE);
+        screenInfo.setPadding(dp(6),0,dp(12),0);
+        screenInfo.setMaxLines(4);
+        footer.addView(screenInfo,new LinearLayout.LayoutParams(dp(360),dp(68)));
+        updateScreenInfo(screenInfo);
+
+        footer.addView(note,new LinearLayout.LayoutParams(dp(68),dp(68)));
 
         TextView settings=plusButton();
         settings.setText("⚙");
         settings.setTextSize(24);
         settings.setContentDescription("设置");
         settings.setOnClickListener(v->showSettingsMenu());
-        footer.addView(settings,new LinearLayout.LayoutParams(dp(58),dp(58)));
+        footer.addView(settings,new LinearLayout.LayoutParams(dp(68),dp(68)));
         root.addView(footer,new LinearLayout.LayoutParams(-1,dp(100)));
         setContentView(frame);
         refresh();
@@ -473,13 +476,13 @@ public class MainActivity extends AppCompatActivity {
                 card.setPadding(dp(8),0,dp(8),0);
                 card.setBackgroundResource(R.drawable.card);
 
-                TextView title=text(p.name,13);
+                TextView title=text(p.name,39);
                 title.setGravity(Gravity.CENTER);
                 title.setMaxLines(1);
                 title.setEllipsize(android.text.TextUtils.TruncateAt.END);
                 card.addView(title,new LinearLayout.LayoutParams(0,dp(30),1));
 
-                TextView size=text(p.w+" × "+p.h,10);
+                TextView size=text(p.w+" × "+p.h,30);
                 size.setTextColor(Color.LTGRAY);
                 size.setGravity(Gravity.CENTER);
                 card.addView(size,new LinearLayout.LayoutParams(dp(65),dp(30)));
@@ -500,7 +503,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
             if(presets.isEmpty()){
-                TextView empty=text("点击左侧“+”新建窗口预设",13);
+                TextView empty=text("点击左侧“+”新建窗口预设",39);
                 empty.setTextColor(Color.GRAY);
                 empty.setGravity(Gravity.CENTER);
                 presetRow.addView(empty,new LinearLayout.LayoutParams(dp(200),dp(180)));
@@ -510,46 +513,51 @@ public class MainActivity extends AppCompatActivity {
         if(appGrid!=null){
             appGrid.removeAllViews();
             if(apps.isEmpty()){
-                TextView empty=text("点击“+”添加 APP",14);
+                TextView empty=text("点击“+”添加 APP",42);
                 empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER);
                 appGrid.addView(empty,new LinearLayout.LayoutParams(dp(200),dp(180)));
-                return;
-            }
-            PackageManager pm=getPackageManager();
-            for(int index=0;index<apps.size();index++){
-                final int itemIndex=index;
-                AppItem item=apps.get(index);
+            }else{
+                PackageManager pm=getPackageManager();
+                LinearLayout row=null;
+                int inRow=0;
+                for(int index=0;index<apps.size();index++){
+                    final int itemIndex=index;
+                    AppItem item=apps.get(index);
+                    if(inRow==0){
+                        row=new LinearLayout(this);
+                        row.setOrientation(LinearLayout.HORIZONTAL);
+                        row.setGravity(Gravity.CENTER_VERTICAL);
+                        appGrid.addView(row,new LinearLayout.LayoutParams(-1,dp(188)));
+                    }
+                    LinearLayout tile=new LinearLayout(this);
+                    tile.setOrientation(LinearLayout.VERTICAL);
+                    tile.setGravity(Gravity.CENTER);
+                    tile.setPadding(dp(8),dp(8),dp(8),dp(8));
+                    tile.setBackgroundResource(item.pkg.equals(selectedPackage)?R.drawable.card_selected:R.drawable.card);
 
-                // APP 选框固定为 200×30dp，多个 APP 横向排列，超出屏幕左右滑动。
-                LinearLayout tile=new LinearLayout(this);
-                tile.setOrientation(LinearLayout.HORIZONTAL);
-                tile.setGravity(Gravity.CENTER_VERTICAL);
-                tile.setPadding(dp(6),0,dp(6),0);
-                tile.setBackgroundResource(item.pkg.equals(selectedPackage)?R.drawable.card_selected:R.drawable.card);
+                    ImageView icon=new ImageView(this);
+                    icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+                    try{icon.setImageDrawable(pm.getApplicationIcon(item.pkg));}catch(Exception ignored){}
+                    tile.addView(icon,new LinearLayout.LayoutParams(dp(82),dp(82)));
 
-                ImageView icon=new ImageView(this);
-                icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                try{icon.setImageDrawable(pm.getApplicationIcon(item.pkg));}catch(Exception ignored){}
-                tile.addView(icon,new LinearLayout.LayoutParams(dp(24),dp(24)));
+                    TextView name=text(item.name,36);
+                    name.setGravity(Gravity.CENTER);
+                    name.setMaxLines(2);
+                    name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                    tile.addView(name,new LinearLayout.LayoutParams(-1,dp(66)));
 
-                TextView name=text(item.name,12);
-                name.setGravity(Gravity.CENTER_VERTICAL);
-                name.setMaxLines(1);
-                name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                LinearLayout.LayoutParams nameLp=new LinearLayout.LayoutParams(0,dp(30),1);
-                nameLp.setMargins(dp(5),0,dp(5),0);
-                tile.addView(name,nameLp);
-
-                tile.setOnClickListener(v->{selectedPackage=item.pkg;selectedName=item.name;info.setText("当前 APP："+item.name);refresh();});
-                tile.setOnLongClickListener(v->{
-                    new AlertDialog.Builder(this).setTitle(item.name)
-                        .setItems(new String[]{"删除 APP"},(d,w)->{if(w==0){if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;}apps.remove(itemIndex);saveApps();refresh();}}).show();
-                    return true;
-                });
-
-                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(200),dp(180));
-                lp.setMargins(dp(4),dp(4),dp(4),dp(4));
-                appGrid.addView(tile,lp);
+                    tile.setOnClickListener(v->{selectedPackage=item.pkg;selectedName=item.name;info.setText("当前 APP："+item.name);refresh();});
+                    tile.setOnLongClickListener(v->{
+                        new AlertDialog.Builder(this).setTitle(item.name)
+                            .setItems(new String[]{"删除 APP"},(d,w)->{if(w==0){if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;}apps.remove(itemIndex);saveApps();refresh();}}).show();
+                        return true;
+                    });
+                    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(200),dp(180));
+                    lp.setMargins(dp(4),dp(4),dp(4),dp(4));
+                    row.addView(tile,lp);
+                    inRow++;
+                    if(inRow>=Math.max(1,Math.min(4, (int)(getRealScreenSize().x/(float)Math.max(1,dp(208)))))) inRow=0;
+                }
             }
         }
     }
@@ -906,10 +914,10 @@ public class MainActivity extends AppCompatActivity {
         actionBar.setGravity(Gravity.CENTER);
         actionBar.setPadding(dp(4),dp(8),dp(4),0);
 
+        Button back=button("返回");
         Button save=button("保存");
-        LinearLayout.LayoutParams saveLp=new LinearLayout.LayoutParams(-1,dp(50));
-        saveLp.setMargins(dp(4),0,dp(4),0);
-        actionBar.addView(save,saveLp);
+        actionBar.addView(back,new LinearLayout.LayoutParams(0,dp(50),1));
+        actionBar.addView(save,new LinearLayout.LayoutParams(0,dp(50),1));
         root.addView(actionBar,new LinearLayout.LayoutParams(-1,dp(64)));
 
         AlertDialog dialog=new AlertDialog.Builder(this)
@@ -917,6 +925,7 @@ public class MainActivity extends AppCompatActivity {
                 .setView(root)
                 .create();
 
+        back.setOnClickListener(v->dialog.dismiss());
         save.setOnClickListener(v->{
             int sp=number(spacing,6), ic=number(icon,44), op=number(opacity,80);
             if(sp<0||sp>80||ic<20||ic>200||op<0||op>100){
@@ -1113,7 +1122,14 @@ public class MainActivity extends AppCompatActivity {
         hint.setPadding(0,dp(4),0,dp(6));
         box.addView(hint,new LinearLayout.LayoutParams(-1,dp(38)));
 
+        LinearLayout actionBar=new LinearLayout(this);
+        actionBar.setOrientation(LinearLayout.HORIZONTAL);
+        actionBar.setGravity(Gravity.CENTER_VERTICAL);
+        Button back=button("返回");
         Button save=button("保存");
+        actionBar.addView(back,new LinearLayout.LayoutParams(0,dp(50),1));
+        actionBar.addView(save,new LinearLayout.LayoutParams(0,dp(50),1));
+        box.addView(actionBar,new LinearLayout.LayoutParams(-1,dp(58)));
         save.setOnClickListener(v->{
             try{
                 int delay=Integer.parseInt(bootDelay.getText().toString().trim());
@@ -1135,8 +1151,8 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this,"请输入有效数值：延迟0-3600秒，字体50-300%，界面50-300%",Toast.LENGTH_LONG).show();
             }
         });
-        box.addView(save,new LinearLayout.LayoutParams(-1,dp(50)));
         dialogRef[0]=new AlertDialog.Builder(this).setTitle("界面选项").setView(box).create();
+        back.setOnClickListener(v->dialogRef[0].dismiss());
         showFixed1000x800(dialogRef[0]);
     }
 
@@ -1599,11 +1615,13 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         actionRow.addView(checkButton,new LinearLayout.LayoutParams(-1,dp(48)));
-        diagBox.addView(actionRow,new LinearLayout.LayoutParams(-1,dp(108)));
+        Button back=button("返回");
+        actionRow.addView(back,new LinearLayout.LayoutParams(-1,dp(48)));
+        diagBox.addView(actionRow,new LinearLayout.LayoutParams(-1,dp(158)));
 
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("权限与诊断")
-                .setView(diagBox)
-                .setNegativeButton("关闭",null).create();
+                .setView(diagBox).create();
+        back.setOnClickListener(v->dialog.dismiss());
         showFixed1000x800(dialog);
     }
 
@@ -1778,16 +1796,23 @@ public class MainActivity extends AppCompatActivity {
         add.setOnClickListener(v->showAddAutoTaskDialog(tasks,refreshTasks[0]));
         refreshTasks[0].run();
 
+        LinearLayout actionBar=new LinearLayout(this);
+        actionBar.setOrientation(LinearLayout.HORIZONTAL);
+        actionBar.setGravity(Gravity.CENTER_VERTICAL);
+        Button back=button("返回");
+        Button save=button("保存");
+        actionBar.addView(back,new LinearLayout.LayoutParams(0,dp(50),1));
+        actionBar.addView(save,new LinearLayout.LayoutParams(0,dp(50),1));
+        box.addView(actionBar,new LinearLayout.LayoutParams(-1,dp(58)));
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("自动启动项目")
-                .setView(box).setPositiveButton("保存",null).create();
-        dialog.setOnShowListener(x->{
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
-                int sec=Math.max(1,number(interval,1));
-                prefs.edit().putString("auto_start_items",tasks[0].toString())
-                        .putInt("auto_start_interval",sec).putBoolean("auto_start_enabled",taskSwitch.isChecked()).apply();
-                Toast.makeText(this,"自动启动项目已保存",Toast.LENGTH_SHORT).show();
-                dialog.dismiss();
-            });
+                .setView(box).create();
+        back.setOnClickListener(v->dialog.dismiss());
+        save.setOnClickListener(v->{
+            int sec=Math.max(1,number(interval,1));
+            prefs.edit().putString("auto_start_items",tasks[0].toString())
+                    .putInt("auto_start_interval",sec).putBoolean("auto_start_enabled",taskSwitch.isChecked()).apply();
+            Toast.makeText(this,"自动启动项目已保存",Toast.LENGTH_SHORT).show();
+            dialog.dismiss();
         });
         showFixed1000x800(dialog);
     }

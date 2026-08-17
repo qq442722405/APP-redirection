@@ -350,15 +350,13 @@ public class FloatingService extends Service {
         if(panel==null)return;
         while(panel.getChildCount()>2)panel.removeViewAt(2);
 
-        // APP 只显示图标，不显示 APP 名称。
+        // 桌面悬浮窗上的 APP 按钮只显示名称第一个字/字母，不显示真实图标。
         for(int i=0;i<floatingPkgs.size();i++){
             final String pkg=floatingPkgs.get(i);
             final String displayName=(i<floatingNames.size()?floatingNames.get(i):pkg);
-            ImageButton b=iconButton(android.R.drawable.sym_def_app_icon);
-            // APP 图标必须保持原始彩色；iconButton 默认的白色 ColorFilter 只用于系统按钮。
-            b.clearColorFilter();
-            try{b.setImageDrawable(getPackageManager().getApplicationIcon(pkg));}catch(Exception ignored){}
-            b.setContentDescription(displayName);
+            TextView b=baseButton(displayName==null||displayName.trim().isEmpty()?"A":displayName.trim().substring(0,1).toUpperCase(Locale.ROOT));
+            b.setTextSize(Math.max(12,Math.min(28,iconSizePx*0.48f)));
+            b.setGravity(Gravity.CENTER);
             b.setOnClickListener(v->{
                 Intent in=getPackageManager().getLaunchIntentForPackage(pkg);
                 if(in!=null){
