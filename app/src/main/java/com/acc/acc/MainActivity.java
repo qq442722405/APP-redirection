@@ -31,7 +31,6 @@ public class MainActivity extends AppCompatActivity {
     SharedPreferences prefs;
     LinearLayout presetRow, appGrid;
     TextView info;
-    Button floatingPickButton;
     String selectedPackage=null;
     String selectedName=null;
 
@@ -187,6 +186,13 @@ public class MainActivity extends AppCompatActivity {
     @Override protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
         prefs=getSharedPreferences(PREF,0);
+        // 新安装默认界面参数；如果用户已经手动设置过，则保留用户设置。
+        SharedPreferences.Editor defaults=prefs.edit();
+        if(!prefs.contains("font_scale")) defaults.putFloat("font_scale",1.50f);
+        if(!prefs.contains("ui_scale")) defaults.putFloat("ui_scale",1.40f);
+        if(!prefs.contains("touch_offset_top_px")) defaults.putInt("touch_offset_top_px",50);
+        if(!prefs.contains("touch_offset_left_px")) defaults.putInt("touch_offset_left_px",50);
+        defaults.apply();
         loadData();
         buildUI();
         requestRuntimePermissions();
@@ -305,18 +311,6 @@ public class MainActivity extends AppCompatActivity {
         prefs.edit().putString(PRESETS,a.toString()).apply();
     }
 
-    @Override protected void onResume(){
-        super.onResume();
-        refreshFloatingPermissionVisibility();
-    }
-
-    void refreshFloatingPermissionVisibility(){
-        boolean allowed=hasOverlayPermission();
-        if(floatingPickButton!=null){
-            floatingPickButton.setVisibility(allowed?View.VISIBLE:View.GONE);
-        }
-    }
-
     void buildUI(){
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
@@ -354,12 +348,11 @@ public class MainActivity extends AppCompatActivity {
 
         // 直接通过悬浮选位器创建/修改窗口预设：拖动红框到目标位置，
         // 在红框中央填写宽高，确认后自动回填到“新建窗口预设”。
-        floatingPickButton=button("悬浮窗选位");
-        floatingPickButton.setTextSize(12);
-        floatingPickButton.setContentDescription("悬浮窗选位");
-        floatingPickButton.setOnClickListener(v->showFloatingPresetPicker());
-        floatingPickButton.setVisibility(hasOverlayPermission()?View.VISIBLE:View.GONE);
-        presetHeader.addView(floatingPickButton,new LinearLayout.LayoutParams(dp(120),dp(44)));
+        Button floatingPick=button("悬浮窗选位");
+        floatingPick.setTextSize(12);
+        floatingPick.setContentDescription("悬浮窗选位");
+        floatingPick.setOnClickListener(v->showFloatingPresetPicker());
+        presetHeader.addView(floatingPick,new LinearLayout.LayoutParams(dp(120),dp(44)));
         root.addView(presetHeader,new LinearLayout.LayoutParams(-1,dp(44)));
 
         ScrollView presetScroll=new ScrollView(this);
@@ -398,10 +391,10 @@ public class MainActivity extends AppCompatActivity {
         footer.addView(info,new LinearLayout.LayoutParams(0,dp(62),1));
 
         TextView screenInfo=text("",10);
-        screenInfo.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
+        screenInfo.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
         screenInfo.setTextColor(Color.WHITE);
         screenInfo.setPadding(dp(6),0,dp(6),0);
-        screenInfo.setMaxLines(5);
+        screenInfo.setMaxLines(4);
         footer.addView(screenInfo,new LinearLayout.LayoutParams(dp(720),dp(96)));
         updateScreenInfo(screenInfo);
 
@@ -487,7 +480,7 @@ public class MainActivity extends AppCompatActivity {
             float density=getResources().getDisplayMetrics().density;
             int availableDp=Math.max(240,(int)(getRealScreenSize().x/density/uiScale())-16);
             int minTileDp=108;
-            int columns=Math.max(1,availableDp/minTileDp);
+            int columns=Math.min(8,Math.max(1,availableDp/minTileDp));
             int tileDp=Math.max(minTileDp,availableDp/columns);
             for(int base=0;base<apps.size();base+=columns){
                 LinearLayout row=new LinearLayout(this);
@@ -579,11 +572,10 @@ public class MainActivity extends AppCompatActivity {
         }catch(Exception ignored){}
 
         view.setText(
-                "分辨率：" + rs.x + " × " + rs.y + "\n"
-                + "包名：" + packageName + "\n"
-                + "签名：" + signature + "\n"
-                + "版本：" + versionCode + "\n"
-                + "versionName：" + versionName
+                "分辨率 " + rs.x + " × " + rs.y + "    DPI " + dm.densityDpi + "\n"
+                + "包名 " + packageName + "\n"
+                + "签名 " + signature + "\n"
+                + "版本 " + versionName + "    versionCode " + versionCode
         );
     }
 
@@ -716,12 +708,6 @@ public class MainActivity extends AppCompatActivity {
     void showDialogBelowTop(AlertDialog dialog){
         if(dialog==null) return;
         dialog.show();
-        try{
-            GradientDrawable bg=new GradientDrawable();
-            bg.setColor(0xF51A1A1A);
-            bg.setCornerRadius(dp(22));
-            dialog.getWindow().setBackgroundDrawable(bg);
-        }catch(Exception ignored){}
         styleDialogActionButtons(dialog);
         placeDialogBelowTop(dialog);
     }
@@ -752,19 +738,17 @@ public class MainActivity extends AppCompatActivity {
         autoButton.setOnClickListener(v->showAutoStartEditor());
         box.addView(autoButton,new LinearLayout.LayoutParams(-1,dp(52)));
 
-        if(hasOverlayPermission()){
-            Button floatSettings=button("悬浮窗口设置  ›");
-            floatSettings.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
-            floatSettings.setPadding(dp(14),0,dp(14),0);
-            floatSettings.setOnClickListener(v->showFloatingWindowSettingsDialog());
-            box.addView(floatSettings,new LinearLayout.LayoutParams(-1,dp(52)));
-        }
+        Button floatSettings=button("悬浮窗口设置  ›");
+        floatSettings.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+        floatSettings.setPadding(dp(14),0,dp(14),0);
+        floatSettings.setOnClickListener(v->showFloatingWindowSettingsDialog());
+        box.addView(floatSettings,new LinearLayout.LayoutParams(-1,dp(52)));
 
-        Button permissions=button("权限与诊断  ›");
+        Button permissions=button("权限与诊断");
         permissions.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
         permissions.setPadding(dp(14),0,dp(14),0);
         permissions.setOnClickListener(v->{if(settingsDialog[0]!=null)settingsDialog[0].dismiss();showScreenDiagnostics();});
-        box.addView(permissions,new LinearLayout.LayoutParams(-1,dp(52)));
+        box.addView(permissions,new LinearLayout.LayoutParams(-1,dp(48)));
         settingsDialog[0]=new AlertDialog.Builder(this).setTitle("设置").setView(box).setNegativeButton("关闭",null).create();
         showDialogBelowTop(settingsDialog[0]);
     }
@@ -1101,7 +1085,6 @@ public class MainActivity extends AppCompatActivity {
         PackageManager pm=getPackageManager();
         ArrayList<ApplicationInfo> list=new ArrayList<>();
         for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){
-            if(ai.packageName.equals(getPackageName())) continue;
             if(pm.getLaunchIntentForPackage(ai.packageName)==null) continue;
             list.add(ai);
         }
@@ -1129,7 +1112,7 @@ public class MainActivity extends AppCompatActivity {
 
         ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true); scroll.setVerticalScrollBarEnabled(true);
         GridLayout grid=new GridLayout(this);
-        int columns=Math.max(1,(int)(getRealScreenSize().x/getResources().getDisplayMetrics().density/uiScale()/112));
+        int columns=Math.min(8,Math.max(1,(int)(getRealScreenSize().x/getResources().getDisplayMetrics().density/uiScale()/112)));
         grid.setColumnCount(columns); grid.setUseDefaultMargins(false);
         scroll.addView(grid,new ScrollView.LayoutParams(-1,-2));
         box.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
@@ -1448,121 +1431,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // 三区域车机按一个超宽 Display 处理，不再创建 Presentation。
-    /**
-     * 再次主动申请当前应用能够通过系统运行时权限对话框申请的权限。
-     * 已经授予的权限不会再次弹窗；不可运行时申请的特殊权限仍通过诊断界面查看。
-     */
-    void requestAllPermissionsAgain(){
-        // Android 12 的悬浮窗、使用情况访问、所有文件访问、修改系统设置
-        // 都不是普通 runtime permission，requestPermissions() 不会弹出它们。
-        // 先把这些特殊权限做成明确的“权限获取”入口，避免因为没有弹窗而
-        // 导致“悬浮窗选位/悬浮窗口设置”一直被隐藏。
-        showSpecialPermissionAcquireDialog();
-    }
-
-    void requestRuntimePermissionsOnly(){
-        try{
-            if(Build.VERSION.SDK_INT>=23){
-                java.util.ArrayList<String> requestable=new java.util.ArrayList<>();
-                String[] candidates={
-                        "android.permission.CAMERA",
-                        "android.permission.RECORD_AUDIO",
-                        "android.permission.ACCESS_FINE_LOCATION",
-                        "android.permission.ACCESS_COARSE_LOCATION",
-                        "android.permission.BLUETOOTH_SCAN",
-                        "android.permission.BLUETOOTH_CONNECT",
-                        "android.permission.BLUETOOTH_ADVERTISE",
-                        "android.permission.READ_PHONE_STATE",
-                        "android.permission.CALL_PHONE",
-                        "android.permission.ANSWER_PHONE_CALLS",
-                        "android.permission.READ_CALL_LOG",
-                        "android.permission.WRITE_CALL_LOG",
-                        "android.permission.READ_CONTACTS",
-                        "android.permission.WRITE_CONTACTS",
-                        "android.permission.READ_CALENDAR",
-                        "android.permission.WRITE_CALENDAR",
-                        "android.permission.ACTIVITY_RECOGNITION",
-                        "android.permission.BODY_SENSORS",
-                        "android.permission.SEND_SMS",
-                        "android.permission.RECEIVE_SMS",
-                        "android.permission.READ_SMS",
-                        "android.permission.RECEIVE_MMS",
-                        "android.permission.RECEIVE_WAP_PUSH",
-                        "android.permission.POST_NOTIFICATIONS",
-                        "android.permission.READ_EXTERNAL_STORAGE",
-                        "android.permission.WRITE_EXTERNAL_STORAGE",
-                        "android.permission.READ_MEDIA_IMAGES",
-                        "android.permission.READ_MEDIA_VIDEO",
-                        "android.permission.READ_MEDIA_AUDIO"
-                };
-                for(String perm:candidates){
-                    try{
-                        if(getPackageManager().getPermissionInfo(perm,0)!=null &&
-                                checkSelfPermission(perm)!=PackageManager.PERMISSION_GRANTED){
-                            requestable.add(perm);
-                        }
-                    }catch(Exception ignored){}
-                }
-                if(!requestable.isEmpty()){
-                    requestPermissions(requestable.toArray(new String[0]),REQ_RUNTIME_PERMS);
-                    Toast.makeText(this,"已重新发起权限申请，请按提示允许",Toast.LENGTH_SHORT).show();
-                    return;
-                }
-            }
-            Toast.makeText(this,"没有可直接弹出的运行时权限",Toast.LENGTH_SHORT).show();
-        }catch(Exception e){
-            Toast.makeText(this,"权限申请失败："+e.getMessage(),Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    void showSpecialPermissionAcquireDialog(){
-        LinearLayout box=new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(18),dp(8),dp(18),dp(10));
-
-        TextView tip=text("特殊权限不会通过普通权限弹窗出现，请在下面逐项开启。开启后返回本程序，按钮会自动恢复显示。",12);
-        tip.setPadding(0,0,0,dp(10));
-        box.addView(tip,new LinearLayout.LayoutParams(-1,dp(64)));
-
-        Button overlay=button((hasOverlayPermission()?"✓ ":"")+"悬浮窗权限");
-        overlay.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
-        overlay.setOnClickListener(v->{ openOverlaySettings(); });
-        box.addView(overlay,new LinearLayout.LayoutParams(-1,dp(48)));
-
-        Button usage=button((hasUsageAccess()?"✓ ":"")+"使用情况访问");
-        usage.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
-        usage.setOnClickListener(v->{ openUsageSettings(); });
-        box.addView(usage,new LinearLayout.LayoutParams(-1,dp(48)));
-
-        Button files=button((hasAllFilesPermission()?"✓ ":"")+"所有文件访问");
-        files.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
-        files.setOnClickListener(v->{ openAllFilesSettings(); });
-        box.addView(files,new LinearLayout.LayoutParams(-1,dp(48)));
-
-        Button write=button((Build.VERSION.SDK_INT<23 || Settings.System.canWrite(this)?"✓ ":"")+"修改系统设置");
-        write.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
-        write.setOnClickListener(v->{
-            try{
-                Intent i=new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS,Uri.parse("package:"+getPackageName()));
-                startActivity(i);
-            }catch(Exception e){
-                try{startActivity(new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS));}catch(Exception ignored){}
-            }
-        });
-        box.addView(write,new LinearLayout.LayoutParams(-1,dp(48)));
-
-        Button runtime=button("重新申请普通权限");
-        runtime.setGravity(Gravity.CENTER);
-        runtime.setOnClickListener(v->requestRuntimePermissionsOnly());
-        box.addView(runtime,new LinearLayout.LayoutParams(-1,dp(48)));
-
-        AlertDialog dialog=new AlertDialog.Builder(this)
-                .setTitle("权限获取")
-                .setView(box)
-                .setNegativeButton("关闭",null).create();
-        showDialogBelowTop(dialog);
-    }
-
     void showScreenDiagnostics(){
         android.view.Display d=getWindow().getWindowManager().getDefaultDisplay();
         android.graphics.Point p=getRealScreenSize(d);
@@ -1615,19 +1483,8 @@ public class MainActivity extends AppCompatActivity {
         TextView msg=text(s.toString(),11);
         msg.setPadding(dp(4),dp(4),dp(4),dp(4));
         ScrollView scroll=new ScrollView(this); scroll.addView(msg,new ScrollView.LayoutParams(-1,-2));
-
-        LinearLayout content=new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(18),dp(6),dp(18),dp(10));
-        content.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-
-        Button requestPermissions=button("权限获取");
-        requestPermissions.setGravity(Gravity.CENTER);
-        requestPermissions.setOnClickListener(v->requestAllPermissionsAgain());
-        content.addView(requestPermissions,new LinearLayout.LayoutParams(-1,dp(48)));
-
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("权限与诊断")
-                .setView(content)
+                .setView(scroll)
                 .setNegativeButton("关闭",null).create();
         showDialogBelowTop(dialog);
     }

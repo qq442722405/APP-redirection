@@ -186,9 +186,11 @@ public class FloatingService extends Service {
         lp=new WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.WRAP_CONTENT,overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT);
+        SharedPreferences positionPrefs=getSharedPreferences(MainActivity.PREF,0);
+        boolean hasSavedPosition=positionPrefs.contains("floating_position_x") && positionPrefs.contains("floating_position_y");
         lp.gravity=Gravity.TOP|Gravity.LEFT;
-        lp.x=getSharedPreferences(MainActivity.PREF,0).getInt("floating_position_x",30);
-        lp.y=getSharedPreferences(MainActivity.PREF,0).getInt("floating_position_y",180);
+        lp.x=hasSavedPosition?positionPrefs.getInt("floating_position_x",0):0;
+        lp.y=hasSavedPosition?positionPrefs.getInt("floating_position_y",0):0;
 
         drag.setOnTouchListener((v,e)->{
             if(e.getAction()==MotionEvent.ACTION_DOWN){
@@ -213,7 +215,22 @@ public class FloatingService extends Service {
             }
             return true;
         });
-        try{wm.addView(panel,lp);}catch(Exception e){stopSelf();}
+        try{
+            wm.addView(panel,lp);
+            if(!hasSavedPosition){
+                panel.post(()->{
+                    try{
+                        android.util.DisplayMetrics dm=new android.util.DisplayMetrics();
+                        wm.getDefaultDisplay().getRealMetrics(dm);
+                        int sw=dm.widthPixels, sh=dm.heightPixels;
+                        lp.x=Math.max(0,(sw-panel.getWidth())/2);
+                        lp.y=Math.max(0,(sh-panel.getHeight())/2);
+                        wm.updateViewLayout(panel,lp);
+                        positionPrefs.edit().putInt("floating_position_x",lp.x).putInt("floating_position_y",lp.y).apply();
+                    }catch(Exception ignored){}
+                });
+            }
+        }catch(Exception e){stopSelf();}
     }
 
     void installSingleIconGesture(View v){
@@ -468,7 +485,7 @@ public class FloatingService extends Service {
         GridLayout rows=new GridLayout(this);
         float density=getResources().getDisplayMetrics().density;
         int availableDp=Math.max(300,(int)(getResources().getDisplayMetrics().widthPixels/density)-28);
-        int columns=Math.max(2,availableDp/118);
+        int columns=Math.min(8,Math.max(2,availableDp/118));
         rows.setColumnCount(columns);
         sv.addView(rows,new ScrollView.LayoutParams(-1,-2));
         box.addView(sv,new LinearLayout.LayoutParams(-1,0,1));
@@ -477,7 +494,6 @@ public class FloatingService extends Service {
         ArrayList<ApplicationInfo> list=new ArrayList<>();
         try{
             for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){
-                if(ai.packageName.equals(getPackageName()))continue;
                 if(pm.getLaunchIntentForPackage(ai.packageName)==null)continue;
                 list.add(ai);
             }
