@@ -1298,17 +1298,17 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this,"悬浮窗大小已保存："+w+" × "+h,Toast.LENGTH_SHORT).show();
         });
 
-        final float[] down={0,0};
+        final float[] dragStart={0,0};
         final int[] start={lp.x,lp.y};
         picker.setOnTouchListener((v,e)->{
             if(e.getAction()==MotionEvent.ACTION_DOWN){
-                down[0]=e.getRawX(); down[1]=e.getRawY();
+                dragStart[0]=e.getRawX(); dragStart[1]=e.getRawY();
                 start[0]=lp.x; start[1]=lp.y;
                 return true;
             }
             if(e.getAction()==MotionEvent.ACTION_MOVE){
-                lp.x=start[0]+(int)(e.getRawX()-down[0]);
-                lp.y=start[1]+(int)(e.getRawY()-down[1]);
+                lp.x=start[0]+(int)(e.getRawX()-dragStart[0]);
+                lp.y=start[1]+(int)(e.getRawY()-dragStart[1]);
                 lp.x=Math.max(0,Math.min(lp.x,Math.max(0,screen.x-lp.width)));
                 lp.y=Math.max(0,Math.min(lp.y,Math.max(0,screen.y-lp.height)));
                 try{pickerWm.updateViewLayout(picker,lp);}catch(Exception ignored){}
