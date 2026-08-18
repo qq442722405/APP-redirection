@@ -23,7 +23,7 @@ import java.util.regex.*;
 public final class AdbWindowController {
     private static final Handler H=new Handler(Looper.getMainLooper());
     private static WindowManager wm;
-    private static View closeView;
+    private static TextView closeView;
     private static WindowManager.LayoutParams closeLp;
     private static String currentPkg;
     private static Rect currentBounds;
@@ -37,7 +37,7 @@ public final class AdbWindowController {
     }
     private static String exec(String[] cmd){
         try{
-            Process p=new ProcessBuilder(cmd).redirectErrorStream(true).start();
+            java.lang.Process p=new ProcessBuilder(cmd).redirectErrorStream(true).start();
             ByteArrayOutputStream out=new ByteArrayOutputStream();
             InputStream in=p.getInputStream(); byte[] b=new byte[4096]; int n;
             while((n=in.read(b))>0)out.write(b,0,n);
@@ -70,7 +70,7 @@ public final class AdbWindowController {
     private static int findTaskId(String pkg){
         String s=shell("dumpsys activity activities");
         if(s==null || s.startsWith("__ERR__"))return -1;
-        Pattern[] ps={Pattern.compile("Task\\{[^}]*#(\\d+)[^}]*\\}.*?"+Pattern.quote(pkg),Pattern.SINGLELINE),Pattern.compile("Task[^\n]*#(\\d+)[^\n]*"+Pattern.quote(pkg))};
+        Pattern[] ps={Pattern.compile("Task\\{[^}]*#(\\d+)[^}]*\\}.*?"+Pattern.quote(pkg),Pattern.DOTALL),Pattern.compile("Task[^\n]*#(\\d+)[^\n]*"+Pattern.quote(pkg))};
         for(Pattern p:ps){Matcher m=p.matcher(s); if(m.find())try{return Integer.parseInt(m.group(1));}catch(Exception ignored){}}
         Matcher m=Pattern.compile("#(\\d+):.*?"+Pattern.quote(pkg)).matcher(s);
         if(m.find())try{return Integer.parseInt(m.group(1));}catch(Exception ignored){}

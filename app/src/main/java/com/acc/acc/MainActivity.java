@@ -1620,7 +1620,7 @@ public class MainActivity extends AppCompatActivity {
         actionRow.addView(save,new LinearLayout.LayoutParams(0,dp(48),1));
         content.addView(actionRow,new LinearLayout.LayoutParams(-1,dp(62)));
 
-        final Button[] modeButtonsHolder=modeButtons;
+        final Button[] modeButtonsHolder=null;
         AlertDialog dialog=new AlertDialog.Builder(this)
                 .setTitle(index<0?"新建窗口预设":"编辑窗口预设")
                 .setView(content).create();
