@@ -2068,7 +2068,7 @@ public class MainActivity extends AppCompatActivity {
                 info.setText("ADB启动："+selectedName+"  "+(floating?"悬浮窗化":"强制窗口化"));
                 return;
             }
-            Toast.makeText(this,"ADB 模式执行失败：当前 APP 进程可能没有 shell/ADB 权限",Toast.LENGTH_LONG).show();
+            Toast.makeText(this,"ADB 执行失败："+AdbWindowController.diagnose(),Toast.LENGTH_LONG).show();
             return;
         }
 

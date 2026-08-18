@@ -30,22 +30,47 @@ public final class AdbWindowController {
 
     private AdbWindowController(){}
 
+    /**
+     * 自动选择可用的高权限通道：
+     * 1) root/su；2) 车机本地 adb client -> adb shell；3) 普通 sh。
+     * 注意：开启 USB/TCP ADB 并不会自动给普通 APK 授予 shell UID；
+     * 只有车机本身提供可调用的 adb client/bridge/root 时才能真正执行 shell。
+     */
     static String shell(String command){
         String r=exec(new String[]{"su","-c",command});
-        if(r!=null && !r.startsWith("__ERR__")) return r;
+        if(ok(r)) return r;
+
+        // 尝试车机本地 adb 客户端。不同车机路径可能不同。
+        String[] adbPaths={"adb","/system/bin/adb","/system/xbin/adb","/vendor/bin/adb"};
+        for(String adb:adbPaths){
+            r=exec(new String[]{adb,"shell",command});
+            if(ok(r)) return r;
+            // 某些系统 adb daemon 只开放本机 5555。
+            r=exec(new String[]{adb,"-s","127.0.0.1:5555","shell",command});
+            if(ok(r)) return r;
+        }
+
         return exec(new String[]{"sh","-c",command});
     }
-    private static String exec(String[] cmd){
-        try{
-            java.lang.Process p=new ProcessBuilder(cmd).redirectErrorStream(true).start();
-            ByteArrayOutputStream out=new ByteArrayOutputStream();
-            InputStream in=p.getInputStream(); byte[] b=new byte[4096]; int n;
-            while((n=in.read(b))>0)out.write(b,0,n);
-            p.waitFor(4,java.util.concurrent.TimeUnit.SECONDS);
-            String s=out.toString("UTF-8");
-            if(p.exitValue()!=0) return "__ERR__"+s;
-            return s;
-        }catch(Exception e){return "__ERR__"+e.getMessage();}
+
+    private static boolean ok(String r){
+        return r!=null && !r.startsWith("__ERR__");
+    }
+
+    /** 返回当前能用的执行通道，供权限与诊断使用。 */
+    public static String diagnose(){
+        String r=exec(new String[]{"su","-c","id"});
+        if(ok(r) && r.contains("uid=0")) return "ROOT（uid=0）";
+        String[] adbPaths={"adb","/system/bin/adb","/system/xbin/adb","/vendor/bin/adb"};
+        for(String adb:adbPaths){
+            r=exec(new String[]{adb,"shell","id"});
+            if(ok(r) && r.contains("uid=2000")) return "ADB SHELL（uid=2000）";
+            r=exec(new String[]{adb,"-s","127.0.0.1:5555","shell","id"});
+            if(ok(r) && r.contains("uid=2000")) return "ADB SHELL（127.0.0.1:5555）";
+        }
+        r=exec(new String[]{"sh","-c","id"});
+        if(ok(r)) return "普通 APP Shell："+r.trim();
+        return "不可用";
     }
 
     public static boolean launchAndResize(Context c,String pkg,Rect bounds,boolean floating){
