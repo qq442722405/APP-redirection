@@ -130,6 +130,14 @@ public class MainActivity extends AppCompatActivity {
         return t;
     }
 
+    // 主界面专用文字：只受“主界面字体大小”控制。
+    TextView mainText(String s,float size){
+        TextView t=new TextView(this);
+        t.setText(s); t.setTextColor(Color.WHITE); t.setTextSize(size*mainFontScale());
+        t.setGravity(Gravity.CENTER_VERTICAL);
+        return t;
+    }
+
     int adaptiveBoxHeight(int baseDp){
         float scale=fontScale();
         return dp(Math.max(baseDp, Math.round(baseDp*scale)));
@@ -392,7 +400,7 @@ public class MainActivity extends AppCompatActivity {
         TextView accBg=new TextView(this);
         accBg.setText("Acc");
         accBg.setTextColor(0x22FFFFFF);
-        accBg.setTextSize(360);
+        accBg.setTextSize(720);
         accBg.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
         accBg.setGravity(Gravity.CENTER);
         accBg.setSingleLine(true);
@@ -402,29 +410,35 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.TRANSPARENT);
+        // 以下内容均属于主界面，统一使用“主界面字体大小”。
+        mainUiContext=true;
         // 主界面固定从顶部 80px 以下开始，避开车机状态栏/触控保留区。
         int topBlank=prefs.getInt("main_top_blank",TOP_BLANK);
         int bottomBlank=prefs.getInt("main_bottom_blank",BOTTOM_BLANK);
         root.setPadding(dp(12),dp(topBlank),dp(12),dp(bottomBlank));
-        frame.addView(root,new FrameLayout.LayoutParams(-1,-1));
+        ScrollView mainScroll=new ScrollView(this);
+        mainScroll.setFillViewport(true);
+        mainScroll.setVerticalScrollBarEnabled(false);
+        mainScroll.addView(root,new ScrollView.LayoutParams(-1,-2));
+        frame.addView(mainScroll,new FrameLayout.LayoutParams(-1,-1));
 
         // “+”统一放在最左边
         LinearLayout presetHeader=new LinearLayout(this);
         presetHeader.setOrientation(LinearLayout.HORIZONTAL);
         presetHeader.setGravity(Gravity.CENTER_VERTICAL);
         TextView addPreset=plusButton();
-        addPreset.setTextSize(42*fontScale());
+        addPreset.setTextSize(42*mainFontScale());
         addPreset.setContentDescription("新建窗口预设");
         addPreset.setOnClickListener(v->editPreset(-1));
         presetHeader.addView(addPreset,new LinearLayout.LayoutParams(dp(60),dp(60)));
-        TextView pt=text("窗口预设",51); pt.setTypeface(null,1);
+        TextView pt=mainText("窗口预设",51); pt.setTypeface(null,1);
         presetHeader.addView(pt,new LinearLayout.LayoutParams(-2,dp(60)));
 
         // 直接通过悬浮选位器创建/修改窗口预设：拖动红框到目标位置，
         // 在红框中央填写宽高，确认后自动回填到“新建窗口预设”。
         if(hasOverlayPermission()){
             Button floatingPick=button("悬浮窗选位");
-            floatingPick.setTextSize(20*fontScale());
+            floatingPick.setTextSize(20*mainFontScale());
             floatingPick.setContentDescription("悬浮窗选位");
             floatingPick.setOnClickListener(v->showFloatingPresetPicker());
             LinearLayout.LayoutParams pickLp=new LinearLayout.LayoutParams(dp(150),dp(44));
@@ -445,11 +459,11 @@ public class MainActivity extends AppCompatActivity {
         appHeader.setOrientation(LinearLayout.HORIZONTAL);
         appHeader.setGravity(Gravity.CENTER_VERTICAL);
         TextView addApp=plusButton();
-        addApp.setTextSize(42*fontScale());
+        addApp.setTextSize(42*mainFontScale());
         addApp.setContentDescription("添加 APP");
         addApp.setOnClickListener(v->chooseApp());
         appHeader.addView(addApp,new LinearLayout.LayoutParams(dp(60),dp(60)));
-        TextView at=text("已添加 APP",51); at.setTypeface(null,1);
+        TextView at=mainText("APP",51); at.setTypeface(null,1);
         appHeader.addView(at,new LinearLayout.LayoutParams(0,dp(60),1));
         root.addView(appHeader,new LinearLayout.LayoutParams(-1,dp(64)));
 
@@ -459,7 +473,9 @@ public class MainActivity extends AppCompatActivity {
         appGrid=new LinearLayout(this);
         appGrid.setOrientation(LinearLayout.VERTICAL);
         appScroll.addView(appGrid,new HorizontalScrollView.LayoutParams(-2,-1));
-        root.addView(appScroll,new LinearLayout.LayoutParams(-1,0,1));
+        int appColumns=Math.max(1,prefs.getInt("main_app_columns",4));
+        int appRows=Math.max(1,(apps.size()+appColumns-1)/appColumns);
+        root.addView(appScroll,new LinearLayout.LayoutParams(-1,dp(Math.max(188,appRows*188))));
 
         // 底部右侧：记事本/设置按钮在上，分辨率等信息统一放在按钮下方，
         // 避免版本、包名等被按钮遮挡。
@@ -482,14 +498,14 @@ public class MainActivity extends AppCompatActivity {
 
         TextView note=plusButton();
         note.setText("📝");
-        note.setTextSize(22*fontScale());
+        note.setTextSize(22*mainFontScale());
         note.setContentDescription("记事本");
         note.setOnClickListener(v->showNotes());
         actionRow.addView(note,new LinearLayout.LayoutParams(dp(68),dp(50)));
 
         TextView settings=plusButton();
         settings.setText("⚙");
-        settings.setTextSize(24*fontScale());
+        settings.setTextSize(24*mainFontScale());
         settings.setContentDescription("设置");
         settings.setOnClickListener(v->showSettingsMenu());
         actionRow.addView(settings,new LinearLayout.LayoutParams(dp(68),dp(50)));
@@ -497,7 +513,7 @@ public class MainActivity extends AppCompatActivity {
         rightFooter.addView(actionRow,new LinearLayout.LayoutParams(-2,dp(52)));
 
         // 信息固定在按钮下面，并整体靠右；一行显示，空间不足时从左侧开始裁剪。
-        TextView screenInfo=text("",20);
+        TextView screenInfo=mainText("",20);
         screenInfo.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
         screenInfo.setTextColor(Color.WHITE);
         screenInfo.setPadding(dp(6),0,0,0);
@@ -532,18 +548,18 @@ public class MainActivity extends AppCompatActivity {
                 card.setPadding(dp(6),dp(3),dp(6),dp(3));
                 card.setBackgroundResource(R.drawable.card);
 
-                TextView title=text(p.name,34);
+                TextView title=mainText(p.name,34);
                 title.setGravity(Gravity.CENTER);
                 title.setMaxLines(1);
                 title.setEllipsize(android.text.TextUtils.TruncateAt.END);
                 card.addView(title,new LinearLayout.LayoutParams(-1,dp(54)));
 
-                TextView size=text(p.w+" × "+p.h,20);
+                TextView size=mainText(p.w+" × "+p.h,20);
                 size.setTextColor(Color.LTGRAY);
                 size.setGravity(Gravity.CENTER);
                 card.addView(size,new LinearLayout.LayoutParams(-1,dp(40)));
 
-                TextView pos=text("上 "+p.y+"    左 "+p.x,20);
+                TextView pos=mainText("上 "+p.y+"    左 "+p.x,20);
                 pos.setTextColor(Color.LTGRAY);
                 pos.setGravity(Gravity.CENTER);
                 card.addView(pos,new LinearLayout.LayoutParams(-1,dp(40)));
@@ -564,7 +580,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
             if(presets.isEmpty()){
-                TextView empty=text("点击左侧“+”新建窗口预设",39);
+                TextView empty=mainText("点击左侧“+”新建窗口预设",39);
                 empty.setTextColor(Color.GRAY);
                 empty.setGravity(Gravity.CENTER);
                 presetRow.addView(empty,new LinearLayout.LayoutParams(dp(200),dp(180)));
@@ -574,7 +590,7 @@ public class MainActivity extends AppCompatActivity {
         if(appGrid!=null){
             appGrid.removeAllViews();
             if(apps.isEmpty()){
-                TextView empty=text("点击“+”添加 APP",42);
+                TextView empty=mainText("点击“+”添加 APP",42);
                 empty.setTextColor(Color.GRAY); empty.setGravity(Gravity.CENTER);
                 appGrid.addView(empty,new LinearLayout.LayoutParams(dp(200),dp(180)));
             }else{
@@ -601,7 +617,7 @@ public class MainActivity extends AppCompatActivity {
                     try{icon.setImageDrawable(pm.getApplicationIcon(item.pkg));}catch(Exception ignored){}
                     tile.addView(icon,new LinearLayout.LayoutParams(dp(82),dp(82)));
 
-                    TextView name=text(item.name,36);
+                    TextView name=mainText(item.name,36);
                     name.setGravity(Gravity.CENTER);
                     name.setMaxLines(2);
                     name.setEllipsize(android.text.TextUtils.TruncateAt.END);
