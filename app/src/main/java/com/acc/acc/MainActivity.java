@@ -76,8 +76,8 @@ public class MainActivity extends AppCompatActivity {
         float saved = prefs==null ? 1.0f : prefs.getFloat("font_scale",1.0f);
         try{
             float density=getResources().getDisplayMetrics().density;
-            return Math.max(0.20f, Math.min(2.0f, saved * (density<=0 ? 1.0f : Math.min(1.0f,1.0f/density))));
-        }catch(Exception ignored){ return Math.max(0.20f, Math.min(2.0f,saved)); }
+            return Math.max(0.20f, Math.min(3.0f, saved));
+        }catch(Exception ignored){ return Math.max(0.20f, Math.min(3.0f,saved)); }
     }
 
     int touchOffsetLeft(){ return prefs==null?0:prefs.getInt("touch_offset_left_px",0); }
@@ -158,7 +158,7 @@ public class MainActivity extends AppCompatActivity {
         for(int i=0;i<labels.length;i++){
             final int delta=deltas[i];
             Button b=button(labels[i]);
-            b.setTextSize(10); b.setMinWidth(0); b.setPadding(0,0,0,0);
+            b.setTextSize(10*fontScale()); b.setMinWidth(0); b.setPadding(0,0,0,0);
             b.setOnClickListener(v->{ if(delta==0) input.setText("0"); else adjustNumber(input,delta); input.setSelection(input.length()); });
             row.addView(b,new LinearLayout.LayoutParams(dp(50),dp(44)));
         }
@@ -210,7 +210,7 @@ public class MainActivity extends AppCompatActivity {
         prefs=getSharedPreferences(PREF,0);
         // 新安装默认界面参数；如果用户已经手动设置过，则保留用户设置。
         SharedPreferences.Editor defaults=prefs.edit();
-        if(!prefs.contains("font_scale")) defaults.putFloat("font_scale",0.20f);
+        if(!prefs.contains("font_scale") || prefs.getFloat("font_scale",1.0f) <= 0.2001f) defaults.putFloat("font_scale",1.00f);
         if(!prefs.contains("ui_scale")) defaults.putFloat("ui_scale",1.00f);
         if(!prefs.contains("touch_offset_top_px")) defaults.putInt("touch_offset_top_px",50);
         if(!prefs.contains("touch_offset_left_px")) defaults.putInt("touch_offset_left_px",50);
@@ -376,7 +376,7 @@ public class MainActivity extends AppCompatActivity {
         presetHeader.setOrientation(LinearLayout.HORIZONTAL);
         presetHeader.setGravity(Gravity.CENTER_VERTICAL);
         TextView addPreset=plusButton();
-        addPreset.setTextSize(42);
+        addPreset.setTextSize(42*fontScale());
         addPreset.setContentDescription("新建窗口预设");
         addPreset.setOnClickListener(v->editPreset(-1));
         presetHeader.addView(addPreset,new LinearLayout.LayoutParams(dp(60),dp(60)));
@@ -387,7 +387,7 @@ public class MainActivity extends AppCompatActivity {
         // 在红框中央填写宽高，确认后自动回填到“新建窗口预设”。
         if(hasOverlayPermission()){
             Button floatingPick=button("悬浮窗选位");
-            floatingPick.setTextSize(20);
+            floatingPick.setTextSize(20*fontScale());
             floatingPick.setContentDescription("悬浮窗选位");
             floatingPick.setOnClickListener(v->showFloatingPresetPicker());
             LinearLayout.LayoutParams pickLp=new LinearLayout.LayoutParams(dp(150),dp(44));
@@ -408,7 +408,7 @@ public class MainActivity extends AppCompatActivity {
         appHeader.setOrientation(LinearLayout.HORIZONTAL);
         appHeader.setGravity(Gravity.CENTER_VERTICAL);
         TextView addApp=plusButton();
-        addApp.setTextSize(42);
+        addApp.setTextSize(42*fontScale());
         addApp.setContentDescription("添加 APP");
         addApp.setOnClickListener(v->chooseApp());
         appHeader.addView(addApp,new LinearLayout.LayoutParams(dp(60),dp(60)));
@@ -435,7 +435,7 @@ public class MainActivity extends AppCompatActivity {
 
         TextView note=plusButton();
         note.setText("📝");
-        note.setTextSize(22);
+        note.setTextSize(22*fontScale());
         note.setContentDescription("记事本");
         note.setOnClickListener(v->showNotes());
         // 右下角信息区：分辨率/包名/版本固定紧贴记事本左侧。
@@ -451,7 +451,7 @@ public class MainActivity extends AppCompatActivity {
 
         TextView settings=plusButton();
         settings.setText("⚙");
-        settings.setTextSize(24);
+        settings.setTextSize(24*fontScale());
         settings.setContentDescription("设置");
         settings.setOnClickListener(v->showSettingsMenu());
         footer.addView(settings,new LinearLayout.LayoutParams(dp(68),dp(68)));
@@ -1080,7 +1080,7 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout fontRow=new LinearLayout(this); fontRow.setGravity(Gravity.CENTER_VERTICAL);
         fontRow.addView(text("主界面字体大小",14),new LinearLayout.LayoutParams(0,dp(52),1));
-        EditText fontInput=numberField("20",String.valueOf(Math.round(prefs.getFloat("font_scale",0.20f)*100)));
+        EditText fontInput=numberField("20",String.valueOf(Math.round(prefs.getFloat("font_scale",1.00f)*100)));
         fontRow.addView(fontInput,new LinearLayout.LayoutParams(dp(82),dp(52)));
         fontRow.addView(text("%",14),new LinearLayout.LayoutParams(dp(28),dp(52)));
         box.addView(fontRow,new LinearLayout.LayoutParams(-1,dp(56)));
@@ -1204,7 +1204,7 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout tabs=new LinearLayout(this); tabs.setGravity(Gravity.CENTER_VERTICAL);
         String[] cats={"全部","用户","系统"}; Button[] tabBtns=new Button[cats.length];
         for(int i=0;i<cats.length;i++){
-            final int ci=i; Button b=button(cats[i]); b.setTextSize(12); tabBtns[i]=b;
+            final int ci=i; Button b=button(cats[i]); b.setTextSize(12*fontScale()); tabBtns[i]=b;
             tabs.addView(b,new LinearLayout.LayoutParams(0,dp(44),1));
             b.setOnClickListener(v->{
                 selectedAppCategory[0]=ci;
@@ -1517,7 +1517,7 @@ public class MainActivity extends AppCompatActivity {
         for(int m=1;m<=6;m++){
             final int mm=m;
             Button mb=button(m==6?"全屏模式":"模式"+m);
-            mb.setTextSize(11);
+            mb.setTextSize(11*fontScale());
             modeButtons[m-1]=mb;
             if(old.mode==mm) mb.setBackgroundResource(R.drawable.card_selected);
             mb.setOnClickListener(v->{
@@ -1798,7 +1798,7 @@ public class MainActivity extends AppCompatActivity {
                 row.addView(icon,new LinearLayout.LayoutParams(dp(42),dp(42)));
                 TextView tv=text((index+1)+". "+name+"  ·  "+presetName,13);
                 row.addView(tv,new LinearLayout.LayoutParams(0,dp(50),1));
-                Button del=button("删除"); del.setTextSize(11);
+                Button del=button("删除"); del.setTextSize(11*fontScale());
                 row.addView(del,new LinearLayout.LayoutParams(dp(58),dp(42)));
                 del.setOnClickListener(v->{
                     JSONArray next=new JSONArray();
@@ -1815,7 +1815,7 @@ public class MainActivity extends AppCompatActivity {
         Switch taskSwitch=new Switch(this);
         taskSwitch.setText("自动任务");
         taskSwitch.setTextColor(Color.WHITE);
-        taskSwitch.setTextSize(14);
+        taskSwitch.setTextSize(14*fontScale());
         taskSwitch.setChecked(prefs.getBoolean("auto_start_enabled",false));
         taskActionRow.addView(taskSwitch,new LinearLayout.LayoutParams(0,dp(50),1));
         Button add=button("＋ 添加启动任务");
