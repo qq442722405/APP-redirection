@@ -72,12 +72,20 @@ public class MainActivity extends AppCompatActivity {
             return Math.max(0.50f, Math.min(1.60f, saved));
         }
     }
-    float fontScale(){
+    boolean mainUiContext=false;
+
+    float mainFontScale(){
+        float saved = prefs==null ? 1.0f : prefs.getFloat("main_font_scale",1.0f);
+        return Math.max(0.20f, Math.min(3.0f, saved));
+    }
+
+    float menuFontScale(){
         float saved = prefs==null ? 1.0f : prefs.getFloat("font_scale",1.0f);
-        try{
-            float density=getResources().getDisplayMetrics().density;
-            return Math.max(0.20f, Math.min(3.0f, saved));
-        }catch(Exception ignored){ return Math.max(0.20f, Math.min(3.0f,saved)); }
+        return Math.max(0.20f, Math.min(3.0f, saved));
+    }
+
+    float fontScale(){
+        return mainUiContext ? mainFontScale() : menuFontScale();
     }
 
     int touchOffsetLeft(){ return prefs==null?0:prefs.getInt("touch_offset_left_px",0); }
@@ -211,6 +219,7 @@ public class MainActivity extends AppCompatActivity {
         // 新安装默认界面参数；如果用户已经手动设置过，则保留用户设置。
         SharedPreferences.Editor defaults=prefs.edit();
         if(!prefs.contains("font_scale") || prefs.getFloat("font_scale",1.0f) <= 0.2001f) defaults.putFloat("font_scale",1.00f);
+        if(!prefs.contains("main_font_scale") || prefs.getFloat("main_font_scale",1.0f) <= 0.2001f) defaults.putFloat("main_font_scale",1.00f);
         if(!prefs.contains("ui_scale")) defaults.putFloat("ui_scale",1.00f);
         if(!prefs.contains("touch_offset_top_px")) defaults.putInt("touch_offset_top_px",50);
         if(!prefs.contains("touch_offset_left_px")) defaults.putInt("touch_offset_left_px",50);
@@ -355,7 +364,7 @@ public class MainActivity extends AppCompatActivity {
         TextView accBg=new TextView(this);
         accBg.setText("Acc");
         accBg.setTextColor(0x22FFFFFF);
-        accBg.setTextSize(1140);
+        accBg.setTextSize(500);
         accBg.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
         accBg.setGravity(Gravity.CENTER);
         accBg.setSingleLine(true);
@@ -473,6 +482,7 @@ public class MainActivity extends AppCompatActivity {
         root.addView(footer,new LinearLayout.LayoutParams(-1,dp(96)));
         setContentView(frame);
         refresh();
+        mainUiContext=false;
     }
 
     /**
@@ -481,6 +491,7 @@ public class MainActivity extends AppCompatActivity {
      * 导致车机 ROM 出现焦点/触控坐标漂移。
      */
     void refresh(){
+        mainUiContext=true;
         if(presetRow!=null){
             presetRow.removeAllViews();
             for(int i=0;i<presets.size();i++){
@@ -493,7 +504,7 @@ public class MainActivity extends AppCompatActivity {
                 card.setPadding(dp(8),dp(8),dp(8),dp(8));
                 card.setBackgroundResource(R.drawable.card);
 
-                TextView title=text(p.name,20);
+                TextView title=text(p.name,28);
                 title.setGravity(Gravity.CENTER);
                 title.setMaxLines(1);
                 title.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -583,6 +594,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         }
+        mainUiContext=false;
     }
 
     void updateScreenInfo(TextView view){
@@ -1100,10 +1112,17 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout fontRow=new LinearLayout(this); fontRow.setGravity(Gravity.CENTER_VERTICAL);
         fontRow.addView(text("主界面字体大小",14),new LinearLayout.LayoutParams(0,dp(52),1));
-        EditText fontInput=numberField("20",String.valueOf(Math.round(prefs.getFloat("font_scale",1.00f)*100)));
+        EditText fontInput=numberField("100",String.valueOf(Math.round(prefs.getFloat("main_font_scale",1.00f)*100)));
         fontRow.addView(fontInput,new LinearLayout.LayoutParams(dp(82),dp(52)));
         fontRow.addView(text("%",14),new LinearLayout.LayoutParams(dp(28),dp(52)));
         box.addView(fontRow,new LinearLayout.LayoutParams(-1,dp(56)));
+
+        LinearLayout menuFontRow=new LinearLayout(this); menuFontRow.setGravity(Gravity.CENTER_VERTICAL);
+        menuFontRow.addView(text("菜单字体大小",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        EditText menuFontInput=numberField("100",String.valueOf(Math.round(prefs.getFloat("font_scale",1.00f)*100)));
+        menuFontRow.addView(menuFontInput,new LinearLayout.LayoutParams(dp(82),dp(52)));
+        menuFontRow.addView(text("%",14),new LinearLayout.LayoutParams(dp(28),dp(52)));
+        box.addView(menuFontRow,new LinearLayout.LayoutParams(-1,dp(56)));
 
         LinearLayout uiRow=new LinearLayout(this); uiRow.setGravity(Gravity.CENTER_VERTICAL);
         uiRow.addView(text("主界面界面大小",14),new LinearLayout.LayoutParams(0,dp(52),1));
@@ -1178,6 +1197,7 @@ public class MainActivity extends AppCompatActivity {
             try{
                 int delay=Integer.parseInt(bootDelay.getText().toString().trim());
                 float fs=Float.parseFloat(fontInput.getText().toString().trim());
+                float mfs=Float.parseFloat(menuFontInput.getText().toString().trim());
                 float us=Float.parseFloat(uiInput.getText().toString().trim());
                 int lm=Integer.parseInt(leftMarginInput.getText().toString().trim());
                 int rm=Integer.parseInt(rightMarginInput.getText().toString().trim());
@@ -1186,9 +1206,9 @@ public class MainActivity extends AppCompatActivity {
                 int bottomBlank=Integer.parseInt(bottomBlankInput.getText().toString().trim());
                 int touchTop=Integer.parseInt(touchTopInput.getText().toString().trim());
                 int touchLeft=Integer.parseInt(touchLeftInput.getText().toString().trim());
-                if(delay<0||delay>3600||fs<20||fs>300||us<50||us>300||columns<1||columns>20||topBlank<0||topBlank>2000||bottomBlank<0||bottomBlank>2000||lm<0||rm<0||lm>3000||rm>3000||touchTop<-2000||touchTop>2000||touchLeft<-2000||touchLeft>2000) throw new Exception();
+                if(delay<0||delay>3600||fs<20||fs>300||mfs<20||mfs>300||us<50||us>300||columns<1||columns>20||topBlank<0||topBlank>2000||bottomBlank<0||bottomBlank>2000||lm<0||rm<0||lm>3000||rm>3000||touchTop<-2000||touchTop>2000||touchLeft<-2000||touchLeft>2000) throw new Exception();
                 prefs.edit().putInt("boot_delay_seconds",delay)
-                        .putFloat("font_scale",fs/100f).putFloat("ui_scale",us/100f)
+                        .putFloat("main_font_scale",fs/100f).putFloat("font_scale",mfs/100f).putFloat("ui_scale",us/100f)
                         .putInt("main_app_columns",columns).putInt("main_top_blank",topBlank).putInt("main_bottom_blank",bottomBlank)
                         .putInt("dialog_left_margin_px",lm).putInt("dialog_right_margin_px",rm)
                         .putInt("touch_offset_top_px",touchTop).putInt("touch_offset_left_px",touchLeft).apply();
@@ -1196,7 +1216,7 @@ public class MainActivity extends AppCompatActivity {
                 if(dialogRef[0]!=null) dialogRef[0].dismiss();
                 buildUI();
             }catch(Exception e){
-                Toast.makeText(this,"请输入有效数值：延迟0-3600秒，字体20-300%，界面50-300%",Toast.LENGTH_LONG).show();
+                Toast.makeText(this,"请输入有效数值：延迟0-3600秒，主界面字体20-300%，菜单字体20-300%，界面50-300%",Toast.LENGTH_LONG).show();
             }
         });
         dialogRef[0]=new AlertDialog.Builder(this).setTitle("界面选项").setView(box).create();
