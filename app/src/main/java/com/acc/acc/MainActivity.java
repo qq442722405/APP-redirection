@@ -444,7 +444,7 @@ public class MainActivity extends AppCompatActivity {
         screenInfo.setTextColor(Color.WHITE);
         screenInfo.setPadding(dp(6),0,dp(12),0);
         screenInfo.setMaxLines(1);
-        footer.addView(screenInfo,new LinearLayout.LayoutParams(dp(360),dp(68)));
+        footer.addView(screenInfo,new LinearLayout.LayoutParams(dp(900),dp(68)));
         updateScreenInfo(screenInfo);
 
         footer.addView(note,new LinearLayout.LayoutParams(dp(68),dp(68)));
@@ -616,9 +616,9 @@ public class MainActivity extends AppCompatActivity {
         }catch(Exception ignored){}
 
         view.setText(
-                "分辨率 " + rs.x + " × " + rs.y + "    DPI " + dm.densityDpi + "\n"
-                + "包名 " + packageName + "\n"
-                + "版本 " + versionName + "    versionCode " + versionCode
+                "分辨率 " + rs.x + " × " + rs.y + "    DPI " + dm.densityDpi
+                + "    包名 " + packageName
+                + "    版本 " + versionName + "    versionCode " + versionCode
         );
     }
 
