@@ -1228,8 +1228,6 @@ public class MainActivity extends AppCompatActivity {
                 float fs=Float.parseFloat(fontInput.getText().toString().trim());
                 float mfs=Float.parseFloat(menuFontInput.getText().toString().trim());
                 float us=Float.parseFloat(uiInput.getText().toString().trim());
-                int lm=Integer.parseInt(leftMarginInput.getText().toString().trim());
-                int rm=Integer.parseInt(rightMarginInput.getText().toString().trim());
                 int columns=Integer.parseInt(columnsInput.getText().toString().trim());
                 int topBlank=Integer.parseInt(topBlankInput.getText().toString().trim());
                 int bottomBlank=Integer.parseInt(bottomBlankInput.getText().toString().trim());
@@ -1239,7 +1237,6 @@ public class MainActivity extends AppCompatActivity {
                 prefs.edit().putInt("boot_delay_seconds",delay)
                         .putFloat("main_font_scale",fs/100f).putFloat("font_scale",mfs/100f).putFloat("ui_scale",us/100f)
                         .putInt("main_app_columns",columns).putInt("main_top_blank",topBlank).putInt("main_bottom_blank",bottomBlank)
-                        .putInt("dialog_left_margin_px",lm).putInt("dialog_right_margin_px",rm)
                         .putInt("touch_offset_top_px",touchTop).putInt("touch_offset_left_px",touchLeft).apply();
                 Toast.makeText(this,"设置已保存并生效",Toast.LENGTH_SHORT).show();
                 if(dialogRef[0]!=null) dialogRef[0].dismiss();
