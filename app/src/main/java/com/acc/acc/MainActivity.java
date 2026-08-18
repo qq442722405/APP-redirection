@@ -130,9 +130,37 @@ public class MainActivity extends AppCompatActivity {
         return t;
     }
 
+    int adaptiveBoxHeight(int baseDp){
+        float scale=fontScale();
+        return dp(Math.max(baseDp, Math.round(baseDp*scale)));
+    }
+
+    void adaptDialogBoxes(AlertDialog dialog){
+        if(dialog==null) return;
+        View root=dialog.getWindow()==null?null:dialog.getWindow().getDecorView();
+        if(root instanceof ViewGroup) adaptViewBoxes((ViewGroup)root);
+    }
+
+    void adaptViewBoxes(ViewGroup group){
+        for(int i=0;i<group.getChildCount();i++){
+            View v=group.getChildAt(i);
+            if(v instanceof TextView){
+                TextView tv=(TextView)v;
+                if(tv.getTextSize()>0 && v.getLayoutParams()!=null && v.getLayoutParams().height>0){
+                    int old=v.getLayoutParams().height;
+                    float scale=fontScale();
+                    int min=(int)(old*scale);
+                    if(scale>1.0f){ v.getLayoutParams().height=Math.max(old,min); v.requestLayout(); }
+                }
+            }
+            if(v instanceof ViewGroup) adaptViewBoxes((ViewGroup)v);
+        }
+    }
+
     Button button(String s){
         Button b=new Button(this);
         b.setText(s); b.setTextColor(Color.WHITE); b.setTextSize(14*fontScale());
+        b.setMinHeight(adaptiveBoxHeight(44));
         b.setAllCaps(false); b.setBackgroundResource(R.drawable.button);
         return b;
     }
@@ -364,7 +392,7 @@ public class MainActivity extends AppCompatActivity {
         TextView accBg=new TextView(this);
         accBg.setText("Acc");
         accBg.setTextColor(0x22FFFFFF);
-        accBg.setTextSize(500);
+        accBg.setTextSize(360);
         accBg.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
         accBg.setGravity(Gravity.CENTER);
         accBg.setSingleLine(true);
@@ -501,24 +529,24 @@ public class MainActivity extends AppCompatActivity {
                 LinearLayout card=new LinearLayout(this);
                 card.setOrientation(LinearLayout.VERTICAL);
                 card.setGravity(Gravity.CENTER);
-                card.setPadding(dp(8),dp(8),dp(8),dp(8));
+                card.setPadding(dp(6),dp(3),dp(6),dp(3));
                 card.setBackgroundResource(R.drawable.card);
 
-                TextView title=text(p.name,28);
+                TextView title=text(p.name,34);
                 title.setGravity(Gravity.CENTER);
                 title.setMaxLines(1);
                 title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                card.addView(title,new LinearLayout.LayoutParams(-1,0,1));
+                card.addView(title,new LinearLayout.LayoutParams(-1,dp(54)));
 
                 TextView size=text(p.w+" × "+p.h,20);
                 size.setTextColor(Color.LTGRAY);
                 size.setGravity(Gravity.CENTER);
-                card.addView(size,new LinearLayout.LayoutParams(-1,0,1));
+                card.addView(size,new LinearLayout.LayoutParams(-1,dp(40)));
 
                 TextView pos=text("上 "+p.y+"    左 "+p.x,20);
                 pos.setTextColor(Color.LTGRAY);
                 pos.setGravity(Gravity.CENTER);
-                card.addView(pos,new LinearLayout.LayoutParams(-1,0,1));
+                card.addView(pos,new LinearLayout.LayoutParams(-1,dp(40)));
 
                 card.setOnClickListener(v->{
                     if(selectedPackage!=null){
@@ -784,6 +812,7 @@ public class MainActivity extends AppCompatActivity {
         if(dialog==null) return;
         dialog.show();
         styleDialogActionButtons(dialog);
+        adaptDialogBoxes(dialog);
         placeDialogBelowTop(dialog);
     }
 
@@ -793,6 +822,7 @@ public class MainActivity extends AppCompatActivity {
         if(dialog==null) return;
         dialog.show();
         styleDialogActionButtons(dialog);
+        adaptDialogBoxes(dialog);
         Window w=dialog.getWindow();
         if(w!=null){
             w.setLayout(1000,800);
@@ -1072,6 +1102,7 @@ public class MainActivity extends AppCompatActivity {
         dialogRef[0]=dlg;
         add.setOnClickListener(v->showGestureAppChooser(key,title,target,dlg));
         dlg.show();
+        adaptDialogBoxes(dlg);
     }
 
     void showGestureAppChooser(String key,String title,Button target,AlertDialog parent){
