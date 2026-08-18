@@ -894,7 +894,10 @@ public class MainActivity extends AppCompatActivity {
         importButton.setOnClickListener(v->importConfig());
         box.addView(importButton,new LinearLayout.LayoutParams(-1,dp(48)));
 
-        settingsDialog[0]=new AlertDialog.Builder(this).setTitle("设置").setView(box).setNegativeButton("关闭",null).create();
+        ScrollView settingsScroll=new ScrollView(this);
+        settingsScroll.setFillViewport(true);
+        settingsScroll.addView(box,new ScrollView.LayoutParams(-1,-2));
+        settingsDialog[0]=new AlertDialog.Builder(this).setTitle("设置").setView(settingsScroll).setNegativeButton("关闭",null).create();
         showFixed1000x800(settingsDialog[0]);
     }
 
@@ -1221,7 +1224,14 @@ public class MainActivity extends AppCompatActivity {
         Button save=button("保存");
         actionBar.addView(back,new LinearLayout.LayoutParams(0,dp(50),1));
         actionBar.addView(save,new LinearLayout.LayoutParams(0,dp(50),1));
-        box.addView(actionBar,new LinearLayout.LayoutParams(-1,dp(58)));
+        // 内容区域可上下滚动，底部返回/保存固定可见。
+        LinearLayout pageRoot=new LinearLayout(this);
+        pageRoot.setOrientation(LinearLayout.VERTICAL);
+        ScrollView pageScroll=new ScrollView(this);
+        pageScroll.setFillViewport(false);
+        pageScroll.addView(box,new ScrollView.LayoutParams(-1,-2));
+        pageRoot.addView(pageScroll,new LinearLayout.LayoutParams(-1,0,1));
+        pageRoot.addView(actionBar,new LinearLayout.LayoutParams(-1,dp(64)));
         save.setOnClickListener(v->{
             try{
                 int delay=Integer.parseInt(bootDelay.getText().toString().trim());
@@ -1245,7 +1255,7 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this,"请输入有效数值：延迟0-3600秒，主界面字体20-300%，菜单字体20-300%，界面50-300%",Toast.LENGTH_LONG).show();
             }
         });
-        dialogRef[0]=new AlertDialog.Builder(this).setTitle("界面选项").setView(box).create();
+        dialogRef[0]=new AlertDialog.Builder(this).setTitle("界面选项").setView(pageRoot).create();
         back.setOnClickListener(v->dialogRef[0].dismiss());
         showFixed1000x800(dialogRef[0]);
     }
@@ -1609,7 +1619,10 @@ public class MainActivity extends AppCompatActivity {
         // 自定义底部按钮：复制、粘贴放在“取消”左边，方便整套面板参数快速导入。
         LinearLayout content=new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.addView(box,new LinearLayout.LayoutParams(-1,0,1));
+        ScrollView presetScroll=new ScrollView(this);
+        presetScroll.setFillViewport(false);
+        presetScroll.addView(box,new ScrollView.LayoutParams(-1,-2));
+        content.addView(presetScroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout actionRow=new LinearLayout(this);
         actionRow.setGravity(Gravity.CENTER_VERTICAL);
         actionRow.setPadding(dp(8),dp(6),dp(8),dp(6));
@@ -1905,9 +1918,16 @@ public class MainActivity extends AppCompatActivity {
         Button save=button("保存");
         actionBar.addView(back,new LinearLayout.LayoutParams(0,dp(50),1));
         actionBar.addView(save,new LinearLayout.LayoutParams(0,dp(50),1));
-        box.addView(actionBar,new LinearLayout.LayoutParams(-1,dp(58)));
+        // 自动启动项目内容过长时上下滚动，返回/保存固定在底部。
+        LinearLayout pageRoot=new LinearLayout(this);
+        pageRoot.setOrientation(LinearLayout.VERTICAL);
+        ScrollView pageScroll=new ScrollView(this);
+        pageScroll.setFillViewport(false);
+        pageScroll.addView(box,new ScrollView.LayoutParams(-1,-2));
+        pageRoot.addView(pageScroll,new LinearLayout.LayoutParams(-1,0,1));
+        pageRoot.addView(actionBar,new LinearLayout.LayoutParams(-1,dp(64)));
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("自动启动项目")
-                .setView(box).create();
+                .setView(pageRoot).create();
         back.setOnClickListener(v->dialog.dismiss());
         save.setOnClickListener(v->{
             int sec=Math.max(1,number(interval,1));
