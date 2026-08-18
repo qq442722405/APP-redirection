@@ -76,8 +76,8 @@ public class MainActivity extends AppCompatActivity {
         float saved = prefs==null ? 1.0f : prefs.getFloat("font_scale",1.0f);
         try{
             float density=getResources().getDisplayMetrics().density;
-            return Math.max(0.65f, Math.min(2.0f, saved * (density<=0 ? 1.0f : Math.min(1.0f,1.0f/density))));
-        }catch(Exception ignored){ return Math.max(0.65f, Math.min(2.0f,saved)); }
+            return Math.max(0.20f, Math.min(2.0f, saved * (density<=0 ? 1.0f : Math.min(1.0f,1.0f/density))));
+        }catch(Exception ignored){ return Math.max(0.20f, Math.min(2.0f,saved)); }
     }
 
     int touchOffsetLeft(){ return prefs==null?0:prefs.getInt("touch_offset_left_px",0); }
@@ -210,7 +210,7 @@ public class MainActivity extends AppCompatActivity {
         prefs=getSharedPreferences(PREF,0);
         // 新安装默认界面参数；如果用户已经手动设置过，则保留用户设置。
         SharedPreferences.Editor defaults=prefs.edit();
-        if(!prefs.contains("font_scale")) defaults.putFloat("font_scale",1.00f);
+        if(!prefs.contains("font_scale")) defaults.putFloat("font_scale",0.20f);
         if(!prefs.contains("ui_scale")) defaults.putFloat("ui_scale",1.00f);
         if(!prefs.contains("touch_offset_top_px")) defaults.putInt("touch_offset_top_px",50);
         if(!prefs.contains("touch_offset_left_px")) defaults.putInt("touch_offset_left_px",50);
@@ -366,7 +366,9 @@ public class MainActivity extends AppCompatActivity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.TRANSPARENT);
         // 主界面固定从顶部 80px 以下开始，避开车机状态栏/触控保留区。
-        root.setPadding(dp(12),dp(TOP_BLANK),dp(12),dp(BOTTOM_BLANK));
+        int topBlank=prefs.getInt("main_top_blank",TOP_BLANK);
+        int bottomBlank=prefs.getInt("main_bottom_blank",BOTTOM_BLANK);
+        root.setPadding(dp(12),dp(topBlank),dp(12),dp(bottomBlank));
         frame.addView(root,new FrameLayout.LayoutParams(-1,-1));
 
         // “+”统一放在最左边
@@ -385,10 +387,10 @@ public class MainActivity extends AppCompatActivity {
         // 在红框中央填写宽高，确认后自动回填到“新建窗口预设”。
         if(hasOverlayPermission()){
             Button floatingPick=button("悬浮窗选位");
-            floatingPick.setTextSize(24);
+            floatingPick.setTextSize(20);
             floatingPick.setContentDescription("悬浮窗选位");
             floatingPick.setOnClickListener(v->showFloatingPresetPicker());
-            LinearLayout.LayoutParams pickLp=new LinearLayout.LayoutParams(dp(92),dp(44));
+            LinearLayout.LayoutParams pickLp=new LinearLayout.LayoutParams(dp(150),dp(44));
             pickLp.setMargins(dp(18),0,0,0);
             presetHeader.addView(floatingPick,pickLp);
         }
@@ -441,7 +443,7 @@ public class MainActivity extends AppCompatActivity {
         screenInfo.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
         screenInfo.setTextColor(Color.WHITE);
         screenInfo.setPadding(dp(6),0,dp(12),0);
-        screenInfo.setMaxLines(4);
+        screenInfo.setMaxLines(1);
         footer.addView(screenInfo,new LinearLayout.LayoutParams(dp(360),dp(68)));
         updateScreenInfo(screenInfo);
 
@@ -556,7 +558,8 @@ public class MainActivity extends AppCompatActivity {
                     lp.setMargins(dp(4),dp(4),dp(4),dp(4));
                     row.addView(tile,lp);
                     inRow++;
-                    if(inRow>=Math.max(1,Math.min(4, (int)(getRealScreenSize().x/(float)Math.max(1,dp(208)))))) inRow=0;
+                    int columns=Math.max(1,prefs.getInt("main_app_columns",4));
+                    if(inRow>=columns) inRow=0;
                 }
             }
         }
@@ -1077,7 +1080,7 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout fontRow=new LinearLayout(this); fontRow.setGravity(Gravity.CENTER_VERTICAL);
         fontRow.addView(text("主界面字体大小",14),new LinearLayout.LayoutParams(0,dp(52),1));
-        EditText fontInput=numberField("100",String.valueOf(Math.round(prefs.getFloat("font_scale",1.0f)*100)));
+        EditText fontInput=numberField("20",String.valueOf(Math.round(prefs.getFloat("font_scale",0.20f)*100)));
         fontRow.addView(fontInput,new LinearLayout.LayoutParams(dp(82),dp(52)));
         fontRow.addView(text("%",14),new LinearLayout.LayoutParams(dp(28),dp(52)));
         box.addView(fontRow,new LinearLayout.LayoutParams(-1,dp(56)));
@@ -1102,6 +1105,27 @@ public class MainActivity extends AppCompatActivity {
         rightRow.addView(rightMarginInput,new LinearLayout.LayoutParams(dp(90),dp(52)));
         rightRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
         box.addView(rightRow,new LinearLayout.LayoutParams(-1,dp(56)));
+
+        LinearLayout columnsRow=new LinearLayout(this); columnsRow.setGravity(Gravity.CENTER_VERTICAL);
+        columnsRow.addView(text("主界面 APP 每排数量",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        EditText columnsInput=numberField("4",String.valueOf(prefs.getInt("main_app_columns",4)));
+        columnsRow.addView(columnsInput,new LinearLayout.LayoutParams(dp(82),dp(52)));
+        columnsRow.addView(text("个",14),new LinearLayout.LayoutParams(dp(28),dp(52)));
+        box.addView(columnsRow,new LinearLayout.LayoutParams(-1,dp(56)));
+
+        LinearLayout topBlankRow=new LinearLayout(this); topBlankRow.setGravity(Gravity.CENTER_VERTICAL);
+        topBlankRow.addView(text("主界面上空白",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        EditText topBlankInput=numberField("80",String.valueOf(prefs.getInt("main_top_blank",80)));
+        topBlankRow.addView(topBlankInput,new LinearLayout.LayoutParams(dp(82),dp(52)));
+        topBlankRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
+        box.addView(topBlankRow,new LinearLayout.LayoutParams(-1,dp(56)));
+
+        LinearLayout bottomBlankRow=new LinearLayout(this); bottomBlankRow.setGravity(Gravity.CENTER_VERTICAL);
+        bottomBlankRow.addView(text("主界面下空白",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        EditText bottomBlankInput=numberField("120",String.valueOf(prefs.getInt("main_bottom_blank",120)));
+        bottomBlankRow.addView(bottomBlankInput,new LinearLayout.LayoutParams(dp(82),dp(52)));
+        bottomBlankRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
+        box.addView(bottomBlankRow,new LinearLayout.LayoutParams(-1,dp(56)));
 
         LinearLayout touchTopRow=new LinearLayout(this); touchTopRow.setGravity(Gravity.CENTER_VERTICAL);
         touchTopRow.addView(text("触控纠正位置上",14),new LinearLayout.LayoutParams(0,dp(52),1));
@@ -1137,18 +1161,22 @@ public class MainActivity extends AppCompatActivity {
                 float us=Float.parseFloat(uiInput.getText().toString().trim());
                 int lm=Integer.parseInt(leftMarginInput.getText().toString().trim());
                 int rm=Integer.parseInt(rightMarginInput.getText().toString().trim());
+                int columns=Integer.parseInt(columnsInput.getText().toString().trim());
+                int topBlank=Integer.parseInt(topBlankInput.getText().toString().trim());
+                int bottomBlank=Integer.parseInt(bottomBlankInput.getText().toString().trim());
                 int touchTop=Integer.parseInt(touchTopInput.getText().toString().trim());
                 int touchLeft=Integer.parseInt(touchLeftInput.getText().toString().trim());
-                if(delay<0||delay>3600||fs<50||fs>300||us<50||us>300||lm<0||rm<0||lm>3000||rm>3000||touchTop<-2000||touchTop>2000||touchLeft<-2000||touchLeft>2000) throw new Exception();
+                if(delay<0||delay>3600||fs<20||fs>300||us<50||us>300||columns<1||columns>20||topBlank<0||topBlank>2000||bottomBlank<0||bottomBlank>2000||lm<0||rm<0||lm>3000||rm>3000||touchTop<-2000||touchTop>2000||touchLeft<-2000||touchLeft>2000) throw new Exception();
                 prefs.edit().putInt("boot_delay_seconds",delay)
                         .putFloat("font_scale",fs/100f).putFloat("ui_scale",us/100f)
+                        .putInt("main_app_columns",columns).putInt("main_top_blank",topBlank).putInt("main_bottom_blank",bottomBlank)
                         .putInt("dialog_left_margin_px",lm).putInt("dialog_right_margin_px",rm)
                         .putInt("touch_offset_top_px",touchTop).putInt("touch_offset_left_px",touchLeft).apply();
                 Toast.makeText(this,"设置已保存并生效",Toast.LENGTH_SHORT).show();
                 if(dialogRef[0]!=null) dialogRef[0].dismiss();
                 buildUI();
             }catch(Exception e){
-                Toast.makeText(this,"请输入有效数值：延迟0-3600秒，字体50-300%，界面50-300%",Toast.LENGTH_LONG).show();
+                Toast.makeText(this,"请输入有效数值：延迟0-3600秒，字体20-300%，界面50-300%",Toast.LENGTH_LONG).show();
             }
         });
         dialogRef[0]=new AlertDialog.Builder(this).setTitle("界面选项").setView(box).create();

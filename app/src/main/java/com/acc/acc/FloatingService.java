@@ -413,17 +413,17 @@ public class FloatingService extends Service {
         bg.setColor(0xFF202020);
         bg.setCornerRadius(dp(16));
         root.setBackground(bg);
-        root.setPadding(dp(10),dp(10),dp(10),dp(10));
+        root.setPadding(dp(18),dp(18),dp(18),dp(18));
 
         LinearLayout box=new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        root.addView(box,new FrameLayout.LayoutParams(dp(300),-1));
+        root.addView(box,new FrameLayout.LayoutParams(dp(560),-1));
 
         LinearLayout title=new LinearLayout(this);
         title.setGravity(Gravity.CENTER_VERTICAL);
         TextView tv=new TextView(this);
         tv.setText("添加到悬浮窗口");
-        tv.setTextColor(Color.WHITE); tv.setTextSize(17);
+        tv.setTextColor(Color.WHITE); tv.setTextSize(22);
         title.addView(tv,new LinearLayout.LayoutParams(0,dp(48),1));
         ImageButton close=iconButton(android.R.drawable.ic_menu_close_clear_cancel);
         close.setContentDescription("关闭");
@@ -431,7 +431,7 @@ public class FloatingService extends Service {
         title.addView(close,new LinearLayout.LayoutParams(dp(44),dp(44)));
         box.addView(title);
 
-        addMenuItem(box,android.R.drawable.ic_menu_add,"添加 APP", "选择一个 APP", v->{closeOverlay();showApps();});
+        addMenuItem(box,android.R.drawable.ic_menu_add,"添加 APP", "打开 APP 列表，显示图标和名称", v->{closeOverlay();showApps();});
         addMenuItem(box,R.drawable.ic_back,"返回按钮", addBack?"已添加，点击取消":"未添加，点击添加", v->{addBack=!addBack;saveButtonState();closeOverlay();showPanel();});
         addMenuItem(box,R.drawable.ic_home,"首页按钮", addHome?"已添加，点击取消":"未添加，点击添加", v->{addHome=!addHome;saveButtonState();closeOverlay();showPanel();});
         addMenuItem(box,R.drawable.ic_menu,"菜单按钮", addMenu?"已添加，点击取消":"未添加，点击添加", v->{addMenu=!addMenu;saveButtonState();closeOverlay();showPanel();});
@@ -447,7 +447,7 @@ public class FloatingService extends Service {
         });
 
         overlayView=root;
-        overlayLp=new WindowManager.LayoutParams(dp(320),dp(330),overlayType(),
+        overlayLp=new WindowManager.LayoutParams(dp(600),dp(620),overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.OPAQUE);
         overlayLp.gravity=Gravity.CENTER;
@@ -458,19 +458,19 @@ public class FloatingService extends Service {
     void addMenuItem(LinearLayout parent,int icon,String title,String sub,View.OnClickListener listener){
         LinearLayout row=new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(6),dp(4),dp(6),dp(4));
+        row.setPadding(dp(10),dp(8),dp(10),dp(8));
         row.setBackgroundResource(R.drawable.card);
         ImageButton ib=iconButton(icon);
-        row.addView(ib,new LinearLayout.LayoutParams(dp(50),dp(50)));
+        row.addView(ib,new LinearLayout.LayoutParams(dp(58),dp(58)));
         LinearLayout textBox=new LinearLayout(this);
         textBox.setOrientation(LinearLayout.VERTICAL);
-        TextView a=new TextView(this); a.setText(title); a.setTextColor(Color.WHITE); a.setTextSize(14);
-        TextView b=new TextView(this); b.setText(sub); b.setTextColor(0xFF9E9E9E); b.setTextSize(10);
-        textBox.addView(a,new LinearLayout.LayoutParams(-1,dp(26)));
-        textBox.addView(b,new LinearLayout.LayoutParams(-1,dp(20)));
-        row.addView(textBox,new LinearLayout.LayoutParams(0,dp(54),1));
+        TextView a=new TextView(this); a.setText(title); a.setTextColor(Color.WHITE); a.setTextSize(18);
+        TextView b=new TextView(this); b.setText(sub); b.setTextColor(0xFF9E9E9E); b.setTextSize(13);
+        textBox.addView(a,new LinearLayout.LayoutParams(-1,dp(30)));
+        textBox.addView(b,new LinearLayout.LayoutParams(-1,dp(24)));
+        row.addView(textBox,new LinearLayout.LayoutParams(0,dp(64),1));
         row.setOnClickListener(listener);
-        parent.addView(row,new LinearLayout.LayoutParams(-1,dp(58)));
+        parent.addView(row,new LinearLayout.LayoutParams(-1,dp(76)));
     }
 
     void saveButtonState(){
