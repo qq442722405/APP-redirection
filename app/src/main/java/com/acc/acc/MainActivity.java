@@ -355,7 +355,7 @@ public class MainActivity extends AppCompatActivity {
         TextView accBg=new TextView(this);
         accBg.setText("Acc");
         accBg.setTextColor(0x22FFFFFF);
-        accBg.setTextSize(380*fontScale());
+        accBg.setTextSize(1140);
         accBg.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
         accBg.setGravity(Gravity.CENTER);
         accBg.setSingleLine(true);
@@ -424,38 +424,53 @@ public class MainActivity extends AppCompatActivity {
         appScroll.addView(appGrid,new HorizontalScrollView.LayoutParams(-2,-1));
         root.addView(appScroll,new LinearLayout.LayoutParams(-1,0,1));
 
-        // 底部：状态信息 + 当前屏幕分辨率/DPI + 设置图标。
+        // 底部右侧：记事本/设置按钮在上，分辨率等信息统一放在按钮下方，
+        // 避免版本、包名等被按钮遮挡。
         LinearLayout footer=new LinearLayout(this);
         footer.setOrientation(LinearLayout.HORIZONTAL);
         footer.setGravity(Gravity.CENTER_VERTICAL);
-        info=text("",36);
+
+        info=text("",20);
         info.setTextColor(Color.LTGRAY);
         info.setPadding(dp(8),dp(4),dp(4),dp(4));
-        footer.addView(info,new LinearLayout.LayoutParams(0,dp(62),1));
+        footer.addView(info,new LinearLayout.LayoutParams(0,dp(86),1));
+
+        LinearLayout rightFooter=new LinearLayout(this);
+        rightFooter.setOrientation(LinearLayout.VERTICAL);
+        rightFooter.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+
+        LinearLayout actionRow=new LinearLayout(this);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
 
         TextView note=plusButton();
         note.setText("📝");
         note.setTextSize(22*fontScale());
         note.setContentDescription("记事本");
         note.setOnClickListener(v->showNotes());
-        // 右下角信息区：分辨率/包名/版本固定紧贴记事本左侧。
-        TextView screenInfo=text("",30);
-        screenInfo.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
-        screenInfo.setTextColor(Color.WHITE);
-        screenInfo.setPadding(dp(6),0,dp(12),0);
-        screenInfo.setMaxLines(1);
-        footer.addView(screenInfo,new LinearLayout.LayoutParams(dp(900),dp(68)));
-        updateScreenInfo(screenInfo);
-
-        footer.addView(note,new LinearLayout.LayoutParams(dp(68),dp(68)));
+        actionRow.addView(note,new LinearLayout.LayoutParams(dp(68),dp(50)));
 
         TextView settings=plusButton();
         settings.setText("⚙");
         settings.setTextSize(24*fontScale());
         settings.setContentDescription("设置");
         settings.setOnClickListener(v->showSettingsMenu());
-        footer.addView(settings,new LinearLayout.LayoutParams(dp(68),dp(68)));
-        root.addView(footer,new LinearLayout.LayoutParams(-1,dp(100)));
+        actionRow.addView(settings,new LinearLayout.LayoutParams(dp(68),dp(50)));
+
+        rightFooter.addView(actionRow,new LinearLayout.LayoutParams(-2,dp(52)));
+
+        // 信息固定在按钮下面，并整体靠右；一行显示，空间不足时从左侧开始裁剪。
+        TextView screenInfo=text("",20);
+        screenInfo.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        screenInfo.setTextColor(Color.WHITE);
+        screenInfo.setPadding(dp(6),0,0,0);
+        screenInfo.setSingleLine(true);
+        screenInfo.setEllipsize(android.text.TextUtils.TruncateAt.START);
+        updateScreenInfo(screenInfo);
+        rightFooter.addView(screenInfo,new LinearLayout.LayoutParams(dp(900),dp(34)));
+
+        footer.addView(rightFooter,new LinearLayout.LayoutParams(-2,dp(90)));
+        root.addView(footer,new LinearLayout.LayoutParams(-1,dp(96)));
         setContentView(frame);
         refresh();
     }
@@ -473,21 +488,26 @@ public class MainActivity extends AppCompatActivity {
                 Preset p=presets.get(i);
 
                 LinearLayout card=new LinearLayout(this);
-                card.setOrientation(LinearLayout.HORIZONTAL);
-                card.setGravity(Gravity.CENTER_VERTICAL);
-                card.setPadding(dp(8),0,dp(8),0);
+                card.setOrientation(LinearLayout.VERTICAL);
+                card.setGravity(Gravity.CENTER);
+                card.setPadding(dp(8),dp(8),dp(8),dp(8));
                 card.setBackgroundResource(R.drawable.card);
 
-                TextView title=text(p.name,39);
+                TextView title=text(p.name,20);
                 title.setGravity(Gravity.CENTER);
                 title.setMaxLines(1);
                 title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                card.addView(title,new LinearLayout.LayoutParams(0,dp(30),1));
+                card.addView(title,new LinearLayout.LayoutParams(-1,0,1));
 
-                TextView size=text(p.w+" × "+p.h,30);
+                TextView size=text(p.w+" × "+p.h,20);
                 size.setTextColor(Color.LTGRAY);
                 size.setGravity(Gravity.CENTER);
-                card.addView(size,new LinearLayout.LayoutParams(dp(65),dp(30)));
+                card.addView(size,new LinearLayout.LayoutParams(-1,0,1));
+
+                TextView pos=text("上 "+p.y+"    左 "+p.x,20);
+                pos.setTextColor(Color.LTGRAY);
+                pos.setGravity(Gravity.CENTER);
+                card.addView(pos,new LinearLayout.LayoutParams(-1,0,1));
 
                 card.setOnClickListener(v->{
                     if(selectedPackage!=null){
