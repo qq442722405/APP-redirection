@@ -2,6 +2,7 @@ package com.acc.acc;
 
 import com.acc.acc.R;
 import android.app.ActivityOptions;
+import android.app.ActivityManager;
 import android.app.Dialog;
 import android.content.*;
 import android.content.pm.*;
@@ -282,8 +283,7 @@ public class MainActivity extends AppCompatActivity {
     /**
      * 只申请本 APK 在 Android 12/13+ 上真正可以由用户授予的运行时权限。
      * 特殊权限不强行跳转，避免启动 APP 时被连续带离主界面；下面的 helper
-     * 可以在需要时打开对应系统授权页。Manifest 已提前声明这些权限，便于
-     * 在 ADB 仍可用时由系统/ADB 进行预授权。
+     * 可以在需要时打开对应系统授权页。Manifest 已提前声明这些权限，实际是否可授予由车机系统决定。
      */
     void requestRuntimePermissions(){
         // 启动阶段不要一次性申请媒体、存储等权限。部分 Android 模拟器
@@ -369,6 +369,12 @@ public class MainActivity extends AppCompatActivity {
                 ));
             }
         }catch(Exception ignored){}
+        selectedPackage=prefs.getString("__selected_app_pkg",null);
+        selectedName=prefs.getString("__selected_app_name",null);
+        if(selectedPackage!=null){
+            try{selectedName=getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(selectedPackage,0)).toString();}
+            catch(Exception ignored){}
+        }
     }
 
     void saveApps(){
@@ -395,7 +401,8 @@ public class MainActivity extends AppCompatActivity {
         getWindow().setNavigationBarColor(Color.BLACK);
 
         FrameLayout frame=new FrameLayout(this);
-        frame.setBackgroundColor(Color.BLACK);
+        boolean hideMainBgAcc=prefs.getBoolean("hide_main_background_acc",false);
+        frame.setBackgroundColor(hideMainBgAcc?Color.TRANSPARENT:Color.BLACK);
 
         TextView accBg=new TextView(this);
         accBg.setText("Acc");
@@ -405,6 +412,7 @@ public class MainActivity extends AppCompatActivity {
         accBg.setGravity(Gravity.CENTER);
         accBg.setSingleLine(true);
         accBg.setClickable(false);
+        if(hideMainBgAcc) accBg.setVisibility(View.GONE);
         frame.addView(accBg,new FrameLayout.LayoutParams(-1,-1));
 
         LinearLayout root=new LinearLayout(this);
@@ -502,6 +510,13 @@ public class MainActivity extends AppCompatActivity {
         note.setContentDescription("记事本");
         note.setOnClickListener(v->showNotes());
         actionRow.addView(note,new LinearLayout.LayoutParams(dp(68),dp(50)));
+
+        TextView closeApp=plusButton();
+        closeApp.setText("×");
+        closeApp.setTextSize(26*mainFontScale());
+        closeApp.setContentDescription("关闭选中的 APP");
+        closeApp.setOnClickListener(v->closeSelectedApp());
+        actionRow.addView(closeApp,new LinearLayout.LayoutParams(dp(68),dp(50)));
 
         TextView settings=plusButton();
         settings.setText("⚙");
@@ -623,10 +638,24 @@ public class MainActivity extends AppCompatActivity {
                     name.setEllipsize(android.text.TextUtils.TruncateAt.END);
                     tile.addView(name,new LinearLayout.LayoutParams(-1,dp(66)));
 
-                    tile.setOnClickListener(v->{selectedPackage=item.pkg;selectedName=item.name;info.setText("当前 APP："+item.name);refresh();});
+                    tile.setOnClickListener(v->{
+                        long now=System.currentTimeMillis();
+                        String lastPkg=prefs.getString("last_app_click_pkg","");
+                        long lastTime=prefs.getLong("last_app_click_time",0);
+                        selectedPackage=item.pkg; selectedName=item.name;
+                        prefs.edit().putString("__selected_app_pkg",item.pkg).putString("__selected_app_name",item.name).apply();
+                        info.setText("当前 APP："+item.name);
+                        if(item.pkg.equals(lastPkg) && now-lastTime<=420){
+                            prefs.edit().remove("last_app_click_pkg").remove("last_app_click_time").apply();
+                            launchAppDirect(item.pkg,item.name);
+                        }else{
+                            prefs.edit().putString("last_app_click_pkg",item.pkg).putLong("last_app_click_time",now).apply();
+                            refresh();
+                        }
+                    });
                     tile.setOnLongClickListener(v->{
                         new AlertDialog.Builder(this).setTitle(item.name)
-                            .setItems(new String[]{"删除 APP"},(d,w)->{if(w==0){if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;}apps.remove(itemIndex);saveApps();refresh();}}).show();
+                            .setItems(new String[]{"删除 APP"},(d,w)->{if(w==0){if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;prefs.edit().remove("__selected_app_pkg").remove("__selected_app_name").apply();}apps.remove(itemIndex);saveApps();refresh();}}).show();
                         return true;
                     });
                     LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(200),dp(180));
@@ -1208,6 +1237,13 @@ public class MainActivity extends AppCompatActivity {
         bottomBlankRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
         box.addView(bottomBlankRow,new LinearLayout.LayoutParams(-1,dp(56)));
 
+        LinearLayout hideBgRow=new LinearLayout(this); hideBgRow.setGravity(Gravity.CENTER_VERTICAL);
+        hideBgRow.addView(text("隐藏主界面背景和Acc",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        Switch hideBgSwitch=new Switch(this);
+        hideBgSwitch.setChecked(prefs.getBoolean("hide_main_background_acc",false));
+        hideBgRow.addView(hideBgSwitch,new LinearLayout.LayoutParams(dp(70),dp(52)));
+        box.addView(hideBgRow,new LinearLayout.LayoutParams(-1,dp(56)));
+
         LinearLayout touchTopRow=new LinearLayout(this); touchTopRow.setGravity(Gravity.CENTER_VERTICAL);
         touchTopRow.addView(text("触控纠正位置上",14),new LinearLayout.LayoutParams(0,dp(52),1));
         EditText touchTopInput=numberField("0",String.valueOf(touchOffsetTop()));
@@ -1263,6 +1299,7 @@ public class MainActivity extends AppCompatActivity {
                         .putInt("main_app_columns",columns)
                         .putInt("main_top_blank",topBlank)
                         .putInt("main_bottom_blank",bottomBlank)
+                        .putBoolean("hide_main_background_acc",hideBgSwitch.isChecked())
                         .putInt("touch_offset_top_px",touchTop)
                         .putInt("touch_offset_left_px",touchLeft)
                         // 清理旧版本已经删除的弹窗左右距离配置。
@@ -1773,6 +1810,8 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
             root.put("settings",keys);
+            if(selectedPackage!=null) root.put("selected_app_pkg",selectedPackage);
+            if(selectedName!=null) root.put("selected_app_name",selectedName);
         }catch(Exception ignored){}
         return root;
     }
@@ -1850,7 +1889,6 @@ public class MainActivity extends AppCompatActivity {
 
                         // 已删除的旧配置不再导入，防止旧配置文件把删除的项目重新带回来。
                         if("popup_left_margin".equals(key) || "popup_right_margin".equals(key)) continue;
-                        if(key.toLowerCase(Locale.US).contains("adb")) continue;
 
                         Object value=item.opt("value");
                         if(value==null || value==JSONObject.NULL) continue;
@@ -1871,7 +1909,17 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
 
+                if(root.has("selected_app_pkg")){
+                    String sp=root.optString("selected_app_pkg","");
+                    if(!sp.isEmpty()) ed.putString("__selected_app_pkg",sp);
+                }
+                if(root.has("selected_app_name")){
+                    String sn=root.optString("selected_app_name","");
+                    if(!sn.isEmpty()) ed.putString("__selected_app_name",sn);
+                }
                 if(!ed.commit()) throw new IOException("保存配置失败");
+                selectedPackage=prefs.getString("__selected_app_pkg",null);
+                selectedName=prefs.getString("__selected_app_name",null);
                 apps.clear();
                 presets.clear();
                 loadData();
@@ -2066,6 +2114,25 @@ public class MainActivity extends AppCompatActivity {
         dialogRef[0]=dialog;
         showFixed1000x800(dialog);
         try{Window w=dialog.getWindow();if(w!=null){android.graphics.Point screen=getRealScreenSize();w.setLayout(w.getAttributes().width,Math.max(dp(420),screen.y-dp(TOP_BLANK+BOTTOM_BLANK)));}}catch(Exception ignored){}
+    }
+
+    /** 在普通第三方权限下向系统请求结束目标 APP 的后台进程。
+     * Android 不保证普通 APP 能强制终止另一个前台 APP，因此这里采用系统允许的最佳努力方式。 */
+    void closeSelectedApp(){
+        if(selectedPackage==null || selectedPackage.trim().isEmpty()){
+            Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show(); return;
+        }
+        String pkg=selectedPackage, name=selectedName==null?pkg:selectedName;
+        boolean attempted=false;
+        try{
+            ActivityManager am=(ActivityManager)getSystemService(ACTIVITY_SERVICE);
+            if(am!=null){ am.killBackgroundProcesses(pkg); attempted=true; }
+        }catch(Exception ignored){}
+        try{
+            // 发送一个显式的“退出/关闭”广播不是 Android 通用标准，不能假定目标 APP 支持。
+            // 这里不发送不存在的私有指令，避免误伤其它应用。
+        }catch(Exception ignored){}
+        Toast.makeText(this,attempted?"已向 "+name+" 发送关闭请求（系统是否允许由车机决定）":"无法发送关闭请求",Toast.LENGTH_LONG).show();
     }
 
     void launchAppDirect(String pkg,String name){
