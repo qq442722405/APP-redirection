@@ -54,7 +54,7 @@ public final class AdbWindowController {
     }
 
     private static String exec(String[] cmd){
-        Process p=null;
+        java.lang.Process p=null;
         try{
             p=new ProcessBuilder(cmd).redirectErrorStream(true).start();
             ByteArrayOutputStream out=new ByteArrayOutputStream();
