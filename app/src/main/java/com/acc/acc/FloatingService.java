@@ -53,6 +53,10 @@ public class FloatingService extends Service {
     }
 
 
+    @Override public IBinder onBind(Intent intent){
+        return null;
+    }
+
     @Override public void onCreate(){
         super.onCreate();
         wm=(WindowManager)getSystemService(WINDOW_SERVICE);
