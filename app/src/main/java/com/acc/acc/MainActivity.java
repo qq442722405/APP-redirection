@@ -960,6 +960,23 @@ public class MainActivity extends AppCompatActivity {
         });
         box.addView(direction,new LinearLayout.LayoutParams(-1,dp(58)));
 
+        LinearLayout plusPosRow=new LinearLayout(this); plusPosRow.setGravity(Gravity.CENTER_VERTICAL);
+        plusPosRow.addView(text("悬浮窗＋号位置",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        String savedPlusPos=prefs.getString("floating_plus_position",prefs.getBoolean("floating_vertical",false)?"top":"left");
+        Button plusPosBtn=button("left".equals(savedPlusPos)?"左边":"right".equals(savedPlusPos)?"右边":"top".equals(savedPlusPos)?"上面":"下面");
+        plusPosRow.addView(plusPosBtn,new LinearLayout.LayoutParams(dp(120),dp(48)));
+        plusPosBtn.setOnClickListener(v->{
+            String[] values={"left","right","top","bottom"};
+            String[] labels={"左边","右边","上面","下面"};
+            String cur=prefs.getString("floating_plus_position",prefs.getBoolean("floating_vertical",false)?"top":"left");
+            int checked=0; for(int i=0;i<values.length;i++)if(values[i].equals(cur))checked=i;
+            new AlertDialog.Builder(this).setTitle("选择悬浮窗＋号位置").setSingleChoiceItems(labels,checked,(d,w)->{
+                prefs.edit().putString("floating_plus_position",values[w]).apply();
+                plusPosBtn.setText(labels[w]); d.dismiss();
+            }).setNegativeButton("取消",null).show();
+        });
+        box.addView(plusPosRow,new LinearLayout.LayoutParams(-1,dp(58)));
+
         EditText spacing=numberField("6",String.valueOf(prefs.getInt("floating_button_spacing_px",6)));
         box.addView(labeledSimpleNumberField("按钮图标间距",spacing),new LinearLayout.LayoutParams(-1,dp(54)));
 

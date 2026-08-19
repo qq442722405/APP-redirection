@@ -30,6 +30,7 @@ public class FloatingService extends Service {
     final ArrayList<Integer> floatingPresetIndexes=new ArrayList<>();
 
     boolean vertical;
+    String plusPosition="left";
     int buttonSpacingPx=6, iconSizePx=44, backgroundOpacity=80;
     boolean addBack=false, addHome=false, addMenu=false;
     boolean singleIconMode=false, positionLocked=false;
@@ -53,10 +54,6 @@ public class FloatingService extends Service {
     }
 
 
-    @Override public IBinder onBind(Intent intent){
-        return null;
-    }
-
     @Override public void onCreate(){
         super.onCreate();
         wm=(WindowManager)getSystemService(WINDOW_SERVICE);
@@ -67,6 +64,7 @@ public class FloatingService extends Service {
         loadFloatingApps();
         SharedPreferences p=getSharedPreferences(MainActivity.PREF,0);
         vertical=p.getBoolean("floating_vertical",false);
+        plusPosition=p.getString("floating_plus_position",vertical?"top":"left");
         buttonSpacingPx=p.getInt("floating_button_spacing_px",6);
         iconSizePx=p.getInt("floating_icon_size_px",44);
         backgroundOpacity=Math.max(0,Math.min(100,p.getInt("floating_background_opacity",80)));
@@ -191,40 +189,7 @@ public class FloatingService extends Service {
             addView(single,iconSizePx,iconSizePx);
             installSingleIconGesture(single);
         } else {
-            // 删除独立的拖拽“☰”按钮；“＋”本身同时承担添加和拖动功能。
-            addView(plus,iconSizePx,iconSizePx);
-            plus.setContentDescription("添加悬浮项目（点击添加，拖动移动）");
-            final int[] plusDown={0,0};
-            final long[] plusDownTime={0};
-            final boolean[] plusMoved={false};
-            plus.setOnTouchListener((v,e)->{
-                switch(e.getActionMasked()){
-                    case MotionEvent.ACTION_DOWN:
-                        plusDown[0]=(int)e.getRawX(); plusDown[1]=(int)e.getRawY();
-                        plusDownTime[0]=System.currentTimeMillis(); plusMoved[0]=false;
-                        return true;
-                    case MotionEvent.ACTION_MOVE:
-                        int dx=(int)e.getRawX()-plusDown[0], dy=(int)e.getRawY()-plusDown[1];
-                        if(Math.abs(dx)>8 || Math.abs(dy)>8){
-                            plusMoved[0]=true;
-                            if(!positionLocked){
-                                lp.x += dx; lp.y += dy;
-                                plusDown[0]=(int)e.getRawX(); plusDown[1]=(int)e.getRawY();
-                                try{wm.updateViewLayout(panel,lp);}catch(Exception ignored){}
-                            }
-                        }
-                        return true;
-                    case MotionEvent.ACTION_UP:
-                        if(!plusMoved[0]){
-                            showAddMenu();
-                        }else if(!positionLocked){
-                            getSharedPreferences(MainActivity.PREF,0).edit()
-                                    .putInt("floating_position_x",lp.x).putInt("floating_position_y",lp.y).apply();
-                        }
-                        return true;
-                }
-                return true;
-            });
+            // 普通模式：＋号同时负责添加和拖动；位置由悬浮窗口设置控制。
             rebuildButtons();
         }
 
@@ -363,9 +328,20 @@ public class FloatingService extends Service {
 
     void rebuildButtons(){
         if(panel==null)return;
-        while(panel.getChildCount()>2)panel.removeViewAt(2);
+        while(panel.getChildCount()>0)panel.removeViewAt(0);
+        addFloatingPlusButton();
+        boolean plusAtEnd=(vertical && "bottom".equals(plusPosition)) || (!vertical && "right".equals(plusPosition));
+        if(plusAtEnd){
+            View plusView=panel.getChildAt(0);
+            panel.removeViewAt(0);
+            buildFloatingItems();
+            panel.addView(plusView);
+        }else{
+            buildFloatingItems();
+        }
+    }
 
-        // 桌面悬浮窗上的 APP 按钮只显示名称第一个字/字母，不显示真实图标。
+    void buildFloatingItems(){
         for(int i=0;i<floatingPkgs.size();i++){
             final String pkg=floatingPkgs.get(i);
             final String displayName=(i<floatingNames.size()?floatingNames.get(i):pkg);
@@ -374,13 +350,46 @@ public class FloatingService extends Service {
             b.setGravity(Gravity.CENTER);
             final int presetIndex=(i<floatingPresetIndexes.size()?floatingPresetIndexes.get(i):-1);
             b.setOnClickListener(v->launchFloatingApp(pkg,presetIndex));
-            b.setOnLongClickListener(v->{removeFloatingApp(pkg);return true;});
+            b.setOnLongClickListener(v->{showRemoveConfirm(pkg);return true;});
             addView(b,iconSizePx,iconSizePx);
         }
-
         if(addBack) addSystemButton(R.drawable.ic_back,"返回",ACTION_BACK);
         if(addHome) addSystemButton(R.drawable.ic_home,"首页",ACTION_HOME);
         if(addMenu) addSystemButton(R.drawable.ic_menu,"菜单",ACTION_MENU);
+    }
+
+    void addFloatingPlusButton(){
+        TextView plus=baseButton("＋");
+        plus.setTextSize(22*fontScale());
+        plus.setContentDescription("添加悬浮项目（点击添加，拖动移动）");
+        final int[] down={0,0}; final boolean[] moved={false};
+        plus.setOnTouchListener((v,e)->{
+            switch(e.getActionMasked()){
+                case MotionEvent.ACTION_DOWN: down[0]=(int)e.getRawX(); down[1]=(int)e.getRawY(); moved[0]=false; return true;
+                case MotionEvent.ACTION_MOVE:
+                    int dx=(int)e.getRawX()-down[0],dy=(int)e.getRawY()-down[1];
+                    if(Math.abs(dx)>8||Math.abs(dy)>8){ moved[0]=true; if(!positionLocked&&lp!=null){lp.x+=dx;lp.y+=dy;down[0]=(int)e.getRawX();down[1]=(int)e.getRawY();try{wm.updateViewLayout(panel,lp);}catch(Exception ignored){}} }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                    if(!moved[0]) showAddMenu(); else if(!positionLocked&&lp!=null) getSharedPreferences(MainActivity.PREF,0).edit().putInt("floating_position_x",lp.x).putInt("floating_position_y",lp.y).apply();
+                    return true;
+            }
+            return true;
+        });
+        addView(plus,iconSizePx,iconSizePx);
+    }
+
+    void showRemoveConfirm(String pkg){
+        closeOverlay(); removePanel();
+        FrameLayout root=new FrameLayout(this);
+        GradientDrawable bg=new GradientDrawable(); bg.setColor(0xFF202020); bg.setCornerRadius(dp(16)); root.setBackground(bg); root.setPadding(dp(20),dp(16),dp(20),dp(16));
+        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); root.addView(box,new FrameLayout.LayoutParams(dp(560),dp(260)));
+        TextView title=new TextView(this); title.setText("删除快捷键？"); title.setTextColor(Color.WHITE); title.setTextSize(22*fontScale()); title.setGravity(Gravity.CENTER); box.addView(title,new LinearLayout.LayoutParams(-1,dp(58)));
+        TextView msg=new TextView(this); msg.setText("是否删除“"+getAppLabelSafe(pkg)+"”这个悬浮窗口快捷键？"); msg.setTextColor(0xFFCCCCCC); msg.setTextSize(15*fontScale()); msg.setGravity(Gravity.CENTER); box.addView(msg,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout actions=new LinearLayout(this); Button no=new Button(this); no.setText("取消"); Button yes=new Button(this); yes.setText("删除"); actions.addView(no,new LinearLayout.LayoutParams(0,dp(52),1)); actions.addView(yes,new LinearLayout.LayoutParams(0,dp(52),1)); box.addView(actions);
+        no.setOnClickListener(v->{closeOverlay();showPanel();}); yes.setOnClickListener(v->{removeFloatingApp(pkg);closeOverlay();showPanel();});
+        overlayView=root; overlayLp=new WindowManager.LayoutParams(dp(600),dp(300),overlayType(),WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT); overlayLp.gravity=Gravity.CENTER;
+        try{wm.addView(root,overlayLp);}catch(Exception e){showPanel();}
     }
 
     void launchFloatingApp(String pkg,int presetIndex){
@@ -575,17 +584,7 @@ public class FloatingService extends Service {
         TextView presetBtn=baseButton("窗口预设：默认");
         box.addView(presetBtn,new LinearLayout.LayoutParams(-1,dp(48)));
         final int[] selectedPreset={-1};
-        presetBtn.setOnClickListener(v->{
-            ArrayList<String> labels=new ArrayList<>();
-            labels.add("默认（不填）");
-            try{
-                JSONArray a=new JSONArray(getSharedPreferences(MainActivity.PREF,0).getString(MainActivity.PRESETS,"[]"));
-                for(int i=0;i<a.length();i++) labels.add(a.optJSONObject(i)==null?"窗口预设"+(i+1):a.optJSONObject(i).optString("name","窗口预设"+(i+1)));
-            }catch(Exception ignored){}
-            String[] items=labels.toArray(new String[0]);
-            AlertDialog d=new AlertDialog.Builder(this).setTitle("选择窗口预设（可不填）").setItems(items,(dd,w)->{selectedPreset[0]=w-1;presetBtn.setText(w==0?"窗口预设：默认":"窗口预设："+items[w]);}).setNegativeButton("取消",null).create();
-            d.getWindow(); d.show();
-        });
+        presetBtn.setOnClickListener(v->showPresetChooserOverlay(presetBtn,selectedPreset));
 
         ScrollView sv=new ScrollView(this);
         LinearLayout rows=new LinearLayout(this);
@@ -659,8 +658,29 @@ public class FloatingService extends Service {
         try{wm.addView(root,overlayLp);}catch(Exception e){Toast.makeText(this,"添加到悬浮窗口界面打开失败："+e.getMessage(),Toast.LENGTH_LONG).show();}
     }
 
+    void showPresetChooserOverlay(TextView target,int[] selectedPreset){
+        closeOverlay();
+        FrameLayout root=new FrameLayout(this);
+        GradientDrawable bg=new GradientDrawable(); bg.setColor(0xFF202020); bg.setCornerRadius(dp(16)); root.setBackground(bg); root.setPadding(dp(18),dp(14),dp(18),dp(14));
+        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); root.addView(box,new FrameLayout.LayoutParams(dp(760),dp(680)));
+        LinearLayout titleRow=new LinearLayout(this); titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title=new TextView(this); title.setText("选择窗口预设（可不填）"); title.setTextColor(Color.WHITE); title.setTextSize(20*fontScale()); titleRow.addView(title,new LinearLayout.LayoutParams(0,dp(54),1));
+        ImageButton close=iconButton(android.R.drawable.ic_menu_close_clear_cancel); close.setOnClickListener(v->{closeOverlay();showApps();}); titleRow.addView(close,new LinearLayout.LayoutParams(dp(46),dp(46))); box.addView(titleRow);
+        ScrollView scroll=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); scroll.addView(list,new ScrollView.LayoutParams(-1,-2)); box.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        ArrayList<String> labels=new ArrayList<>(); labels.add("默认（不填）");
+        try{JSONArray a=new JSONArray(getSharedPreferences(MainActivity.PREF,0).getString(MainActivity.PRESETS,"[]")); for(int i=0;i<a.length();i++){JSONObject o=a.optJSONObject(i); labels.add(o==null?"窗口预设"+(i+1):o.optString("name","窗口预设"+(i+1)));}}catch(Exception ignored){}
+        for(int i=0;i<labels.size();i++){
+            final int idx=i-1; Button item=button(labels.get(i)); item.setGravity(Gravity.LEFT|Gravity.CENTER_VERTICAL); item.setPadding(dp(18),0,dp(12),0); list.addView(item,new LinearLayout.LayoutParams(-1,dp(58)));
+            item.setOnClickListener(v->{selectedPreset[0]=idx; target.setText(idx<0?"窗口预设：默认":"窗口预设："+labels.get(idx+1)); closeOverlay(); showApps();});
+        }
+        overlayView=root; overlayLp=new WindowManager.LayoutParams(dp(800),dp(720),overlayType(),WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT); overlayLp.gravity=Gravity.CENTER;
+        try{wm.addView(root,overlayLp);}catch(Exception e){Toast.makeText(this,"窗口预设列表打开失败",Toast.LENGTH_SHORT).show(); showApps();}
+    }
+
     int availableWidth(){
         try{return getResources().getDisplayMetrics().widthPixels;}catch(Exception e){return 1000;}
     }
+
+    @Override public IBinder onBind(Intent intent){ return null; }
 
 }
