@@ -93,6 +93,63 @@ public final class AdbWindowController {
         return "不可用";
     }
 
+    /**
+     * 使用车机本机 ADB TCP 服务（127.0.0.1:5555）强制结束指定 APP。
+     * 优先 adb -s 127.0.0.1:5555 shell am force-stop；如果车机 adb client
+     * 不在 PATH，则返回明确诊断，不伪装成“ADB 已连接”。
+     */
+    public static String forceStopViaLocalAdb(String pkg){
+        if(pkg==null || pkg.trim().isEmpty()) return "未选择 APP";
+        String[] paths={"adb","/system/bin/adb","/system/xbin/adb","/vendor/bin/adb"};
+        String last="未找到本机 adb 客户端";
+        for(String adb:paths){
+            String r=exec(new String[]{adb,"-s","127.0.0.1:5555","shell","am","force-stop",pkg});
+            if(ok(r)) return "OK：127.0.0.1:5555";
+            last=cleanError(r);
+        }
+        // 如果 APK 本身具有 root/shell 桥接能力，也允许使用该通道。
+        String r=shell("am force-stop "+pkg);
+        if(ok(r)) return "OK：系统 Shell/Root";
+        return last;
+    }
+
+    /** ADB 专用诊断：明确检查本地 127.0.0.1:5555。 */
+    public static String diagnoseLocalAdb(Context c){
+        StringBuilder s=new StringBuilder();
+        s.append("目标：127.0.0.1:5555\n");
+        try{
+            java.net.Socket socket=new java.net.Socket();
+            socket.connect(new java.net.InetSocketAddress("127.0.0.1",5555),800);
+            socket.close();
+            s.append("✓ TCP 5555 端口：可连接\n");
+        }catch(Exception e){
+            s.append("✗ TCP 5555 端口：不可连接（").append(e.getClass().getSimpleName()).append("）\n");
+        }
+        String[] paths={"adb","/system/bin/adb","/system/xbin/adb","/vendor/bin/adb"};
+        boolean found=false;
+        for(String adb:paths){
+            String r=exec(new String[]{adb,"-s","127.0.0.1:5555","shell","id"});
+            if(ok(r)){
+                found=true;
+                s.append("✓ ADB Shell：").append(r).append("\n");
+                break;
+            }
+        }
+        if(!found) s.append("✗ ADB Shell：当前 APK 找不到可执行的本机 adb 客户端或无法访问 shell\n");
+        String uid=exec(new String[]{"sh","-c","id"});
+        if(ok(uid)) s.append("当前 APK Shell：").append(uid).append("\n");
+        String root=exec(new String[]{"su","-c","id"});
+        if(ok(root)) s.append("✓ Root/SU：").append(root).append("\n");
+        else s.append("✗ Root/SU：不可用\n");
+        return s.toString().trim();
+    }
+
+    private static String cleanError(String r){
+        if(r==null)return "未知错误";
+        if(r.startsWith("__ERR__"))r=r.substring(7);
+        return r.trim().isEmpty()?"命令执行失败":r.trim();
+    }
+
     public static boolean launchAndResize(Context c,String pkg,Rect bounds,boolean floating){
         if(Build.VERSION.SDK_INT>=23 && !Settings.canDrawOverlays(c)) return false;
         Intent i=c.getPackageManager().getLaunchIntentForPackage(pkg);

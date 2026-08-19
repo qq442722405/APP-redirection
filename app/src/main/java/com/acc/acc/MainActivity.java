@@ -365,7 +365,7 @@ public class MainActivity extends AppCompatActivity {
                 JSONObject o=a.getJSONObject(i);
                 presets.add(new Preset(
                         o.getString("name"),o.getInt("x"),o.getInt("y"),
-                        o.getInt("w"),o.getInt("h"),o.optInt("displayId",-1),o.optInt("mode",1)
+                        o.getInt("w"),o.getInt("h"),o.optInt("displayId",-1),Math.max(1,Math.min(6,o.optInt("mode",1)))
                 ));
             }
         }catch(Exception ignored){}
@@ -502,6 +502,24 @@ public class MainActivity extends AppCompatActivity {
         note.setContentDescription("记事本");
         note.setOnClickListener(v->showNotes());
         actionRow.addView(note,new LinearLayout.LayoutParams(dp(68),dp(50)));
+
+        TextView closeApp=plusButton();
+        closeApp.setText("×");
+        closeApp.setTextSize(28*mainFontScale());
+        closeApp.setContentDescription("关闭指定程序");
+        closeApp.setOnClickListener(v->{
+            if(selectedPackage==null || selectedPackage.trim().isEmpty()){
+                Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show();
+                return;
+            }
+            String result=AdbWindowController.forceStopViaLocalAdb(selectedPackage);
+            if(result.startsWith("OK")){
+                Toast.makeText(this,"已通过本地 ADB 关闭："+selectedName,Toast.LENGTH_SHORT).show();
+            }else{
+                Toast.makeText(this,"ADB 关闭失败："+result,Toast.LENGTH_LONG).show();
+            }
+        });
+        actionRow.addView(closeApp,new LinearLayout.LayoutParams(dp(68),dp(50)));
 
         TextView settings=plusButton();
         settings.setText("⚙");
@@ -1557,7 +1575,7 @@ public class MainActivity extends AppCompatActivity {
             name.setText(o.optString("name",""));
             x.setText(String.valueOf(o.optInt("x",0))); y.setText(String.valueOf(o.optInt("y",0)));
             width.setText(String.valueOf(o.optInt("w",0))); height.setText(String.valueOf(o.optInt("h",0)));
-            int m=Math.max(1,Math.min(8,o.optInt("mode",1))); modeHolder[0]=m;
+            int m=Math.max(1,Math.min(6,o.optInt("mode",1))); modeHolder[0]=m;
             if(modeButtons!=null) for(int i=0;i<modeButtons.length;i++) modeButtons[i].setBackgroundResource(i==m-1?R.drawable.card_selected:R.drawable.button);
             Toast.makeText(this,"面板参数已粘贴",Toast.LENGTH_SHORT).show();
             return true;
@@ -1575,9 +1593,7 @@ public class MainActivity extends AppCompatActivity {
             case 4:return "普通窗口模式（模式4）";
             case 5:return "普通窗口模式（模式5）";
             case 6:return "全屏模式";
-            case 7:return "ADB 强制窗口化";
-            case 8:return "ADB 程序悬浮窗化";
-            default:return "普通窗口模式（模式1）";
+                        default:return "普通窗口模式（模式1）";
         }
     }
 
@@ -1601,18 +1617,17 @@ public class MainActivity extends AppCompatActivity {
         box.addView(modeTitle,new LinearLayout.LayoutParams(-1,dp(32)));
         Button modeSelector=button("普通窗口模式");
         modeSelector.setTextSize(13*fontScale());
-        final int[] modeHolder={Math.max(1,Math.min(8,old.mode))};
-        String[] modeLabels={"普通窗口模式（点击选择模式1-5）","全屏模式","ADB 强制窗口模式","ADB 程序悬浮窗化"};
-        modeSelector.setText(modeLabel(modeHolder[0]));
+        final int[] modeHolder={Math.max(1,Math.min(6,old.mode))};
+                modeSelector.setText(modeLabel(modeHolder[0]));
         modeSelector.setOnClickListener(v->{
-            String[] choices={"普通窗口模式（模式1）","普通窗口模式（模式2）","普通窗口模式（模式3）","普通窗口模式（模式4）","普通窗口模式（模式5）","全屏模式","ADB 强制窗口化","ADB 程序悬浮窗化"};
+            String[] choices={"普通窗口模式（模式1）","普通窗口模式（模式2）","普通窗口模式（模式3）","普通窗口模式（模式4）","普通窗口模式（模式5）","全屏模式"};
             new AlertDialog.Builder(this).setTitle("选择启动模式").setItems(choices,(d,which)->{
                 int m=which+1; modeHolder[0]=m; modeSelector.setText(modeLabel(m));
                 if(m==6){x.setText("0");y.setText("0");width.setText("0");height.setText("0");}
             }).show();
         });
         box.addView(modeSelector,new LinearLayout.LayoutParams(-1,dp(48)));
-        TextView modeHint=text("模式1-5统一通过此按钮选择；ADB模式需要车机允许应用执行 shell/ADB 命令。",11);
+        TextView modeHint=text("模式1-5统一通过此按钮选择；模式6为全屏模式。",11);
         modeHint.setTextColor(Color.GRAY);
         box.addView(modeHint,new LinearLayout.LayoutParams(-1,dp(36)));
 
@@ -1703,7 +1718,9 @@ public class MainActivity extends AppCompatActivity {
          .append(hasUsageAccess()?"✓ 使用情况访问\n":"✗ 使用情况访问\n")
          .append(hasAllFilesPermission()?"✓ 所有文件访问\n":"✗ 所有文件访问\n")
          .append(Build.VERSION.SDK_INT<23 || Settings.System.canWrite(this)?"✓ 修改系统设置\n":"✗ 修改系统设置\n")
-         .append("\n触控纠正：上=").append(touchOffsetTop()).append("px，左=").append(touchOffsetLeft()).append("px");
+         .append("\n触控纠正：上=").append(touchOffsetTop()).append("px，左=").append(touchOffsetLeft()).append("px")
+         .append("\n\n=== ADB 诊断（本地 127.0.0.1:5555）===\n")
+         .append(AdbWindowController.diagnoseLocalAdb(this)).append("\n");
 
         TextView msg=text(s.toString(),11);
         msg.setPadding(dp(4),dp(4),dp(4),dp(4));
@@ -1730,6 +1747,12 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         actionRow.addView(checkButton,new LinearLayout.LayoutParams(-1,dp(48)));
+        Button adbCheck=button("ADB连接检查（127.0.0.1:5555）");
+        adbCheck.setOnClickListener(v->{
+            msg.setText("=== ADB 诊断（本地 127.0.0.1:5555） ===\n"+AdbWindowController.diagnoseLocalAdb(this));
+            Toast.makeText(this,"已重新检测本地 ADB 127.0.0.1:5555",Toast.LENGTH_SHORT).show();
+        });
+        actionRow.addView(adbCheck,new LinearLayout.LayoutParams(-1,dp(48)));
         Button back=button("返回");
         actionRow.addView(back,new LinearLayout.LayoutParams(-1,dp(48)));
         diagBox.addView(actionRow,new LinearLayout.LayoutParams(-1,dp(158)));
@@ -2060,17 +2083,6 @@ public class MainActivity extends AppCompatActivity {
                     View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         }
         android.graphics.Rect bounds=new android.graphics.Rect(left,top,right,bottom);
-
-        // ADB 模式：尝试通过 shell/ADB 的 Activity 管理命令启用 freeform、启动并调整目标任务。
-        if(p.mode==7 || p.mode==8){
-            boolean floating=(p.mode==8);
-            if(AdbWindowController.launchAndResize(this, selectedPackage, bounds, floating)){
-                info.setText("ADB启动："+selectedName+"  "+(floating?"悬浮窗化":"强制窗口化"));
-                return;
-            }
-            Toast.makeText(this,"ADB 执行失败："+AdbWindowController.diagnose(),Toast.LENGTH_LONG).show();
-            return;
-        }
 
         ActivityOptions options=ActivityOptions.makeBasic();
         options.setLaunchBounds(bounds);
