@@ -1783,6 +1783,7 @@ public class MainActivity extends AppCompatActivity {
             i.addCategory(Intent.CATEGORY_OPENABLE);
             i.setType("application/json");
             i.putExtra(Intent.EXTRA_TITLE,"APP窗口启动器配置.json");
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             startActivityForResult(i,REQ_EXPORT_CONFIG);
         }catch(Exception e){Toast.makeText(this,"无法打开导出界面",Toast.LENGTH_SHORT).show();}
     }
@@ -1791,7 +1792,9 @@ public class MainActivity extends AppCompatActivity {
         try{
             Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
             i.addCategory(Intent.CATEGORY_OPENABLE);
-            i.setType("application/json");
+            i.setType("*/*");
+            i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/json","text/plain","text/json","application/octet-stream"});
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
             startActivityForResult(i,REQ_IMPORT_CONFIG);
         }catch(Exception e){Toast.makeText(this,"无法打开导入界面",Toast.LENGTH_SHORT).show();}
     }
@@ -1802,19 +1805,33 @@ public class MainActivity extends AppCompatActivity {
         Uri uri=data.getData();
         try{
             if(requestCode==REQ_EXPORT_CONFIG){
-                OutputStream out=getContentResolver().openOutputStream(uri);
-                if(out==null) throw new IOException("output null");
-                out.write(buildConfigJson().toString(2).getBytes("UTF-8"));
+                OutputStream out=getContentResolver().openOutputStream(uri,"w");
+                if(out==null) throw new IOException("无法打开导出文件");
+                byte[] bytes=buildConfigJson().toString(2).getBytes("UTF-8");
+                out.write(bytes);
+                out.flush();
                 out.close();
                 Toast.makeText(this,"配置导出成功",Toast.LENGTH_SHORT).show();
             }else if(requestCode==REQ_IMPORT_CONFIG){
                 InputStream in=getContentResolver().openInputStream(uri);
-                if(in==null) throw new IOException("input null");
+                if(in==null) throw new IOException("无法读取配置文件");
                 ByteArrayOutputStream buf=new ByteArrayOutputStream();
                 byte[] b=new byte[8192]; int n;
                 while((n=in.read(b))!=-1) buf.write(b,0,n);
                 in.close();
-                JSONObject root=new JSONObject(new String(buf.toByteArray(),"UTF-8"));
+
+                // 兼容部分车机文件管理器/编辑器给 JSON 文件添加 UTF-8 BOM 的情况。
+                String text=new String(buf.toByteArray(),"UTF-8");
+                if(text.length()>0 && text.charAt(0)=='\ufeff') text=text.substring(1);
+                text=text.trim();
+                if(text.isEmpty()) throw new IOException("配置文件为空");
+
+                JSONObject root=new JSONObject(text);
+                // 必须是本程序的配置对象，避免误选其它 JSON 后直接报一堆设置错误。
+                if(!root.has("apps") && !root.has("presets") && !root.has("settings") && !root.has("floating_apps")){
+                    throw new JSONException("不是 APP窗口启动器配置文件");
+                }
+
                 JSONArray appsJson=root.optJSONArray("apps");
                 JSONArray presetsJson=root.optJSONArray("presets");
                 JSONArray floatingJson=root.optJSONArray("floating_apps");
@@ -1822,26 +1839,51 @@ public class MainActivity extends AppCompatActivity {
                 if(appsJson!=null) ed.putString(APPS,appsJson.toString());
                 if(presetsJson!=null) ed.putString(PRESETS,presetsJson.toString());
                 if(floatingJson!=null) ed.putString("floating_apps",floatingJson.toString());
+
                 JSONArray settings=root.optJSONArray("settings");
                 if(settings!=null){
                     for(int i=0;i<settings.length();i++){
-                        JSONObject item=settings.optJSONObject(i); if(item==null) continue;
-                        String key=item.optString("key",""); if(key.isEmpty()) continue;
+                        JSONObject item=settings.optJSONObject(i);
+                        if(item==null) continue;
+                        String key=item.optString("key","");
+                        if(key.isEmpty()) continue;
+
+                        // 已删除的旧配置不再导入，防止旧配置文件把删除的项目重新带回来。
+                        if("popup_left_margin".equals(key) || "popup_right_margin".equals(key)) continue;
+                        if(key.toLowerCase(Locale.US).contains("adb")) continue;
+
                         Object value=item.opt("value");
-                        if(value instanceof Boolean) ed.putBoolean(key,(Boolean)value);
-                        else if(value instanceof Integer) ed.putInt(key,(Integer)value);
-                        else if(value instanceof Long) ed.putLong(key,(Long)value);
-                        else if(value instanceof Number) ed.putFloat(key,((Number)value).floatValue());
-                        else if(value!=JSONObject.NULL) ed.putString(key,String.valueOf(value));
+                        if(value==null || value==JSONObject.NULL) continue;
+                        Object old=prefs.getAll().get(key);
+                        try{
+                            if(old instanceof Boolean) ed.putBoolean(key,Boolean.parseBoolean(String.valueOf(value)));
+                            else if(old instanceof Integer) ed.putInt(key,Integer.parseInt(String.valueOf(value)));
+                            else if(old instanceof Long) ed.putLong(key,Long.parseLong(String.valueOf(value)));
+                            else if(old instanceof Float) ed.putFloat(key,Float.parseFloat(String.valueOf(value)));
+                            else if(old instanceof Double) ed.putFloat(key,Float.parseFloat(String.valueOf(value)));
+                            else if(old instanceof String) ed.putString(key,String.valueOf(value));
+                            else if(value instanceof Boolean) ed.putBoolean(key,(Boolean)value);
+                            else if(value instanceof Number) ed.putFloat(key,((Number)value).floatValue());
+                            else ed.putString(key,String.valueOf(value));
+                        }catch(Exception ignored){
+                            // 单个设置格式异常不影响其它配置继续导入。
+                        }
                     }
                 }
-                ed.apply();
-                apps.clear(); presets.clear(); loadData();
+
+                if(!ed.commit()) throw new IOException("保存配置失败");
+                apps.clear();
+                presets.clear();
+                loadData();
                 refresh();
-                Toast.makeText(this,"配置导入成功，部分设置将在重新打开页面/悬浮窗口后生效",Toast.LENGTH_LONG).show();
+                Toast.makeText(this,"配置导入成功",Toast.LENGTH_LONG).show();
             }
+        }catch(JSONException e){
+            Toast.makeText(this,"导入失败：配置文件格式错误或不是本程序导出的配置",Toast.LENGTH_LONG).show();
         }catch(Exception e){
-            Toast.makeText(this,"配置处理失败："+e.getMessage(),Toast.LENGTH_LONG).show();
+            String msg=e.getMessage();
+            if(msg==null || msg.trim().isEmpty()) msg="无法读取或保存配置文件";
+            Toast.makeText(this,"配置处理失败："+msg,Toast.LENGTH_LONG).show();
         }
     }
 
