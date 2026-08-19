@@ -128,6 +128,25 @@ public class FloatingService extends Service {
         }catch(Exception ignored){}
     }
 
+    String getAppLabelSafe(String pkg){
+        try{
+            ApplicationInfo ai=getPackageManager().getApplicationInfo(pkg,0);
+            return getPackageManager().getApplicationLabel(ai).toString();
+        }catch(Exception e){ return pkg==null?"未知 APP":pkg; }
+    }
+
+    Button button(String label){
+        Button b=new Button(this);
+        b.setText(label);
+        b.setTextColor(Color.WHITE);
+        b.setTextSize(14*fontScale());
+        b.setAllCaps(false);
+        b.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+        b.setPadding(dp(16),0,dp(16),0);
+        b.setBackgroundResource(R.drawable.button);
+        return b;
+    }
+
     TextView baseButton(String label){
         TextView b=new TextView(this);
         b.setText(label);

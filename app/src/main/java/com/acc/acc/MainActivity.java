@@ -250,9 +250,50 @@ public class MainActivity extends AppCompatActivity {
         catch(Exception ex){return fallback;}
     }
 
+    void loadBundledDefaultConfigIfFreshInstall(){
+        if(!prefs.getAll().isEmpty()) return;
+        try(InputStream in=getAssets().open("APP窗口启动器配置.json")){
+            ByteArrayOutputStream buf=new ByteArrayOutputStream();
+            byte[] b=new byte[8192]; int n;
+            while((n=in.read(b))!=-1) buf.write(b,0,n);
+            String json=new String(buf.toByteArray(),"UTF-8");
+            if(json.length()>0 && json.charAt(0)=='\ufeff') json=json.substring(1);
+            JSONObject root=new JSONObject(json.trim());
+            SharedPreferences.Editor ed=prefs.edit();
+            JSONArray appsJson=root.optJSONArray("apps");
+            JSONArray presetsJson=root.optJSONArray("presets");
+            JSONArray floatingJson=root.optJSONArray("floating_apps");
+            if(appsJson!=null) ed.putString(APPS,appsJson.toString());
+            if(presetsJson!=null) ed.putString(PRESETS,presetsJson.toString());
+            if(floatingJson!=null) ed.putString("floating_apps",floatingJson.toString());
+            JSONArray settings=root.optJSONArray("settings");
+            if(settings!=null){
+                for(int i=0;i<settings.length();i++){
+                    JSONObject item=settings.optJSONObject(i);
+                    if(item==null) continue;
+                    String key=item.optString("key","");
+                    if(key.isEmpty()) continue;
+                    Object value=item.opt("value");
+                    if(value==null || value==JSONObject.NULL) continue;
+                    if(value instanceof Boolean) ed.putBoolean(key,((Boolean)value).booleanValue());
+                    else if(value instanceof Number){
+                        double d=((Number)value).doubleValue();
+                        if(Math.rint(d)==d) ed.putInt(key,(int)d); else ed.putFloat(key,(float)d);
+                    }else ed.putString(key,String.valueOf(value));
+                }
+            }
+            String selectedPkg=root.optString("selected_app_pkg","");
+            String selectedName=root.optString("selected_app_name","");
+            if(!selectedPkg.isEmpty()) ed.putString("__selected_app_pkg",selectedPkg);
+            if(!selectedName.isEmpty()) ed.putString("__selected_app_name",selectedName);
+            ed.apply();
+        }catch(Exception ignored){}
+    }
+
     @Override protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
         prefs=getSharedPreferences(PREF,0);
+        loadBundledDefaultConfigIfFreshInstall();
         // 新安装默认界面参数；如果用户已经手动设置过，则保留用户设置。
         SharedPreferences.Editor defaults=prefs.edit();
         if(!prefs.contains("font_scale") || prefs.getFloat("font_scale",1.0f) <= 0.2001f) defaults.putFloat("font_scale",1.00f);
