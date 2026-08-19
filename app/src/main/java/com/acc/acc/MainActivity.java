@@ -1260,40 +1260,181 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /** 添加 APP：枚举系统中所有具有可启动主界面的 APP。使用 MAIN/LAUNCHER 与 MAIN/LEANBACK_LAUNCHER 双通道，避免遗漏车机/TV APP。 */
+    /**
+     * 获取设备上所有可以被本启动器识别/显示的 APP。
+     *
+     * 不再只依赖 LAUNCHER/LEANBACK 类别：
+     * 1. MAIN + LAUNCHER
+     * 2. MAIN + LEANBACK_LAUNCHER
+     * 3. 所有 MAIN Activity
+     * 4. getLaunchIntentForPackage()
+     * 5. 已安装 ApplicationInfo 作为最后兜底
+     *
+     * 这样车机厂商自定义、TV/车机、没有标准 Launcher category 的 APP
+     * 也会出现在列表中。真正没有可启动 Activity 的包仍然可以显示，
+     * 点击时会给出“无法启动”的提示。
+     */
     ArrayList<ApplicationInfo> getDisplayableApps(){
         PackageManager pm=getPackageManager();
         LinkedHashMap<String,ApplicationInfo> map=new LinkedHashMap<>();
-        Intent main=new Intent(Intent.ACTION_MAIN);
-        main.addCategory(Intent.CATEGORY_LAUNCHER);
+
         try{
-            for(android.content.pm.ResolveInfo ri:pm.queryIntentActivities(main,PackageManager.MATCH_ALL)){
-                if(ri.activityInfo==null || ri.activityInfo.applicationInfo==null) continue;
-                ApplicationInfo ai=ri.activityInfo.applicationInfo;
+            List<ApplicationInfo> installed=pm.getInstalledApplications(PackageManager.MATCH_ALL);
+            for(ApplicationInfo ai:installed){
+                if(ai==null || ai.packageName==null) continue;
                 if(ai.packageName.equals(getPackageName())) continue;
-                map.put(ai.packageName,ai);
+                CharSequence label=null;
+                try{ label=pm.getApplicationLabel(ai); }catch(Exception ignored){}
+                // 没有任何可显示名称的极少数内部包不放进用户 APP 列表。
+                if(label!=null && label.toString().trim().length()>0){
+                    map.put(ai.packageName,ai);
+                }
             }
         }catch(Exception ignored){}
-        Intent lean=new Intent(Intent.ACTION_MAIN);
-        lean.addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
+
         try{
-            for(android.content.pm.ResolveInfo ri:pm.queryIntentActivities(lean,PackageManager.MATCH_ALL)){
-                if(ri.activityInfo==null || ri.activityInfo.applicationInfo==null) continue;
-                ApplicationInfo ai=ri.activityInfo.applicationInfo;
-                if(ai.packageName.equals(getPackageName())) continue;
-                map.put(ai.packageName,ai);
+            Intent main=new Intent(Intent.ACTION_MAIN);
+            main.addCategory(Intent.CATEGORY_LAUNCHER);
+            List<ResolveInfo> list=pm.queryIntentActivities(main,PackageManager.MATCH_ALL);
+            for(ResolveInfo ri:list){
+                if(ri!=null && ri.activityInfo!=null && ri.activityInfo.applicationInfo!=null){
+                    ApplicationInfo ai=ri.activityInfo.applicationInfo;
+                    if(!ai.packageName.equals(getPackageName())) map.put(ai.packageName,ai);
+                }
             }
         }catch(Exception ignored){}
-        // 部分定制车机 APP 只声明 MAIN，没有标准 LAUNCHER 类别；补充可启动包。
+
         try{
-            for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){
-                if(ai.packageName.equals(getPackageName())) continue;
+            Intent lean=new Intent(Intent.ACTION_MAIN);
+            lean.addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
+            List<ResolveInfo> list=pm.queryIntentActivities(lean,PackageManager.MATCH_ALL);
+            for(ResolveInfo ri:list){
+                if(ri!=null && ri.activityInfo!=null && ri.activityInfo.applicationInfo!=null){
+                    ApplicationInfo ai=ri.activityInfo.applicationInfo;
+                    if(!ai.packageName.equals(getPackageName())) map.put(ai.packageName,ai);
+                }
+            }
+        }catch(Exception ignored){}
+
+        // 补充所有 ACTION_MAIN Activity，包括厂商没有声明 LAUNCHER category 的 APP。
+        try{
+            Intent anyMain=new Intent(Intent.ACTION_MAIN);
+            List<ResolveInfo> list=pm.queryIntentActivities(anyMain,PackageManager.MATCH_ALL);
+            for(ResolveInfo ri:list){
+                if(ri!=null && ri.activityInfo!=null && ri.activityInfo.applicationInfo!=null){
+                    ActivityInfo act=ri.activityInfo;
+                    ApplicationInfo ai=act.applicationInfo;
+                    if(!ai.packageName.equals(getPackageName())) map.put(ai.packageName,ai);
+                }
+            }
+        }catch(Exception ignored){}
+
+        // 最后再用 getLaunchIntentForPackage 补一次。
+        try{
+            for(ApplicationInfo ai:new ArrayList<>(map.values())){
                 Intent launch=pm.getLaunchIntentForPackage(ai.packageName);
                 if(launch!=null) map.put(ai.packageName,ai);
             }
         }catch(Exception ignored){}
+
         ArrayList<ApplicationInfo> result=new ArrayList<>(map.values());
-        Collections.sort(result,(a,b)->getAppLabelSafe(a.packageName).compareToIgnoreCase(getAppLabelSafe(b.packageName)));
+        Collections.sort(result,(a,b)->{
+            String an=getAppLabelSafe(a.packageName);
+            String bn=getAppLabelSafe(b.packageName);
+            int c=an.compareToIgnoreCase(bn);
+            return c!=0?c:a.packageName.compareToIgnoreCase(b.packageName);
+        });
         return result;
+    }
+
+    /**
+     * 新建/编辑窗口预设。
+     * 启动模式只使用普通模式 1~5 和全屏模式。
+     */
+    void editPreset(final int index){
+        LinearLayout page=new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setPadding(dp(24),dp(10),dp(24),dp(10));
+
+        EditText name=textField("预设名称",index>=0?presets.get(index).name:"");
+        EditText x=textField("左距离 X",index>=0?String.valueOf(presets.get(index).x):"0");
+        EditText y=textField("上距离 Y",index>=0?String.valueOf(presets.get(index).y):"80");
+        EditText w=textField("窗口宽度",index>=0?String.valueOf(presets.get(index).w):"1000");
+        EditText h=textField("窗口高度",index>=0?String.valueOf(presets.get(index).h):"800");
+
+        page.addView(name,new LinearLayout.LayoutParams(-1,dp(58)));
+        page.addView(x,new LinearLayout.LayoutParams(-1,dp(58)));
+        page.addView(y,new LinearLayout.LayoutParams(-1,dp(58)));
+        page.addView(w,new LinearLayout.LayoutParams(-1,dp(58)));
+        page.addView(h,new LinearLayout.LayoutParams(-1,dp(58)));
+
+        LinearLayout modeRow=new LinearLayout(this);
+        modeRow.setOrientation(LinearLayout.HORIZONTAL);
+        modeRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView modeLabel=text("启动模式",18);
+        modeRow.addView(modeLabel,new LinearLayout.LayoutParams(dp(150),dp(58)));
+        Spinner mode=new Spinner(this);
+        String[] modes={"模式1","模式2","模式3","模式4","模式5","全屏模式"};
+        ArrayAdapter<String> adapter=new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,modes);
+        mode.setAdapter(adapter);
+        int oldMode=index>=0?presets.get(index).mode:1;
+        mode.setSelection(oldMode>=1&&oldMode<=6?oldMode-1:0);
+        modeRow.addView(mode,new LinearLayout.LayoutParams(0,dp(58),1));
+        page.addView(modeRow);
+
+        AlertDialog dialog=new AlertDialog.Builder(this)
+                .setTitle(index>=0?"编辑窗口预设":"新建窗口预设")
+                .setView(page)
+                .setNegativeButton("返回",null)
+                .setPositiveButton("保存",null)
+                .create();
+
+        dialog.setOnShowListener(v->{
+            Button save=dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            save.setOnClickListener(btn->{
+                try{
+                    String n=name.getText().toString().trim();
+                    if(n.isEmpty()) n="窗口预设";
+                    int xx=Integer.parseInt(x.getText().toString().trim());
+                    int yy=Integer.parseInt(y.getText().toString().trim());
+                    int ww=Integer.parseInt(w.getText().toString().trim());
+                    int hh=Integer.parseInt(h.getText().toString().trim());
+                    int mm=mode.getSelectedItemPosition()+1;
+                    if(ww<=0||hh<=0) throw new Exception();
+                    Preset p=new Preset(n,xx,yy,ww,hh,-1,mm);
+                    if(index>=0 && index<presets.size()) presets.set(index,p);
+                    else presets.add(p);
+                    savePresets();
+                    dialog.dismiss();
+                    buildUI();
+                }catch(Exception e){
+                    Toast.makeText(this,"请输入有效的窗口预设参数",Toast.LENGTH_SHORT).show();
+                }
+            });
+        });
+        showFixed1000x800(dialog);
+    }
+
+    void presetMenu(final int index){
+        if(index<0||index>=presets.size()) return;
+        final Preset p=presets.get(index);
+        new AlertDialog.Builder(this)
+                .setTitle(p.name)
+                .setItems(new String[]{"编辑预设","删除预设"},(d,which)->{
+                    if(which==0){
+                        editPreset(index);
+                    }else{
+                        new AlertDialog.Builder(this)
+                                .setTitle("删除预设")
+                                .setMessage("确定删除“"+p.name+"”？")
+                                .setNegativeButton("取消",null)
+                                .setPositiveButton("删除",(dd,w)->{
+                                    presets.remove(index);
+                                    savePresets();
+                                    buildUI();
+                                }).show();
+                    }
+                }).show();
     }
 
     void chooseApp(){
