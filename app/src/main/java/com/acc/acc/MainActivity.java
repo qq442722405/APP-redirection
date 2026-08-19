@@ -251,7 +251,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void loadBundledDefaultConfigIfFreshInstall(){
-        if(!prefs.getAll().isEmpty()) return;
+        if(prefs.getBoolean("__bundled_defaults_loaded",false)) return;
         try(InputStream in=getAssets().open("APP窗口启动器配置.json")){
             ByteArrayOutputStream buf=new ByteArrayOutputStream();
             byte[] b=new byte[8192]; int n;
@@ -286,6 +286,8 @@ public class MainActivity extends AppCompatActivity {
             String selectedName=root.optString("selected_app_name","");
             if(!selectedPkg.isEmpty()) ed.putString("__selected_app_pkg",selectedPkg);
             if(!selectedName.isEmpty()) ed.putString("__selected_app_name",selectedName);
+            // 标记默认配置已经成功导入；只有成功解析并写入后才标记，避免损坏配置导致下一次启动重复失败。
+            ed.putBoolean("__bundled_defaults_loaded",true);
             ed.apply();
         }catch(Exception ignored){}
     }
@@ -405,8 +407,9 @@ public class MainActivity extends AppCompatActivity {
             for(int i=0;i<a.length();i++){
                 JSONObject o=a.getJSONObject(i);
                 presets.add(new Preset(
-                        o.getString("name"),o.getInt("x"),o.getInt("y"),
-                        o.getInt("w"),o.getInt("h"),o.optInt("displayId",-1),o.optInt("mode",1)
+                        o.optString("name","未命名"),o.optInt("x",0),o.optInt("y",0),
+                        Math.max(1,o.optInt("w",1)),Math.max(1,o.optInt("h",1)),
+                        o.optInt("displayId",-1),o.optInt("mode",1)
                 ));
             }
         }catch(Exception ignored){}
