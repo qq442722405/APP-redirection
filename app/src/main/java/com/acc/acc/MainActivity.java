@@ -395,7 +395,8 @@ public class MainActivity extends AppCompatActivity {
         getWindow().setNavigationBarColor(Color.BLACK);
 
         FrameLayout frame=new FrameLayout(this);
-        frame.setBackgroundColor(Color.BLACK);
+        boolean hideMainBackground=prefs.getBoolean("hide_main_background_acc",false);
+        frame.setBackgroundColor(hideMainBackground ? Color.TRANSPARENT : Color.BLACK);
 
         TextView accBg=new TextView(this);
         accBg.setText("Acc");
@@ -405,6 +406,7 @@ public class MainActivity extends AppCompatActivity {
         accBg.setGravity(Gravity.CENTER);
         accBg.setSingleLine(true);
         accBg.setClickable(false);
+        accBg.setVisibility(hideMainBackground ? View.GONE : View.VISIBLE);
         frame.addView(accBg,new FrameLayout.LayoutParams(-1,-1));
 
         LinearLayout root=new LinearLayout(this);
@@ -623,12 +625,30 @@ public class MainActivity extends AppCompatActivity {
                     name.setEllipsize(android.text.TextUtils.TruncateAt.END);
                     tile.addView(name,new LinearLayout.LayoutParams(-1,dp(66)));
 
-                    tile.setOnClickListener(v->{selectedPackage=item.pkg;selectedName=item.name;info.setText("当前 APP："+item.name);refresh();});
-                    tile.setOnLongClickListener(v->{
-                        new AlertDialog.Builder(this).setTitle(item.name)
-                            .setItems(new String[]{"删除 APP"},(d,w)->{if(w==0){if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;}apps.remove(itemIndex);saveApps();refresh();}}).show();
-                        return true;
+                    final android.view.GestureDetector appGesture=new android.view.GestureDetector(this,new android.view.GestureDetector.SimpleOnGestureListener(){
+                        @Override public boolean onDown(MotionEvent e){return true;}
+                        @Override public boolean onSingleTapConfirmed(MotionEvent e){
+                            selectedPackage=item.pkg; selectedName=item.name; info.setText("当前 APP："+item.name); refresh(); return true;
+                        }
+                        @Override public boolean onDoubleTap(MotionEvent e){
+                            selectedPackage=item.pkg; selectedName=item.name; info.setText("启动："+item.name);
+                            launchAppDirect(item.pkg,item.name); return true;
+                        }
                     });
+                    tile.setOnTouchListener((v,e)->{ return appGesture.onTouchEvent(e); });
+                    // 单击=选择，双击=直接启动，长按=删除。
+                    final Runnable deleteApp=()->new AlertDialog.Builder(this).setTitle(item.name)
+                        .setItems(new String[]{"删除 APP"},(d,w)->{if(w==0){if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;}apps.remove(itemIndex);saveApps();refresh();}}).show();
+                    // 使用同一个 GestureDetector 处理长按，避免 OnTouchListener 吞掉 OnLongClick。
+                    appGesture.setIsLongpressEnabled(true);
+                    // 将原 detector 的长按行为通过新的 detector 重新绑定。
+                    final android.view.GestureDetector fullGesture=new android.view.GestureDetector(this,new android.view.GestureDetector.SimpleOnGestureListener(){
+                        @Override public boolean onDown(MotionEvent e){return true;}
+                        @Override public boolean onSingleTapConfirmed(MotionEvent e){selectedPackage=item.pkg;selectedName=item.name;info.setText("当前 APP："+item.name);refresh();return true;}
+                        @Override public boolean onDoubleTap(MotionEvent e){selectedPackage=item.pkg;selectedName=item.name;info.setText("启动："+item.name);launchAppDirect(item.pkg,item.name);return true;}
+                        @Override public void onLongPress(MotionEvent e){deleteApp.run();}
+                    });
+                    tile.setOnTouchListener((v,e)->fullGesture.onTouchEvent(e));
                     LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(200),dp(180));
                     lp.setMargins(dp(4),dp(4),dp(4),dp(4));
                     row.addView(tile,lp);
@@ -1208,6 +1228,13 @@ public class MainActivity extends AppCompatActivity {
         bottomBlankRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
         box.addView(bottomBlankRow,new LinearLayout.LayoutParams(-1,dp(56)));
 
+        LinearLayout bgRow=new LinearLayout(this); bgRow.setGravity(Gravity.CENTER_VERTICAL);
+        bgRow.addView(text("隐藏主界面背景和 ACC",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        Switch bgSwitch=new Switch(this);
+        bgSwitch.setChecked(prefs.getBoolean("hide_main_background_acc",false));
+        bgRow.addView(bgSwitch,new LinearLayout.LayoutParams(dp(90),dp(52)));
+        box.addView(bgRow,new LinearLayout.LayoutParams(-1,dp(56)));
+
         LinearLayout touchTopRow=new LinearLayout(this); touchTopRow.setGravity(Gravity.CENTER_VERTICAL);
         touchTopRow.addView(text("触控纠正位置上",14),new LinearLayout.LayoutParams(0,dp(52),1));
         EditText touchTopInput=numberField("0",String.valueOf(touchOffsetTop()));
@@ -1263,6 +1290,7 @@ public class MainActivity extends AppCompatActivity {
                         .putInt("main_app_columns",columns)
                         .putInt("main_top_blank",topBlank)
                         .putInt("main_bottom_blank",bottomBlank)
+                        .putBoolean("hide_main_background_acc",bgSwitch.isChecked())
                         .putInt("touch_offset_top_px",touchTop)
                         .putInt("touch_offset_left_px",touchLeft)
                         // 清理旧版本已经删除的弹窗左右距离配置。
@@ -1288,7 +1316,6 @@ public class MainActivity extends AppCompatActivity {
         PackageManager pm=getPackageManager();
         ArrayList<ApplicationInfo> list=new ArrayList<>();
         for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){
-            if(ai.packageName.equals(getPackageName())) continue;
             try{
                 CharSequence label=pm.getApplicationLabel(ai);
                 if(label!=null && label.toString().trim().length()>0) list.add(ai);
@@ -1758,21 +1785,25 @@ public class MainActivity extends AppCompatActivity {
     JSONObject buildConfigJson(){
         JSONObject root=new JSONObject();
         try{
-            root.put("version",2);
+            root.put("app_config_format","APP_WINDOW_LAUNCHER");
+            root.put("schema_version",3);
             root.put("export_time",System.currentTimeMillis());
-            root.put("apps",new JSONArray(prefs.getString(APPS,"[]")));
-            root.put("presets",new JSONArray(prefs.getString(PRESETS,"[]")));
-            root.put("floating_apps",new JSONArray(prefs.getString("floating_apps","[]")));
-            JSONArray keys=new JSONArray();
+            JSONObject data=new JSONObject();
+            data.put("apps",new JSONArray(prefs.getString(APPS,"[]")));
+            data.put("presets",new JSONArray(prefs.getString(PRESETS,"[]")));
+            data.put("floating_apps",new JSONArray(prefs.getString("floating_apps","[]")));
+            root.put("data",data);
+
+            JSONObject settings=new JSONObject();
             Map<String,?> all=prefs.getAll();
             for(String k:all.keySet()){
-                if(k.equals(APPS)||k.equals(PRESETS)) continue;
+                if(k.equals(APPS)||k.equals(PRESETS)||k.equals("floating_apps")) continue;
                 Object v=all.get(k);
-                if(v instanceof String || v instanceof Integer || v instanceof Long || v instanceof Float || v instanceof Boolean){
-                    JSONObject item=new JSONObject(); item.put("key",k); item.put("value",v); keys.put(item);
+                if(v instanceof String || v instanceof Integer || v instanceof Long || v instanceof Float || v instanceof Double || v instanceof Boolean){
+                    settings.put(k,v);
                 }
             }
-            root.put("settings",keys);
+            root.put("settings",settings);
         }catch(Exception ignored){}
         return root;
     }
@@ -1827,47 +1858,34 @@ public class MainActivity extends AppCompatActivity {
                 if(text.isEmpty()) throw new IOException("配置文件为空");
 
                 JSONObject root=new JSONObject(text);
-                // 必须是本程序的配置对象，避免误选其它 JSON 后直接报一堆设置错误。
-                if(!root.has("apps") && !root.has("presets") && !root.has("settings") && !root.has("floating_apps")){
+                // 同时兼容历史 v1/v2 配置和当前 v3 配置；未知字段直接忽略。
+                JSONObject data=root.optJSONObject("data");
+                JSONArray appsJson=data!=null?data.optJSONArray("apps"):root.optJSONArray("apps");
+                JSONArray presetsJson=data!=null?data.optJSONArray("presets"):root.optJSONArray("presets");
+                JSONArray floatingJson=data!=null?data.optJSONArray("floating_apps"):root.optJSONArray("floating_apps");
+                JSONObject settingsObj=root.optJSONObject("settings");
+                JSONArray settingsArr=root.optJSONArray("settings");
+                if(appsJson==null && presetsJson==null && floatingJson==null && settingsObj==null && settingsArr==null){
                     throw new JSONException("不是 APP窗口启动器配置文件");
                 }
 
-                JSONArray appsJson=root.optJSONArray("apps");
-                JSONArray presetsJson=root.optJSONArray("presets");
-                JSONArray floatingJson=root.optJSONArray("floating_apps");
                 SharedPreferences.Editor ed=prefs.edit();
-                if(appsJson!=null) ed.putString(APPS,appsJson.toString());
-                if(presetsJson!=null) ed.putString(PRESETS,presetsJson.toString());
-                if(floatingJson!=null) ed.putString("floating_apps",floatingJson.toString());
+                if(appsJson!=null) ed.putString(APPS,normalizeAppsJson(appsJson).toString());
+                if(presetsJson!=null) ed.putString(PRESETS,normalizePresetsJson(presetsJson).toString());
+                if(floatingJson!=null) ed.putString("floating_apps",normalizeFloatingJson(floatingJson).toString());
 
-                JSONArray settings=root.optJSONArray("settings");
-                if(settings!=null){
-                    for(int i=0;i<settings.length();i++){
-                        JSONObject item=settings.optJSONObject(i);
+                // v3 使用对象，v1/v2 使用 [{key,value}] 数组，两种格式全部支持。
+                if(settingsObj!=null){
+                    Iterator<String> it=settingsObj.keys();
+                    while(it.hasNext()){
+                        String key=it.next(); putImportedSetting(ed,key,settingsObj.opt(key));
+                    }
+                }
+                if(settingsArr!=null){
+                    for(int i=0;i<settingsArr.length();i++){
+                        JSONObject item=settingsArr.optJSONObject(i);
                         if(item==null) continue;
-                        String key=item.optString("key","");
-                        if(key.isEmpty()) continue;
-
-                        // 已删除的旧配置不再导入，防止旧配置文件把删除的项目重新带回来。
-                        if("popup_left_margin".equals(key) || "popup_right_margin".equals(key)) continue;
-                        if(key.toLowerCase(Locale.US).contains("adb")) continue;
-
-                        Object value=item.opt("value");
-                        if(value==null || value==JSONObject.NULL) continue;
-                        Object old=prefs.getAll().get(key);
-                        try{
-                            if(old instanceof Boolean) ed.putBoolean(key,Boolean.parseBoolean(String.valueOf(value)));
-                            else if(old instanceof Integer) ed.putInt(key,Integer.parseInt(String.valueOf(value)));
-                            else if(old instanceof Long) ed.putLong(key,Long.parseLong(String.valueOf(value)));
-                            else if(old instanceof Float) ed.putFloat(key,Float.parseFloat(String.valueOf(value)));
-                            else if(old instanceof Double) ed.putFloat(key,Float.parseFloat(String.valueOf(value)));
-                            else if(old instanceof String) ed.putString(key,String.valueOf(value));
-                            else if(value instanceof Boolean) ed.putBoolean(key,(Boolean)value);
-                            else if(value instanceof Number) ed.putFloat(key,((Number)value).floatValue());
-                            else ed.putString(key,String.valueOf(value));
-                        }catch(Exception ignored){
-                            // 单个设置格式异常不影响其它配置继续导入。
-                        }
+                        putImportedSetting(ed,item.optString("key",""),item.opt("value"));
                     }
                 }
 
@@ -1885,6 +1903,39 @@ public class MainActivity extends AppCompatActivity {
             if(msg==null || msg.trim().isEmpty()) msg="无法读取或保存配置文件";
             Toast.makeText(this,"配置处理失败："+msg,Toast.LENGTH_LONG).show();
         }
+    }
+
+    void putImportedSetting(SharedPreferences.Editor ed,String key,Object value){
+        if(key==null||key.trim().isEmpty()||value==null||value==JSONObject.NULL)return;
+        if("popup_left_margin".equals(key)||"popup_right_margin".equals(key)||"dialog_left_margin_px".equals(key)||"dialog_right_margin_px".equals(key))return;
+        if(key.toLowerCase(Locale.US).contains("adb"))return;
+        try{
+            Object old=prefs.getAll().get(key);
+            if(old instanceof Boolean) ed.putBoolean(key,Boolean.parseBoolean(String.valueOf(value)));
+            else if(old instanceof Integer) ed.putInt(key,Integer.parseInt(String.valueOf(value)));
+            else if(old instanceof Long) ed.putLong(key,Long.parseLong(String.valueOf(value)));
+            else if(old instanceof Float || old instanceof Double) ed.putFloat(key,Float.parseFloat(String.valueOf(value)));
+            else if(old instanceof String) ed.putString(key,String.valueOf(value));
+            else if(value instanceof Boolean) ed.putBoolean(key,(Boolean)value);
+            else if(value instanceof Number) ed.putFloat(key,((Number)value).floatValue());
+            else ed.putString(key,String.valueOf(value));
+        }catch(Exception ignored){}
+    }
+
+    JSONArray normalizeAppsJson(JSONArray src){
+        JSONArray out=new JSONArray();
+        for(int i=0;i<src.length();i++){JSONObject o=src.optJSONObject(i);if(o==null)continue;String pkg=o.optString("pkg","");if(pkg.isEmpty())continue;try{JSONObject n=new JSONObject();n.put("pkg",pkg);n.put("name",o.optString("name",getAppLabelSafe(pkg)));out.put(n);}catch(Exception ignored){}}
+        return out;
+    }
+    JSONArray normalizePresetsJson(JSONArray src){
+        JSONArray out=new JSONArray();
+        for(int i=0;i<src.length();i++){JSONObject o=src.optJSONObject(i);if(o==null)continue;try{JSONObject n=new JSONObject();n.put("name",o.optString("name","窗口预设"));n.put("x",o.optInt("x",0));n.put("y",o.optInt("y",0));n.put("w",Math.max(1,o.optInt("w",1)));n.put("h",Math.max(1,o.optInt("h",1)));n.put("displayId",o.optInt("displayId",-1));n.put("mode",o.optInt("mode",1));out.put(n);}catch(Exception ignored){}}
+        return out;
+    }
+    JSONArray normalizeFloatingJson(JSONArray src){
+        JSONArray out=new JSONArray();
+        for(int i=0;i<src.length();i++){JSONObject o=src.optJSONObject(i);if(o==null)continue;String pkg=o.optString("pkg","");if(pkg.isEmpty())continue;try{JSONObject n=new JSONObject();n.put("pkg",pkg);n.put("name",o.optString("name",getAppLabelSafe(pkg)));n.put("preset",o.optInt("preset",-1));out.put(n);}catch(Exception ignored){}}
+        return out;
     }
 
     void startFloatingService(){
