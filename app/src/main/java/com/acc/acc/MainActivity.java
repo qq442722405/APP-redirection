@@ -2,7 +2,6 @@ package com.acc.acc;
 
 import com.acc.acc.R;
 import android.app.ActivityOptions;
-import android.app.ActivityManager;
 import android.app.Dialog;
 import android.content.*;
 import android.content.pm.*;
@@ -250,52 +249,52 @@ public class MainActivity extends AppCompatActivity {
         catch(Exception ex){return fallback;}
     }
 
-    void loadBundledDefaultConfigIfFreshInstall(){
-        if(prefs.getBoolean("__bundled_defaults_loaded",false)) return;
-        try(InputStream in=getAssets().open("APP窗口启动器配置.json")){
-            ByteArrayOutputStream buf=new ByteArrayOutputStream();
-            byte[] b=new byte[8192]; int n;
-            while((n=in.read(b))!=-1) buf.write(b,0,n);
-            String json=new String(buf.toByteArray(),"UTF-8");
-            if(json.length()>0 && json.charAt(0)=='\ufeff') json=json.substring(1);
-            JSONObject root=new JSONObject(json.trim());
-            SharedPreferences.Editor ed=prefs.edit();
-            JSONArray appsJson=root.optJSONArray("apps");
-            JSONArray presetsJson=root.optJSONArray("presets");
-            JSONArray floatingJson=root.optJSONArray("floating_apps");
-            if(appsJson!=null) ed.putString(APPS,appsJson.toString());
-            if(presetsJson!=null) ed.putString(PRESETS,presetsJson.toString());
-            if(floatingJson!=null) ed.putString("floating_apps",floatingJson.toString());
-            JSONArray settings=root.optJSONArray("settings");
-            if(settings!=null){
-                for(int i=0;i<settings.length();i++){
-                    JSONObject item=settings.optJSONObject(i);
-                    if(item==null) continue;
-                    String key=item.optString("key","");
-                    if(key.isEmpty()) continue;
-                    Object value=item.opt("value");
-                    if(value==null || value==JSONObject.NULL) continue;
-                    if(value instanceof Boolean) ed.putBoolean(key,((Boolean)value).booleanValue());
-                    else if(value instanceof Number){
-                        double d=((Number)value).doubleValue();
-                        if(Math.rint(d)==d) ed.putInt(key,(int)d); else ed.putFloat(key,(float)d);
-                    }else ed.putString(key,String.valueOf(value));
+
+    /**
+     * 首次安装时加载 assets 中的默认配置。升级时只要已有 APPS/PRESETS 就绝不覆盖。
+     * 读取采用“字段可选”策略，未来新增字段不会让旧配置无法使用。
+     */
+    void loadBundledDefaultConfigIfNeeded(){
+        try{
+            if(prefs.contains("bundled_default_loaded")) return;
+            boolean hasUserData=prefs.contains(APPS)||prefs.contains(PRESETS)||prefs.contains("floating_apps");
+            if(!hasUserData){
+                InputStream in=getAssets().open("APP窗口启动器配置.json");
+                ByteArrayOutputStream buf=new ByteArrayOutputStream();
+                byte[] b=new byte[8192]; int n;
+                while((n=in.read(b))!=-1)buf.write(b,0,n);
+                in.close();
+                String s=new String(buf.toByteArray(),"UTF-8");
+                if(s.startsWith("\ufeff"))s=s.substring(1);
+                JSONObject root=new JSONObject(s.trim());
+                SharedPreferences.Editor ed=prefs.edit();
+                JSONArray a=root.optJSONArray("apps"); if(a!=null)ed.putString(APPS,a.toString());
+                JSONArray p=root.optJSONArray("presets"); if(p!=null)ed.putString(PRESETS,p.toString());
+                JSONArray f=root.optJSONArray("floating_apps"); if(f!=null)ed.putString("floating_apps",f.toString());
+                JSONArray settings=root.optJSONArray("settings");
+                if(settings!=null) for(int i=0;i<settings.length();i++){
+                    JSONObject item=settings.optJSONObject(i); if(item==null)continue;
+                    String key=item.optString("key",""); Object v=item.opt("value");
+                    if(key.isEmpty()||v==null||v==JSONObject.NULL)continue;
+                    if(v instanceof Boolean)ed.putBoolean(key,(Boolean)v);
+                    else if(v instanceof Integer)ed.putInt(key,(Integer)v);
+                    else if(v instanceof Long)ed.putLong(key,(Long)v);
+                    else if(v instanceof Number)ed.putFloat(key,((Number)v).floatValue());
+                    else ed.putString(key,String.valueOf(v));
                 }
+                ed.putBoolean("bundled_default_loaded",true).apply();
+            }else{
+                prefs.edit().putBoolean("bundled_default_loaded",true).apply();
             }
-            String selectedPkg=root.optString("selected_app_pkg","");
-            String selectedName=root.optString("selected_app_name","");
-            if(!selectedPkg.isEmpty()) ed.putString("__selected_app_pkg",selectedPkg);
-            if(!selectedName.isEmpty()) ed.putString("__selected_app_name",selectedName);
-            // 标记默认配置已经成功导入；只有成功解析并写入后才标记，避免损坏配置导致下一次启动重复失败。
-            ed.putBoolean("__bundled_defaults_loaded",true);
-            ed.apply();
-        }catch(Exception ignored){}
+        }catch(Exception ignored){
+            // 默认配置损坏/不存在不能影响 APP 正常启动。
+            try{prefs.edit().putBoolean("bundled_default_loaded",true).apply();}catch(Exception ignored2){}
+        }
     }
 
     @Override protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
         prefs=getSharedPreferences(PREF,0);
-        loadBundledDefaultConfigIfFreshInstall();
         // 新安装默认界面参数；如果用户已经手动设置过，则保留用户设置。
         SharedPreferences.Editor defaults=prefs.edit();
         if(!prefs.contains("font_scale") || prefs.getFloat("font_scale",1.0f) <= 0.2001f) defaults.putFloat("font_scale",1.00f);
@@ -304,6 +303,7 @@ public class MainActivity extends AppCompatActivity {
         if(!prefs.contains("touch_offset_top_px")) defaults.putInt("touch_offset_top_px",50);
         if(!prefs.contains("touch_offset_left_px")) defaults.putInt("touch_offset_left_px",50);
         defaults.apply();
+        loadBundledDefaultConfigIfNeeded();
         loadData();
         buildUI();
         lastOverlayState=hasOverlayPermission();
@@ -326,7 +326,8 @@ public class MainActivity extends AppCompatActivity {
     /**
      * 只申请本 APK 在 Android 12/13+ 上真正可以由用户授予的运行时权限。
      * 特殊权限不强行跳转，避免启动 APP 时被连续带离主界面；下面的 helper
-     * 可以在需要时打开对应系统授权页。Manifest 已提前声明这些权限，实际是否可授予由车机系统决定。
+     * 可以在需要时打开对应系统授权页。Manifest 已提前声明这些权限，便于
+     * 在 ADB 仍可用时由系统/ADB 进行预授权。
      */
     void requestRuntimePermissions(){
         // 启动阶段不要一次性申请媒体、存储等权限。部分 Android 模拟器
@@ -406,19 +407,16 @@ public class MainActivity extends AppCompatActivity {
             JSONArray a=new JSONArray(prefs.getString(PRESETS,"[]"));
             for(int i=0;i<a.length();i++){
                 JSONObject o=a.getJSONObject(i);
-                presets.add(new Preset(
-                        o.optString("name","未命名"),o.optInt("x",0),o.optInt("y",0),
-                        Math.max(1,o.optInt("w",1)),Math.max(1,o.optInt("h",1)),
-                        o.optInt("displayId",-1),o.optInt("mode",1)
-                ));
+                String pn=o.optString("name","未命名");
+                int px=o.optInt("x",0), py=o.optInt("y",0);
+                int pw=o.optInt("w",0), ph=o.optInt("h",0);
+                int pmode=o.optInt("mode",1);
+                // 兼容旧配置：缺少新字段时使用安全默认值；旧全屏模式允许 0×0。
+                if(pmode!=6 && (pw<=0 || ph<=0)) continue;
+                presets.add(new Preset(pn,px,py,pw,ph,o.optInt("displayId",-1),Math.max(1,Math.min(6,pmode))));
+
             }
         }catch(Exception ignored){}
-        selectedPackage=prefs.getString("__selected_app_pkg",null);
-        selectedName=prefs.getString("__selected_app_name",null);
-        if(selectedPackage!=null){
-            try{selectedName=getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(selectedPackage,0)).toString();}
-            catch(Exception ignored){}
-        }
     }
 
     void saveApps(){
@@ -445,8 +443,7 @@ public class MainActivity extends AppCompatActivity {
         getWindow().setNavigationBarColor(Color.BLACK);
 
         FrameLayout frame=new FrameLayout(this);
-        boolean hideMainBgAcc=prefs.getBoolean("hide_main_background_acc",false);
-        frame.setBackgroundColor(hideMainBgAcc?Color.TRANSPARENT:Color.BLACK);
+        frame.setBackgroundColor(Color.BLACK);
 
         TextView accBg=new TextView(this);
         accBg.setText("Acc");
@@ -456,7 +453,9 @@ public class MainActivity extends AppCompatActivity {
         accBg.setGravity(Gravity.CENTER);
         accBg.setSingleLine(true);
         accBg.setClickable(false);
-        if(hideMainBgAcc) accBg.setVisibility(View.GONE);
+        boolean hideMainBgAcc=prefs.getBoolean("hide_main_background_acc",false);
+        accBg.setVisibility(hideMainBgAcc?View.GONE:View.VISIBLE);
+        frame.setBackgroundColor(hideMainBgAcc?Color.BLACK:Color.BLACK);
         frame.addView(accBg,new FrameLayout.LayoutParams(-1,-1));
 
         LinearLayout root=new LinearLayout(this);
@@ -554,13 +553,6 @@ public class MainActivity extends AppCompatActivity {
         note.setContentDescription("记事本");
         note.setOnClickListener(v->showNotes());
         actionRow.addView(note,new LinearLayout.LayoutParams(dp(68),dp(50)));
-
-        TextView closeApp=plusButton();
-        closeApp.setText("×");
-        closeApp.setTextSize(26*mainFontScale());
-        closeApp.setContentDescription("关闭选中的 APP");
-        closeApp.setOnClickListener(v->closeSelectedApp());
-        actionRow.addView(closeApp,new LinearLayout.LayoutParams(dp(68),dp(50)));
 
         TextView settings=plusButton();
         settings.setText("⚙");
@@ -682,24 +674,28 @@ public class MainActivity extends AppCompatActivity {
                     name.setEllipsize(android.text.TextUtils.TruncateAt.END);
                     tile.addView(name,new LinearLayout.LayoutParams(-1,dp(66)));
 
+                    final long[] lastTap={0};
                     tile.setOnClickListener(v->{
                         long now=System.currentTimeMillis();
-                        String lastPkg=prefs.getString("last_app_click_pkg","");
-                        long lastTime=prefs.getLong("last_app_click_time",0);
-                        selectedPackage=item.pkg; selectedName=item.name;
-                        prefs.edit().putString("__selected_app_pkg",item.pkg).putString("__selected_app_name",item.name).apply();
-                        info.setText("当前 APP："+item.name);
-                        if(item.pkg.equals(lastPkg) && now-lastTime<=420){
-                            prefs.edit().remove("last_app_click_pkg").remove("last_app_click_time").apply();
-                            launchAppDirect(item.pkg,item.name);
+                        if(now-lastTap[0] <= 350){
+                            selectedPackage=item.pkg; selectedName=item.name;
+                            // 双击主界面已添加 APP：直接启动该 APP。
+                            Intent launch=getPackageManager().getLaunchIntentForPackage(item.pkg);
+                            if(launch!=null){
+                                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+                                try{startActivity(launch);}catch(Exception ignored){}
+                            }
+                            lastTap[0]=0;
                         }else{
-                            prefs.edit().putString("last_app_click_pkg",item.pkg).putLong("last_app_click_time",now).apply();
+                            selectedPackage=item.pkg; selectedName=item.name;
+                            info.setText("当前 APP："+item.name);
                             refresh();
+                            lastTap[0]=now;
                         }
                     });
                     tile.setOnLongClickListener(v->{
                         new AlertDialog.Builder(this).setTitle(item.name)
-                            .setItems(new String[]{"删除 APP"},(d,w)->{if(w==0){if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;prefs.edit().remove("__selected_app_pkg").remove("__selected_app_name").apply();}apps.remove(itemIndex);saveApps();refresh();}}).show();
+                            .setItems(new String[]{"删除 APP"},(d,w)->{if(w==0){if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;}apps.remove(itemIndex);saveApps();refresh();}}).show();
                         return true;
                     });
                     LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(200),dp(180));
@@ -1004,23 +1000,6 @@ public class MainActivity extends AppCompatActivity {
         });
         box.addView(direction,new LinearLayout.LayoutParams(-1,dp(58)));
 
-        LinearLayout plusPosRow=new LinearLayout(this); plusPosRow.setGravity(Gravity.CENTER_VERTICAL);
-        plusPosRow.addView(text("悬浮窗＋号位置",14),new LinearLayout.LayoutParams(0,dp(52),1));
-        String savedPlusPos=prefs.getString("floating_plus_position",prefs.getBoolean("floating_vertical",false)?"top":"left");
-        Button plusPosBtn=button("left".equals(savedPlusPos)?"左边":"right".equals(savedPlusPos)?"右边":"top".equals(savedPlusPos)?"上面":"下面");
-        plusPosRow.addView(plusPosBtn,new LinearLayout.LayoutParams(dp(120),dp(48)));
-        plusPosBtn.setOnClickListener(v->{
-            String[] values={"left","right","top","bottom"};
-            String[] labels={"左边","右边","上面","下面"};
-            String cur=prefs.getString("floating_plus_position",prefs.getBoolean("floating_vertical",false)?"top":"left");
-            int checked=0; for(int i=0;i<values.length;i++)if(values[i].equals(cur))checked=i;
-            new AlertDialog.Builder(this).setTitle("选择悬浮窗＋号位置").setSingleChoiceItems(labels,checked,(d,w)->{
-                prefs.edit().putString("floating_plus_position",values[w]).apply();
-                plusPosBtn.setText(labels[w]); d.dismiss();
-            }).setNegativeButton("取消",null).show();
-        });
-        box.addView(plusPosRow,new LinearLayout.LayoutParams(-1,dp(58)));
-
         EditText spacing=numberField("6",String.valueOf(prefs.getInt("floating_button_spacing_px",6)));
         box.addView(labeledSimpleNumberField("按钮图标间距",spacing),new LinearLayout.LayoutParams(-1,dp(54)));
 
@@ -1298,13 +1277,6 @@ public class MainActivity extends AppCompatActivity {
         bottomBlankRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
         box.addView(bottomBlankRow,new LinearLayout.LayoutParams(-1,dp(56)));
 
-        LinearLayout hideBgRow=new LinearLayout(this); hideBgRow.setGravity(Gravity.CENTER_VERTICAL);
-        hideBgRow.addView(text("隐藏主界面背景和Acc",14),new LinearLayout.LayoutParams(0,dp(52),1));
-        Switch hideBgSwitch=new Switch(this);
-        hideBgSwitch.setChecked(prefs.getBoolean("hide_main_background_acc",false));
-        hideBgRow.addView(hideBgSwitch,new LinearLayout.LayoutParams(dp(70),dp(52)));
-        box.addView(hideBgRow,new LinearLayout.LayoutParams(-1,dp(56)));
-
         LinearLayout touchTopRow=new LinearLayout(this); touchTopRow.setGravity(Gravity.CENTER_VERTICAL);
         touchTopRow.addView(text("触控纠正位置上",14),new LinearLayout.LayoutParams(0,dp(52),1));
         EditText touchTopInput=numberField("0",String.valueOf(touchOffsetTop()));
@@ -1318,6 +1290,14 @@ public class MainActivity extends AppCompatActivity {
         touchLeftRow.addView(touchLeftInput,new LinearLayout.LayoutParams(dp(90),dp(52)));
         touchLeftRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
         box.addView(touchLeftRow,new LinearLayout.LayoutParams(-1,dp(56)));
+
+        // 主界面背景/ACC 隐藏开关：打开后同时隐藏背景和中央“Acc”字样。
+        LinearLayout hideBgRow=new LinearLayout(this); hideBgRow.setGravity(Gravity.CENTER_VERTICAL);
+        hideBgRow.addView(text("隐藏主界面背景和 ACC",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        Switch hideBgSwitch=new Switch(this);
+        hideBgSwitch.setChecked(prefs.getBoolean("hide_main_background_acc",false));
+        hideBgRow.addView(hideBgSwitch,new LinearLayout.LayoutParams(dp(70),dp(52)));
+        box.addView(hideBgRow,new LinearLayout.LayoutParams(-1,dp(56)));
 
         TextView hint=text("触控纠正只作用于弹窗，主界面不受影响。正值向下/向右，负值向上/向左。",11);
         hint.setTextColor(Color.GRAY);
@@ -1360,9 +1340,8 @@ public class MainActivity extends AppCompatActivity {
                         .putInt("main_app_columns",columns)
                         .putInt("main_top_blank",topBlank)
                         .putInt("main_bottom_blank",bottomBlank)
-                        .putBoolean("hide_main_background_acc",hideBgSwitch.isChecked())
                         .putInt("touch_offset_top_px",touchTop)
-                        .putInt("touch_offset_left_px",touchLeft)
+                        .putInt("touch_offset_left_px",touchLeft).putBoolean("hide_main_background_acc",hideBgSwitch.isChecked())
                         // 清理旧版本已经删除的弹窗左右距离配置。
                         .remove("dialog_left_margin_px")
                         .remove("dialog_right_margin_px")
@@ -1856,8 +1835,9 @@ public class MainActivity extends AppCompatActivity {
     JSONObject buildConfigJson(){
         JSONObject root=new JSONObject();
         try{
-            root.put("version",2);
+            root.put("version",3);
             root.put("export_time",System.currentTimeMillis());
+            root.put("schema","app-window-launcher");
             root.put("apps",new JSONArray(prefs.getString(APPS,"[]")));
             root.put("presets",new JSONArray(prefs.getString(PRESETS,"[]")));
             root.put("floating_apps",new JSONArray(prefs.getString("floating_apps","[]")));
@@ -1871,8 +1851,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
             root.put("settings",keys);
-            if(selectedPackage!=null) root.put("selected_app_pkg",selectedPackage);
-            if(selectedName!=null) root.put("selected_app_name",selectedName);
         }catch(Exception ignored){}
         return root;
     }
@@ -1950,6 +1928,7 @@ public class MainActivity extends AppCompatActivity {
 
                         // 已删除的旧配置不再导入，防止旧配置文件把删除的项目重新带回来。
                         if("popup_left_margin".equals(key) || "popup_right_margin".equals(key)) continue;
+                        if(key.toLowerCase(Locale.US).contains("adb")) continue;
 
                         Object value=item.opt("value");
                         if(value==null || value==JSONObject.NULL) continue;
@@ -1970,17 +1949,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
 
-                if(root.has("selected_app_pkg")){
-                    String sp=root.optString("selected_app_pkg","");
-                    if(!sp.isEmpty()) ed.putString("__selected_app_pkg",sp);
-                }
-                if(root.has("selected_app_name")){
-                    String sn=root.optString("selected_app_name","");
-                    if(!sn.isEmpty()) ed.putString("__selected_app_name",sn);
-                }
                 if(!ed.commit()) throw new IOException("保存配置失败");
-                selectedPackage=prefs.getString("__selected_app_pkg",null);
-                selectedName=prefs.getString("__selected_app_name",null);
                 apps.clear();
                 presets.clear();
                 loadData();
@@ -2175,25 +2144,6 @@ public class MainActivity extends AppCompatActivity {
         dialogRef[0]=dialog;
         showFixed1000x800(dialog);
         try{Window w=dialog.getWindow();if(w!=null){android.graphics.Point screen=getRealScreenSize();w.setLayout(w.getAttributes().width,Math.max(dp(420),screen.y-dp(TOP_BLANK+BOTTOM_BLANK)));}}catch(Exception ignored){}
-    }
-
-    /** 在普通第三方权限下向系统请求结束目标 APP 的后台进程。
-     * Android 不保证普通 APP 能强制终止另一个前台 APP，因此这里采用系统允许的最佳努力方式。 */
-    void closeSelectedApp(){
-        if(selectedPackage==null || selectedPackage.trim().isEmpty()){
-            Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show(); return;
-        }
-        String pkg=selectedPackage, name=selectedName==null?pkg:selectedName;
-        boolean attempted=false;
-        try{
-            ActivityManager am=(ActivityManager)getSystemService(ACTIVITY_SERVICE);
-            if(am!=null){ am.killBackgroundProcesses(pkg); attempted=true; }
-        }catch(Exception ignored){}
-        try{
-            // 发送一个显式的“退出/关闭”广播不是 Android 通用标准，不能假定目标 APP 支持。
-            // 这里不发送不存在的私有指令，避免误伤其它应用。
-        }catch(Exception ignored){}
-        Toast.makeText(this,attempted?"已向 "+name+" 发送关闭请求（系统是否允许由车机决定）":"无法发送关闭请求",Toast.LENGTH_LONG).show();
     }
 
     void launchAppDirect(String pkg,String name){
