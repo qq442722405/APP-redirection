@@ -1859,10 +1859,10 @@ public class MainActivity extends AppCompatActivity {
 
                 JSONObject root=new JSONObject(text);
                 // 同时兼容历史 v1/v2 配置和当前 v3 配置；未知字段直接忽略。
-                JSONObject data=root.optJSONObject("data");
-                JSONArray appsJson=data!=null?data.optJSONArray("apps"):root.optJSONArray("apps");
-                JSONArray presetsJson=data!=null?data.optJSONArray("presets"):root.optJSONArray("presets");
-                JSONArray floatingJson=data!=null?data.optJSONArray("floating_apps"):root.optJSONArray("floating_apps");
+                JSONObject dataObj=root.optJSONObject("data");
+                JSONArray appsJson=dataObj!=null?dataObj.optJSONArray("apps"):root.optJSONArray("apps");
+                JSONArray presetsJson=dataObj!=null?dataObj.optJSONArray("presets"):root.optJSONArray("presets");
+                JSONArray floatingJson=dataObj!=null?dataObj.optJSONArray("floating_apps"):root.optJSONArray("floating_apps");
                 JSONObject settingsObj=root.optJSONObject("settings");
                 JSONArray settingsArr=root.optJSONArray("settings");
                 if(appsJson==null && presetsJson==null && floatingJson==null && settingsObj==null && settingsArr==null){
