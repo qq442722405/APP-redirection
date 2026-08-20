@@ -249,93 +249,6 @@ public class MainActivity extends AppCompatActivity {
         catch(Exception ex){return fallback;}
     }
 
-
-    /**
-     * 首次安装时加载 assets 中的默认配置。升级时只要已有 APPS/PRESETS 就绝不覆盖。
-     * 读取采用“字段可选”策略，未来新增字段不会让旧配置无法使用。
-     */
-    void loadBundledDefaultConfigIfNeeded(){
-        try{
-            if(prefs.contains("bundled_default_loaded")) return;
-            boolean hasUserData=prefs.contains(APPS)||prefs.contains(PRESETS)||prefs.contains("floating_apps");
-            if(!hasUserData){
-                InputStream in=getAssets().open("APP窗口启动器配置.json");
-                ByteArrayOutputStream buf=new ByteArrayOutputStream();
-                byte[] b=new byte[8192]; int n;
-                while((n=in.read(b))!=-1)buf.write(b,0,n);
-                in.close();
-                String s=new String(buf.toByteArray(),"UTF-8");
-                if(s.startsWith("\ufeff"))s=s.substring(1);
-                JSONObject root=new JSONObject(s.trim());
-                SharedPreferences.Editor ed=prefs.edit();
-                // 默认配置中的 APP 可能来自另一台车机；只保存当前设备真正安装的 APP。
-                // 未安装的包名不会参与启动阶段的 UI/图标处理，避免定制 ROM 因不存在包而闪退。
-                JSONArray sourceApps=root.optJSONArray("apps");
-                JSONArray installedApps=new JSONArray();
-                if(sourceApps!=null){
-                    PackageManager pm=getPackageManager();
-                    for(int i=0;i<sourceApps.length();i++){
-                        String pkg=sourceApps.optString(i,"").trim();
-                        if(pkg.isEmpty() || pkg.equals(getPackageName())) continue;
-                        try{
-                            ApplicationInfo ai=pm.getApplicationInfo(pkg,0);
-                            if(ai!=null) installedApps.put(pkg);
-                        }catch(Exception ignored){}
-                    }
-                }
-                ed.putString(APPS,installedApps.toString());
-
-                JSONArray p=root.optJSONArray("presets");
-                if(p!=null){
-                    JSONArray safePresets=new JSONArray();
-                    for(int i=0;i<p.length();i++){
-                        JSONObject po=p.optJSONObject(i);
-                        if(po==null) continue;
-                        int mode=po.optInt("mode",1);
-                        int w=po.optInt("w",0), h=po.optInt("h",0);
-                        // 0×0 预设只允许全屏模式；其它模式必须有有效尺寸。
-                        if(mode!=6 && (w<=0 || h<=0)) continue;
-                        safePresets.put(po);
-                    }
-                    ed.putString(PRESETS,safePresets.toString());
-                }
-
-                JSONArray f=root.optJSONArray("floating_apps");
-                if(f!=null){
-                    JSONArray safeFloating=new JSONArray();
-                    PackageManager pm=getPackageManager();
-                    for(int i=0;i<f.length();i++){
-                        JSONObject fo=f.optJSONObject(i);
-                        if(fo==null) continue;
-                        String pkg=fo.optString("pkg","").trim();
-                        if(pkg.isEmpty() || pkg.equals(getPackageName())) continue;
-                        try{
-                            if(pm.getLaunchIntentForPackage(pkg)!=null) safeFloating.put(fo);
-                        }catch(Exception ignored){}
-                    }
-                    ed.putString("floating_apps",safeFloating.toString());
-                }
-                JSONArray settings=root.optJSONArray("settings");
-                if(settings!=null) for(int i=0;i<settings.length();i++){
-                    JSONObject item=settings.optJSONObject(i); if(item==null)continue;
-                    String key=item.optString("key",""); Object v=item.opt("value");
-                    if(key.isEmpty()||v==null||v==JSONObject.NULL)continue;
-                    if(v instanceof Boolean)ed.putBoolean(key,(Boolean)v);
-                    else if(v instanceof Integer)ed.putInt(key,(Integer)v);
-                    else if(v instanceof Long)ed.putLong(key,(Long)v);
-                    else if(v instanceof Number)ed.putFloat(key,((Number)v).floatValue());
-                    else ed.putString(key,String.valueOf(v));
-                }
-                ed.putBoolean("bundled_default_loaded",true).apply();
-            }else{
-                prefs.edit().putBoolean("bundled_default_loaded",true).apply();
-            }
-        }catch(Exception ignored){
-            // 默认配置损坏/不存在不能影响 APP 正常启动。
-            try{prefs.edit().putBoolean("bundled_default_loaded",true).apply();}catch(Exception ignored2){}
-        }
-    }
-
     @Override protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
         prefs=getSharedPreferences(PREF,0);
@@ -347,7 +260,6 @@ public class MainActivity extends AppCompatActivity {
         if(!prefs.contains("touch_offset_top_px")) defaults.putInt("touch_offset_top_px",50);
         if(!prefs.contains("touch_offset_left_px")) defaults.putInt("touch_offset_left_px",50);
         defaults.apply();
-        loadBundledDefaultConfigIfNeeded();
         loadData();
         buildUI();
         lastOverlayState=hasOverlayPermission();
@@ -451,14 +363,10 @@ public class MainActivity extends AppCompatActivity {
             JSONArray a=new JSONArray(prefs.getString(PRESETS,"[]"));
             for(int i=0;i<a.length();i++){
                 JSONObject o=a.getJSONObject(i);
-                String pn=o.optString("name","未命名");
-                int px=o.optInt("x",0), py=o.optInt("y",0);
-                int pw=o.optInt("w",0), ph=o.optInt("h",0);
-                int pmode=o.optInt("mode",1);
-                // 兼容旧配置：缺少新字段时使用安全默认值；旧全屏模式允许 0×0。
-                if(pmode!=6 && (pw<=0 || ph<=0)) continue;
-                presets.add(new Preset(pn,px,py,pw,ph,o.optInt("displayId",-1),Math.max(1,Math.min(6,pmode))));
-
+                presets.add(new Preset(
+                        o.getString("name"),o.getInt("x"),o.getInt("y"),
+                        o.getInt("w"),o.getInt("h"),o.optInt("displayId",-1),o.optInt("mode",1)
+                ));
             }
         }catch(Exception ignored){}
     }
@@ -497,9 +405,6 @@ public class MainActivity extends AppCompatActivity {
         accBg.setGravity(Gravity.CENTER);
         accBg.setSingleLine(true);
         accBg.setClickable(false);
-        boolean hideMainBgAcc=prefs.getBoolean("hide_main_background_acc",false);
-        accBg.setVisibility(hideMainBgAcc?View.GONE:View.VISIBLE);
-        frame.setBackgroundColor(hideMainBgAcc?Color.BLACK:Color.BLACK);
         frame.addView(accBg,new FrameLayout.LayoutParams(-1,-1));
 
         LinearLayout root=new LinearLayout(this);
@@ -718,25 +623,7 @@ public class MainActivity extends AppCompatActivity {
                     name.setEllipsize(android.text.TextUtils.TruncateAt.END);
                     tile.addView(name,new LinearLayout.LayoutParams(-1,dp(66)));
 
-                    final long[] lastTap={0};
-                    tile.setOnClickListener(v->{
-                        long now=System.currentTimeMillis();
-                        if(now-lastTap[0] <= 350){
-                            selectedPackage=item.pkg; selectedName=item.name;
-                            // 双击主界面已添加 APP：直接启动该 APP。
-                            Intent launch=getPackageManager().getLaunchIntentForPackage(item.pkg);
-                            if(launch!=null){
-                                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-                                try{startActivity(launch);}catch(Exception ignored){}
-                            }
-                            lastTap[0]=0;
-                        }else{
-                            selectedPackage=item.pkg; selectedName=item.name;
-                            info.setText("当前 APP："+item.name);
-                            refresh();
-                            lastTap[0]=now;
-                        }
-                    });
+                    tile.setOnClickListener(v->{selectedPackage=item.pkg;selectedName=item.name;info.setText("当前 APP："+item.name);refresh();});
                     tile.setOnLongClickListener(v->{
                         new AlertDialog.Builder(this).setTitle(item.name)
                             .setItems(new String[]{"删除 APP"},(d,w)->{if(w==0){if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;}apps.remove(itemIndex);saveApps();refresh();}}).show();
@@ -1335,14 +1222,6 @@ public class MainActivity extends AppCompatActivity {
         touchLeftRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
         box.addView(touchLeftRow,new LinearLayout.LayoutParams(-1,dp(56)));
 
-        // 主界面背景/ACC 隐藏开关：打开后同时隐藏背景和中央“Acc”字样。
-        LinearLayout hideBgRow=new LinearLayout(this); hideBgRow.setGravity(Gravity.CENTER_VERTICAL);
-        hideBgRow.addView(text("隐藏主界面背景和 ACC",14),new LinearLayout.LayoutParams(0,dp(52),1));
-        Switch hideBgSwitch=new Switch(this);
-        hideBgSwitch.setChecked(prefs.getBoolean("hide_main_background_acc",false));
-        hideBgRow.addView(hideBgSwitch,new LinearLayout.LayoutParams(dp(70),dp(52)));
-        box.addView(hideBgRow,new LinearLayout.LayoutParams(-1,dp(56)));
-
         TextView hint=text("触控纠正只作用于弹窗，主界面不受影响。正值向下/向右，负值向上/向左。",11);
         hint.setTextColor(Color.GRAY);
         hint.setPadding(0,dp(4),0,dp(6));
@@ -1385,7 +1264,7 @@ public class MainActivity extends AppCompatActivity {
                         .putInt("main_top_blank",topBlank)
                         .putInt("main_bottom_blank",bottomBlank)
                         .putInt("touch_offset_top_px",touchTop)
-                        .putInt("touch_offset_left_px",touchLeft).putBoolean("hide_main_background_acc",hideBgSwitch.isChecked())
+                        .putInt("touch_offset_left_px",touchLeft)
                         // 清理旧版本已经删除的弹窗左右距离配置。
                         .remove("dialog_left_margin_px")
                         .remove("dialog_right_margin_px")
@@ -1879,9 +1758,8 @@ public class MainActivity extends AppCompatActivity {
     JSONObject buildConfigJson(){
         JSONObject root=new JSONObject();
         try{
-            root.put("version",3);
+            root.put("version",2);
             root.put("export_time",System.currentTimeMillis());
-            root.put("schema","app-window-launcher");
             root.put("apps",new JSONArray(prefs.getString(APPS,"[]")));
             root.put("presets",new JSONArray(prefs.getString(PRESETS,"[]")));
             root.put("floating_apps",new JSONArray(prefs.getString("floating_apps","[]")));
