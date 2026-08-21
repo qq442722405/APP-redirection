@@ -579,6 +579,13 @@ public class MainActivity extends AppCompatActivity {
         selectedClose.setOnClickListener(v->controlSelectedApp(true));
         actionRow.addView(selectedClose,new LinearLayout.LayoutParams(dp(68),dp(50)));
 
+        TextView selectedHome=plusButton();
+        selectedHome.setText("主页");
+        selectedHome.setTextSize(17*mainFontScale());
+        selectedHome.setContentDescription("返回主页，让所有 APP 进入后台");
+        selectedHome.setOnClickListener(v->controlHome());
+        actionRow.addView(selectedHome,new LinearLayout.LayoutParams(dp(68),dp(50)));
+
         TextView settings=plusButton();
         settings.setText("⚙");
         settings.setTextSize(24*mainFontScale());
@@ -2575,6 +2582,11 @@ public class MainActivity extends AppCompatActivity {
      * 带回前台，再执行系统级返回，因此不会把返回键误发送给其他 APP。
      * 关闭操作在返回后再补一次返回，尽量让 APP 退出当前任务。
      */
+    /**
+     * 主界面返回/关闭：始终只针对当前选择的 APP。
+     * 如果目标 APP 当前不在前台，则先启动它，再由无障碍服务执行返回/关闭。
+     * 这样不会把按键发送给其他 APP，同时满足车机没有任务管理器的场景。
+     */
     void controlSelectedApp(boolean close){
         if(selectedPackage==null || selectedPackage.isEmpty()){
             Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show();
@@ -2586,29 +2598,62 @@ public class MainActivity extends AppCompatActivity {
         if(!isAccessibilityServiceEnabled()){
             new AlertDialog.Builder(this)
                     .setTitle("需要无障碍权限")
-                    .setMessage("为了让主界面的“返回/关闭”只作用于当前选中的 APP，请先开启本 APP 的无障碍服务。")
+                    .setMessage("为了让返回/关闭只作用于当前选中的 APP，请先开启本 APP 的无障碍服务。")
                     .setNegativeButton("取消",null)
                     .setPositiveButton("去开启",(d,w)->openAccessibilitySettings())
                     .show();
             return;
         }
 
-        // 关键修复：绝不为了执行返回/关闭而启动目标 APP。
-        // 只有当“当前前台 APP”就是用户选择的 APP 时才执行操作。
-        if(!AccessibilityServiceBridge.isTargetForeground(pkg)){
-            String current=AccessibilityServiceBridge.getCurrentPackage();
-            String msg=(current==null||current.isEmpty())
-                    ? "当前没有可控制的目标 APP"
-                    : "当前前台不是所选 APP（"+name+"），不执行返回/关闭";
-            Toast.makeText(this,msg,Toast.LENGTH_SHORT).show();
+        // 已经在前台：直接执行。
+        if(AccessibilityServiceBridge.isTargetForeground(pkg)){
+            if(AccessibilityServiceBridge.performBackForTarget(pkg,close)){
+                info.setText((close?"关闭":"返回")+"当前选中 APP："+name);
+            }
             return;
         }
 
-        if(AccessibilityServiceBridge.performBackForTarget(pkg,close)){
-            info.setText((close?"关闭":"返回")+"当前选中 APP："+name);
-        }else{
-            Toast.makeText(this,"当前 APP 不可控制",Toast.LENGTH_SHORT).show();
+        // 不在前台：先激活选中的 APP，再执行对应操作。
+        Intent launch=getPackageManager().getLaunchIntentForPackage(pkg);
+        if(launch==null){
+            Toast.makeText(this,"无法启动所选 APP："+name,Toast.LENGTH_SHORT).show();
+            return;
         }
+        try{
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            startActivity(launch);
+            new Handler(Looper.getMainLooper()).postDelayed(()->{
+                if(AccessibilityServiceBridge.isTargetForeground(pkg)){
+                    AccessibilityServiceBridge.performBackForTarget(pkg,close);
+                    info.setText((close?"关闭":"返回")+"当前选中 APP："+name);
+                }else{
+                    Toast.makeText(this,"已激活「"+name+"」，但无障碍服务未识别到前台窗口",Toast.LENGTH_SHORT).show();
+                }
+            },700);
+        }catch(Exception e){
+            Toast.makeText(this,"无法激活所选 APP："+e.getMessage(),Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** 主界面“主页”：使用系统 HOME，让所有 APP 进入后台，不启动任何 APP。 */
+    void controlHome(){
+        if(!isAccessibilityServiceEnabled()){
+            new AlertDialog.Builder(this)
+                    .setTitle("需要无障碍权限")
+                    .setMessage("为了让主页快捷键稳定生效，请先开启本 APP 的无障碍服务。")
+                    .setNegativeButton("取消",null)
+                    .setPositiveButton("去开启",(d,w)->openAccessibilitySettings())
+                    .show();
+            return;
+        }
+        AccessibilityServiceBridge.perform(this,2);
+        try{
+            Intent i=new Intent(Intent.ACTION_MAIN);
+            i.addCategory(Intent.CATEGORY_HOME);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+        }catch(Exception ignored){}
+        if(info!=null) info.setText("已返回主页，所有 APP 进入后台");
     }
 
     boolean isAccessibilityServiceEnabled(){

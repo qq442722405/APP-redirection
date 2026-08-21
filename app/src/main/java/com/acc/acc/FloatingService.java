@@ -455,15 +455,44 @@ public class FloatingService extends Service {
     void performSelectedTargetAction(boolean close){
         String pkg=getSharedPreferences(MainActivity.PREF,0).getString("selected_control_package","");
         if(pkg==null || pkg.isEmpty()){
-            Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show();
+            Toast.makeText(this,"请先在主界面选择 APP",Toast.LENGTH_SHORT).show();
             return;
         }
-        if(!AccessibilityServiceBridge.isTargetForeground(pkg)){
-            String current=AccessibilityServiceBridge.getCurrentPackage();
-            Toast.makeText(this,"当前前台不是所选 APP，不执行"+(close?"关闭":"返回"),Toast.LENGTH_SHORT).show();
+        if(!isAccessibilityEnabled()){
+            Toast.makeText(this,"请先开启无障碍服务",Toast.LENGTH_SHORT).show();
             return;
         }
-        AccessibilityServiceBridge.performBackForTarget(pkg,close);
+
+        // 已在前台：直接映射主界面的返回/关闭。
+        if(AccessibilityServiceBridge.isTargetForeground(pkg)){
+            AccessibilityServiceBridge.performBackForTarget(pkg,close);
+            return;
+        }
+
+        // 不在前台：先激活主界面当前选择的 APP，再执行同样的返回/关闭。
+        Intent launch=getPackageManager().getLaunchIntentForPackage(pkg);
+        if(launch==null){
+            Toast.makeText(this,"无法启动当前选择的 APP",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try{
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            startActivity(launch);
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(()->{
+                if(AccessibilityServiceBridge.isTargetForeground(pkg)){
+                    AccessibilityServiceBridge.performBackForTarget(pkg,close);
+                }
+            },700);
+        }catch(Exception e){
+            Toast.makeText(this,"无法激活当前选择的 APP",Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    boolean isAccessibilityEnabled(){
+        try{
+            String enabled=android.provider.Settings.Secure.getString(getContentResolver(),android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            return enabled!=null && enabled.contains(getPackageName()+"/"+AccessibilityServiceBridge.class.getName());
+        }catch(Exception e){return false;}
     }
 
     void globalAction(int action){
