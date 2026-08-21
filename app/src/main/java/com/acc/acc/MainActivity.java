@@ -1027,7 +1027,7 @@ public class MainActivity extends AppCompatActivity {
         floatingAddRow.setGravity(Gravity.CENTER_VERTICAL);
         TextView floatingAddTitle=text("悬浮窗项目",14);
         floatingAddRow.addView(floatingAddTitle,new LinearLayout.LayoutParams(0,dp(58),1));
-        Button floatingAdd=plusButton();
+        TextView floatingAdd=plusButton();
         floatingAdd.setText("+");
         floatingAdd.setTextSize(30);
         floatingAdd.setContentDescription("添加到悬浮窗口");
