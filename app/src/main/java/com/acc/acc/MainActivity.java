@@ -651,12 +651,26 @@ public class MainActivity extends AppCompatActivity {
                     name.setEllipsize(android.text.TextUtils.TruncateAt.END);
                     tile.addView(name,new LinearLayout.LayoutParams(-1,dp(66)));
 
-                    tile.setOnClickListener(v->{selectedPackage=item.pkg;selectedName=item.name;info.setText("当前 APP："+item.name);refresh();});
-                    tile.setOnLongClickListener(v->{
-                        new AlertDialog.Builder(this).setTitle(item.name)
-                            .setItems(new String[]{"删除 APP"},(d,w)->{if(w==0){if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;}apps.remove(itemIndex);saveApps();refresh();}}).show();
-                        return true;
+                    final GestureDetector appGesture=new GestureDetector(this,new GestureDetector.SimpleOnGestureListener(){
+                        @Override public boolean onDown(MotionEvent e){return true;}
+                        @Override public boolean onSingleTapConfirmed(MotionEvent e){
+                            selectedPackage=item.pkg; selectedName=item.name; info.setText("当前 APP："+item.name); refresh();
+                            return true;
+                        }
+                        @Override public boolean onDoubleTap(MotionEvent e){
+                            selectedPackage=item.pkg; selectedName=item.name; info.setText("当前 APP："+item.name);
+                            launchAppDirect(item.pkg,item.name);
+                            return true;
+                        }
+                        @Override public void onLongPress(MotionEvent e){
+                            new AlertDialog.Builder(MainActivity.this).setTitle(item.name)
+                                .setItems(new String[]{"删除 APP"},(d,w)->{if(w==0){
+                                    if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;}
+                                    apps.remove(itemIndex);saveApps();refresh();
+                                }}).show();
+                        }
                     });
+                    tile.setOnTouchListener((v,e)->appGesture.onTouchEvent(e));
                     LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(200),dp(180));
                     lp.setMargins(dp(4),dp(4),dp(4),dp(4));
                     row.addView(tile,lp);
@@ -930,6 +944,13 @@ public class MainActivity extends AppCompatActivity {
         showFixed1000x800(settingsDialog[0]);
     }
 
+    String plusDirectionLabel(String value){
+        if("left".equals(value)) return "横向：＋在左";
+        if("bottom".equals(value)) return "竖向：＋在下";
+        if("top".equals(value)) return "竖向：＋在上";
+        return "横向：＋在右";
+    }
+
     void showFloatingWindowSettingsDialog(){
         // 悬浮窗口尺寸由内容自动适应，位置只通过拖动调整。保存后窗口保持打开。
         LinearLayout root=new LinearLayout(this);
@@ -958,6 +979,23 @@ public class MainActivity extends AppCompatActivity {
             dirBtn.setText(vertical?"竖向":"横向");
         });
         box.addView(direction,new LinearLayout.LayoutParams(-1,dp(58)));
+
+        LinearLayout plusDirRow=new LinearLayout(this); plusDirRow.setGravity(Gravity.CENTER_VERTICAL);
+        plusDirRow.addView(text("悬浮窗＋号方向",14),new LinearLayout.LayoutParams(0,dp(52),1));
+        String savedPlusDir=prefs.getString("floating_plus_position", "right");
+        Button plusDirBtn=button(plusDirectionLabel(savedPlusDir));
+        plusDirBtn.setGravity(Gravity.CENTER);
+        plusDirRow.addView(plusDirBtn,new LinearLayout.LayoutParams(dp(150),dp(48)));
+        plusDirBtn.setOnClickListener(v->{
+            String cur=prefs.getString("floating_plus_position","right");
+            String[] vals={"right","left","bottom","top"};
+            int idx=0;
+            for(int i=0;i<vals.length;i++) if(vals[i].equals(cur)){idx=i;break;}
+            String next=vals[(idx+1)%vals.length];
+            prefs.edit().putString("floating_plus_position",next).apply();
+            plusDirBtn.setText(plusDirectionLabel(next));
+        });
+        box.addView(plusDirRow,new LinearLayout.LayoutParams(-1,dp(58)));
 
         EditText spacing=numberField("6",String.valueOf(prefs.getInt("floating_button_spacing_px",6)));
         box.addView(labeledSimpleNumberField("按钮图标间距",spacing),new LinearLayout.LayoutParams(-1,dp(54)));
@@ -2096,10 +2134,73 @@ public class MainActivity extends AppCompatActivity {
         try{Window w=dialog.getWindow();if(w!=null){android.graphics.Point screen=getRealScreenSize();w.setLayout(w.getAttributes().width,Math.max(dp(420),screen.y-dp(TOP_BLANK+BOTTOM_BLANK)));}}catch(Exception ignored){}
     }
 
+    JSONObject getSavedAppBounds(String pkg){
+        try{
+            JSONObject all=new JSONObject(prefs.getString("app_last_bounds","{}"));
+            JSONObject o=all.optJSONObject(pkg);
+            return o==null?null:o;
+        }catch(Exception e){return null;}
+    }
+
+    void saveAppBounds(String pkg,int x,int y,int w,int h,int displayId,boolean fullscreen){
+        try{
+            JSONObject all=new JSONObject(prefs.getString("app_last_bounds","{}"));
+            JSONObject o=new JSONObject();
+            o.put("x",x); o.put("y",y); o.put("w",w); o.put("h",h);
+            o.put("displayId",displayId); o.put("fullscreen",fullscreen);
+            all.put(pkg,o);
+            prefs.edit().putString("app_last_bounds",all.toString()).apply();
+        }catch(Exception ignored){}
+    }
+
+    void launchIntentWithBounds(Intent intent,String pkg,int x,int y,int w,int h,int displayId,boolean fullscreen,String name){
+        android.view.Display targetDisplay=getWindow().getWindowManager().getDefaultDisplay();
+        android.graphics.Point real=getRealScreenSize(targetDisplay);
+        int left=Math.max(0,Math.min(x,real.x-1));
+        int top=Math.max(0,Math.min(y,real.y-1));
+        int right=Math.max(left+1,Math.min(x+w,real.x));
+        int bottom=Math.max(top+1,Math.min(y+h,real.y));
+        if(fullscreen){left=0;top=0;right=real.x;bottom=real.y;}
+        ActivityOptions options=ActivityOptions.makeBasic();
+        options.setLaunchBounds(new android.graphics.Rect(left,top,right,bottom));
+        if(Build.VERSION.SDK_INT>=26 && targetDisplay!=null){
+            try{
+                java.lang.reflect.Method m=ActivityOptions.class.getMethod("setLaunchDisplayId",int.class);
+                m.invoke(options,targetDisplay.getDisplayId());
+            }catch(Exception ignored){}
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS);
+        // 不使用 RESET_TASK_IF_NEEDED，避免车机 Launcher 把已有任务重新计算成左上角全屏。
+        // MULTIPLE_TASK 让不同 APP 的任务彼此独立，切换第二个 APP 不会清掉第一个任务。
+        if(Build.VERSION.SDK_INT>=21) intent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+        intent.putExtra("com.acc.acc.target_x",left);
+        intent.putExtra("com.acc.acc.target_y",top);
+        intent.putExtra("com.acc.acc.target_w",right-left);
+        intent.putExtra("com.acc.acc.target_h",bottom-top);
+        intent.putExtra("com.acc.acc.target_display_id",targetDisplay==null?displayId:targetDisplay.getDisplayId());
+        intent.putExtra("com.acc.acc.fullscreen",fullscreen);
+        try{
+            startActivity(intent,options.toBundle());
+            saveAppBounds(pkg,left,top,right-left,bottom-top,targetDisplay==null?displayId:targetDisplay.getDisplayId(),fullscreen);
+            info.setText("启动："+name+"\n已恢复窗口："+(right-left)+" × "+(bottom-top)+"  左 "+left+"  上 "+top);
+        }catch(Exception e){
+            try{startActivity(intent);}catch(Exception ignored){Toast.makeText(this,"APP 启动失败",Toast.LENGTH_SHORT).show();}
+        }
+    }
+
     void launchAppDirect(String pkg,String name){
         Intent intent=getPackageManager().getLaunchIntentForPackage(pkg);
         if(intent==null){Toast.makeText(this,"无法启动 APP",Toast.LENGTH_SHORT).show();return;}
+        JSONObject saved=getSavedAppBounds(pkg);
+        if(saved!=null){
+            launchIntentWithBounds(intent,pkg,
+                    saved.optInt("x",0),saved.optInt("y",0),saved.optInt("w",getRealScreenSize().x),saved.optInt("h",getRealScreenSize().y),
+                    saved.optInt("displayId",-1),saved.optBoolean("fullscreen",false),name);
+            return;
+        }
         info.setText("直接启动："+name);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS);
+        if(Build.VERSION.SDK_INT>=21) intent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
         try{startActivity(intent);}catch(Exception e){info.setText("启动失败："+e.getMessage());}
     }
 
@@ -2158,7 +2259,8 @@ public class MainActivity extends AppCompatActivity {
             }catch(Exception ignored){}
         }
 
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS);
+        if(Build.VERSION.SDK_INT>=21) intent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
         intent.putExtra("com.acc.acc.target_x",left);
         intent.putExtra("com.acc.acc.target_y",top);
         intent.putExtra("com.acc.acc.target_w",right-left);
@@ -2170,6 +2272,7 @@ public class MainActivity extends AppCompatActivity {
 
         try{
             startActivity(intent,options.toBundle());
+            saveAppBounds(selectedPackage,left,top,right-left,bottom-top,targetDisplay==null?-1:targetDisplay.getDisplayId(),p.mode==6);
             // 给车机 Launcher 一点时间完成 Activity 切换。这里不再尝试使用
             // 非公开 API 强制修改别的 APP，避免在 Android 12 上崩溃。
             Toast.makeText(this,
