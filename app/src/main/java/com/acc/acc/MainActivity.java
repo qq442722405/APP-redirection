@@ -877,6 +877,10 @@ public class MainActivity extends AppCompatActivity {
     // 用户指定的标准设置/编辑页面尺寸：1000×800 物理像素。
     // 在显示器小于该尺寸时保持居中并由系统裁剪，避免根据屏幕 density 改变页面设计尺寸。
     void showFixed1000x800(AlertDialog dialog){
+        showFixed1000x800(dialog,0);
+    }
+
+    void showFixed1000x800(AlertDialog dialog,int bottomOffsetPx){
         if(dialog==null) return;
         dialog.show();
         styleDialogActionButtons(dialog);
@@ -885,6 +889,11 @@ public class MainActivity extends AppCompatActivity {
         if(w!=null){
             w.setLayout(1000,800);
             w.setGravity(Gravity.CENTER);
+            if(bottomOffsetPx!=0){
+                WindowManager.LayoutParams a=w.getAttributes();
+                a.y=-bottomOffsetPx;
+                w.setAttributes(a);
+            }
         }
     }
 
@@ -1370,7 +1379,7 @@ public class MainActivity extends AppCompatActivity {
         final int[] selectedAppCategory={0};
         final Runnable[] refreshHolder={null};
         LinearLayout tabs=new LinearLayout(this); tabs.setGravity(Gravity.CENTER_VERTICAL);
-        String[] cats={"全部","用户","系统"}; Button[] tabBtns=new Button[cats.length];
+        String[] cats={"用户","系统","全部"}; Button[] tabBtns=new Button[cats.length];
         for(int i=0;i<cats.length;i++){
             final int ci=i; Button b=button(cats[i]); b.setTextSize(12*fontScale()); tabBtns[i]=b;
             tabs.addView(b,new LinearLayout.LayoutParams(0,dp(44),1));
@@ -1400,8 +1409,8 @@ public class MainActivity extends AppCompatActivity {
             int inRow=0;
             for(ApplicationInfo ai:list){
                 boolean system=(ai.flags & ApplicationInfo.FLAG_SYSTEM)!=0 || (ai.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)!=0;
-                if(selectedAppCategory[0]==1 && system) continue;
-                if(selectedAppCategory[0]==2 && !system) continue;
+                if(selectedAppCategory[0]==0 && system) continue;
+                if(selectedAppCategory[0]==1 && !system) continue;
                 String name=pm.getApplicationLabel(ai).toString();
                 if(!q.isEmpty() && !name.toLowerCase(Locale.ROOT).contains(q) && !ai.packageName.toLowerCase(Locale.ROOT).contains(q)) continue;
                 if(inRow==0){
@@ -1441,7 +1450,7 @@ public class MainActivity extends AppCompatActivity {
     void showNotes(){
         EditText edit=new EditText(this); edit.setText(prefs.getString("notes","")); edit.setTextColor(Color.WHITE); edit.setHintTextColor(Color.GRAY); edit.setGravity(Gravity.TOP|Gravity.LEFT); edit.setHint("在这里记录内容……"); edit.setSingleLine(false); edit.setMinLines(12); edit.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE|android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES); edit.setPadding(dp(12),dp(12),dp(12),dp(12));
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("记事本").setView(edit).setNegativeButton("取消",null).setPositiveButton("保存",(d,w)->{prefs.edit().putString("notes",edit.getText().toString()).apply(); Toast.makeText(this,"已保存",Toast.LENGTH_SHORT).show();}).create();
-        showFixed1000x800(dialog);
+        showFixed1000x800(dialog,dp(80));
     }
 
     void presetMenu(int index){
@@ -1733,7 +1742,7 @@ public class MainActivity extends AppCompatActivity {
             if(index<0) presets.add(p); else presets.set(index,p);
             savePresets(); refresh(); dialog.dismiss();
         });
-        showFixed1000x800(dialog);
+        showFixed1000x800(dialog,dp(80));
     }
 
     // 三区域车机按一个超宽 Display 处理，不再创建 Presentation。
@@ -1980,7 +1989,10 @@ public class MainActivity extends AppCompatActivity {
         box.addView(scroll,new LinearLayout.LayoutParams(-1,dp(220)));
 
         EditText interval=numberField("启动间隔（秒）",String.valueOf(prefs.getInt("auto_start_interval",1)));
-        box.addView(labeledNumberField("任务间隔",interval));
+        LinearLayout intervalRow=labeledNumberField("任务间隔",interval);
+        LinearLayout.LayoutParams intervalLp=new LinearLayout.LayoutParams(-1,dp(52));
+        intervalLp.topMargin=dp(18);
+        box.addView(intervalRow,intervalLp);
 
         final JSONArray[] tasks={loadAutoTasks()};
         final Runnable[] refreshTasks=new Runnable[1];
@@ -2030,7 +2042,9 @@ public class MainActivity extends AppCompatActivity {
         taskActionRow.addView(taskSwitch,new LinearLayout.LayoutParams(0,dp(50),1));
         Button add=button("＋ 添加启动任务");
         taskActionRow.addView(add,new LinearLayout.LayoutParams(dp(150),dp(48)));
-        box.addView(taskActionRow,new LinearLayout.LayoutParams(-1,dp(54)));
+        LinearLayout.LayoutParams taskActionLp=new LinearLayout.LayoutParams(-1,dp(54));
+        taskActionLp.topMargin=dp(18);
+        box.addView(taskActionRow,taskActionLp);
         add.setOnClickListener(v->showAddAutoTaskDialog(tasks,refreshTasks[0]));
         refreshTasks[0].run();
 
@@ -2041,7 +2055,9 @@ public class MainActivity extends AppCompatActivity {
         Button save=button("保存");
         actionBar.addView(back,new LinearLayout.LayoutParams(0,dp(50),1));
         actionBar.addView(save,new LinearLayout.LayoutParams(0,dp(50),1));
-        box.addView(actionBar,new LinearLayout.LayoutParams(-1,dp(58)));
+        LinearLayout.LayoutParams actionBarLp=new LinearLayout.LayoutParams(-1,dp(58));
+        actionBarLp.topMargin=dp(18);
+        box.addView(actionBar,actionBarLp);
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("自动启动项目")
                 .setView(box).create();
         back.setOnClickListener(v->dialog.dismiss());
