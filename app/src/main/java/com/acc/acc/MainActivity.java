@@ -1320,7 +1320,7 @@ public class MainActivity extends AppCompatActivity {
         ArrayList<ApplicationInfo> allApps=new ArrayList<>();
         try{
             for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){
-                if(ai.packageName.equals(getPackageName())) continue;
+                // 本程序也作为可添加 APP 显示在“用户”分类中。
                 if(pm.getLaunchIntentForPackage(ai.packageName)!=null) allApps.add(ai);
             }
         }catch(Exception ignored){}

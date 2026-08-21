@@ -623,7 +623,13 @@ public class FloatingService extends Service {
 
         ScrollView sv=new ScrollView(this); LinearLayout rows=new LinearLayout(this); rows.setOrientation(LinearLayout.VERTICAL); rows.setGravity(Gravity.CENTER_HORIZONTAL); sv.addView(rows,new ScrollView.LayoutParams(-1,-2)); box.addView(sv,new LinearLayout.LayoutParams(-1,0,1));
         PackageManager pm=getPackageManager(); ArrayList<ApplicationInfo> list=new ArrayList<>();
-        try{for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){if(!ai.packageName.equals(getPackageName()))list.add(ai);} Collections.sort(list,(a,b)->String.valueOf(pm.getApplicationLabel(a)).compareToIgnoreCase(String.valueOf(pm.getApplicationLabel(b))));}catch(Exception ignored){}
+        try{
+            // 本程序也允许作为悬浮窗 APP 添加。
+            for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){
+                if(pm.getLaunchIntentForPackage(ai.packageName)!=null) list.add(ai);
+            }
+            Collections.sort(list,(a,b)->String.valueOf(pm.getApplicationLabel(a)).compareToIgnoreCase(String.valueOf(pm.getApplicationLabel(b))));
+        }catch(Exception ignored){}
         refreshApps[0]=()->{
             rows.removeAllViews(); String q=search.getText().toString().trim().toLowerCase(Locale.ROOT); int count=0,inRow=0; LinearLayout row=null;
             for(ApplicationInfo ai:list){
