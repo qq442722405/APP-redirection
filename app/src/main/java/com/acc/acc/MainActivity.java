@@ -1190,7 +1190,7 @@ public class MainActivity extends AppCompatActivity {
         Switch home=new Switch(this); home.setChecked(prefs.getBoolean("floating_home",false));
         homeRow.addView(home,new LinearLayout.LayoutParams(dp(58),dp(50))); box.addView(homeRow,new LinearLayout.LayoutParams(-1,dp(52)));
 
-        LinearLayout menuRow=new LinearLayout(this); menuRow.setGravity(Gravity.CENTER_VERTICAL;
+        LinearLayout menuRow=new LinearLayout(this); menuRow.setGravity(Gravity.CENTER_VERTICAL);
         menuRow.addView(text("菜单按钮",14),new LinearLayout.LayoutParams(0,dp(50),1));
         Switch menu=new Switch(this); menu.setChecked(prefs.getBoolean("floating_menu",false));
         menuRow.addView(menu,new LinearLayout.LayoutParams(dp(58),dp(50))); box.addView(menuRow,new LinearLayout.LayoutParams(-1,dp(52)));
