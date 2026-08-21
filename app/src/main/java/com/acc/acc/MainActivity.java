@@ -1196,7 +1196,7 @@ public class MainActivity extends AppCompatActivity {
         menuRow.addView(menu,new LinearLayout.LayoutParams(dp(58),dp(50))); box.addView(menuRow,new LinearLayout.LayoutParams(-1,dp(52)));
 
         final Runnable[] rebuildHolder=new Runnable[1];
-         rebuildHolder[0]=()->{
+        rebuildHolder[0]=()->{
             list.removeAllViews();
             try{
                 JSONArray a=new JSONArray(prefs.getString("floating_apps","[]"));
@@ -1208,8 +1208,8 @@ public class MainActivity extends AppCompatActivity {
                     LinearLayout row=new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(dp(10),0,dp(6),0);
                     ImageView iv=new ImageView(this);
                     try{iv.setImageDrawable(getPackageManager().getApplicationIcon(pkg));}catch(Exception ignored){}
-                    row.addView(iv,new LinearLayout.LayoutParams(dp(44),dp(44)));
-                    TextView tv=text(name,14); row.addView(tv,new LinearLayout.LayoutParams(0,dp(50),1));
+                    row.addView(iv,new LinearLayout.LayoutParams(dp(60),dp(60)));
+                    TextView tv=text(name,14); row.addView(tv,new LinearLayout.LayoutParams(0,dp(70),1));
                     Button del=button("删除");
                     del.setOnClickListener(v->{
                         try{
@@ -1219,8 +1219,8 @@ public class MainActivity extends AppCompatActivity {
                             rebuildHolder[0].run();
                         }catch(Exception ignored){}
                     });
-                    row.addView(del,new LinearLayout.LayoutParams(dp(72),dp(46)));
-                    list.addView(row,new LinearLayout.LayoutParams(-1,dp(54)));
+                    row.addView(del,new LinearLayout.LayoutParams(dp(72),dp(60)));
+                    list.addView(row,new LinearLayout.LayoutParams(-1,dp(80)));
                 }
             }catch(Exception ignored){}
             if(list.getChildCount()==0){TextView empty=text("暂无 APP 快捷键",12); empty.setTextColor(Color.GRAY); list.addView(empty,new LinearLayout.LayoutParams(-1,dp(42)));}
