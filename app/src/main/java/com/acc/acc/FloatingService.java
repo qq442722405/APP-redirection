@@ -139,6 +139,19 @@ public class FloatingService extends Service {
         return b;
     }
 
+    Button button(String label){
+        Button b=new Button(this);
+        b.setText(label);
+        b.setTextColor(Color.WHITE);
+        b.setTextSize(12*fontScale());
+        b.setGravity(Gravity.CENTER);
+        b.setSingleLine(true);
+        b.setAllCaps(false);
+        b.setPadding(dp(6),0,dp(6),0);
+        b.setBackgroundResource(R.drawable.button);
+        return b;
+    }
+
     ImageButton iconButton(int icon){
         ImageButton b=new ImageButton(this);
         b.setImageResource(icon);
