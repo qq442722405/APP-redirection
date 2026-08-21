@@ -29,7 +29,6 @@ public class FloatingService extends Service {
     final ArrayList<String> floatingNames=new ArrayList<>();
 
     boolean vertical;
-    String plusPosition="right";
     int buttonSpacingPx=6, iconSizePx=44, backgroundOpacity=80;
     boolean addBack=false, addHome=false, addMenu=false;
     boolean singleIconMode=false, positionLocked=false;
@@ -63,7 +62,6 @@ public class FloatingService extends Service {
         loadFloatingApps();
         SharedPreferences p=getSharedPreferences(MainActivity.PREF,0);
         vertical=p.getBoolean("floating_vertical",false);
-        plusPosition=p.getString("floating_plus_position", vertical ? "bottom" : "right");
         buttonSpacingPx=p.getInt("floating_button_spacing_px",6);
         iconSizePx=p.getInt("floating_icon_size_px",44);
         backgroundOpacity=Math.max(0,Math.min(100,p.getInt("floating_background_opacity",80)));
@@ -176,10 +174,6 @@ public class FloatingService extends Service {
         // 透明度作用于整个悬浮窗口（背景、按钮、APP图标等所有内容），而不是仅背景。
         panel.setAlpha(Math.max(0f, Math.min(1f, backgroundOpacity / 100f)));
 
-        TextView drag=baseButton("☰");
-        drag.setTextSize(20*fontScale());
-        TextView plus=baseButton("＋");
-        plus.setTextSize(22*fontScale());
         if(singleIconMode) {
             ImageButton single=iconButton(0);
             // 单图标模式的图形本身就是按钮，不显示任何 APP 图标。
@@ -199,8 +193,7 @@ public class FloatingService extends Service {
             addView(single,iconSizePx,iconSizePx);
             installSingleIconGesture(single);
         } else {
-            // 普通模式：把拖动按钮固定在第一个位置，后面的 APP/系统按钮由 rebuildButtons() 管理。
-            addView(drag,iconSizePx,iconSizePx);
+            // 普通模式：悬浮窗只显示用户配置的 APP / 系统按钮；不再显示“＋”和拖动手柄。
             rebuildButtons();
         }
 
@@ -213,29 +206,6 @@ public class FloatingService extends Service {
         lp.x=hasSavedPosition?positionPrefs.getInt("floating_position_x",0):0;
         lp.y=hasSavedPosition?positionPrefs.getInt("floating_position_y",0):0;
 
-        drag.setOnTouchListener((v,e)->{
-            if(e.getAction()==MotionEvent.ACTION_DOWN){
-                downX=(int)e.getRawX(); downY=(int)e.getRawY();
-                startX=lp.x; startY=lp.y;
-                return true;
-            }
-            if(e.getAction()==MotionEvent.ACTION_MOVE){
-                if(positionLocked)return true;
-                int dx=(int)e.getRawX()-downX;
-                int dy=(int)e.getRawY()-downY;
-                lp.x=startX+dx; lp.y=startY+dy;
-                try{wm.updateViewLayout(panel,lp);}catch(Exception ignored){}
-                return true;
-            }
-            if(e.getAction()==MotionEvent.ACTION_UP || e.getAction()==MotionEvent.ACTION_CANCEL){
-                if(positionLocked)return true;
-                getSharedPreferences(MainActivity.PREF,0).edit()
-                        .putInt("floating_position_x",lp.x)
-                        .putInt("floating_position_y",lp.y).apply();
-                return true;
-            }
-            return true;
-        });
         try{
             wm.addView(panel,lp);
             if(!hasSavedPosition){
@@ -398,63 +368,22 @@ public class FloatingService extends Service {
 
     void rebuildButtons(){
         if(panel==null)return;
-        // 第 0 个固定为拖动按钮；其余全部重建。旧版本只删除到第 1 个，
-        // 切换方向后会把第一个 APP 当成“固定按钮”，导致 2 个以上 APP 消失。
-        while(panel.getChildCount()>1)panel.removeViewAt(1);
+        // 重新构建时清空全部按钮，避免切换方向/刷新后只剩一个项目。
+        while(panel.getChildCount()>0)panel.removeViewAt(0);
 
-        // 按“＋号方向”决定加号位于 APP/系统按钮的哪一侧。
-        boolean plusFirst="left".equals(plusPosition)||"top".equals(plusPosition);
-        boolean plusLast="right".equals(plusPosition)||"bottom".equals(plusPosition);
-
-        // 单独创建加号按钮；点击添加，拖动移动。
-        TextView plus=baseButton("＋");
-        plus.setTextSize(22*fontScale());
-        plus.setContentDescription("添加悬浮项目（点击添加，拖动移动）");
-        final int[] plusDown={0,0};
-        final boolean[] plusMoved={false};
-        plus.setOnTouchListener((v,e)->{
-            switch(e.getActionMasked()){
-                case MotionEvent.ACTION_DOWN:
-                    plusDown[0]=(int)e.getRawX(); plusDown[1]=(int)e.getRawY(); plusMoved[0]=false;
-                    return true;
-                case MotionEvent.ACTION_MOVE:
-                    int dx=(int)e.getRawX()-plusDown[0], dy=(int)e.getRawY()-plusDown[1];
-                    if(Math.abs(dx)>8||Math.abs(dy)>8){
-                        plusMoved[0]=true;
-                        if(!positionLocked){
-                            lp.x+=dx; lp.y+=dy;
-                            plusDown[0]=(int)e.getRawX(); plusDown[1]=(int)e.getRawY();
-                            try{wm.updateViewLayout(panel,lp);}catch(Exception ignored){}
-                        }
-                    }
-                    return true;
-                case MotionEvent.ACTION_UP:
-                    if(!plusMoved[0]) showAddMenu();
-                    else if(!positionLocked) getSharedPreferences(MainActivity.PREF,0).edit()
-                            .putInt("floating_position_x",lp.x).putInt("floating_position_y",lp.y).apply();
-                    return true;
-            }
-            return true;
-        });
-
-        if(plusFirst) addView(plus,iconSizePx,iconSizePx);
-
-        // 桌面悬浮窗上的 APP 按钮只显示名称第一个字/字母。
         for(int i=0;i<floatingPkgs.size();i++){
             final String pkg=floatingPkgs.get(i);
             final String displayName=(i<floatingNames.size()?floatingNames.get(i):pkg);
             TextView b=baseButton(displayName==null||displayName.trim().isEmpty()?"A":displayName.trim().substring(0,1).toUpperCase(Locale.ROOT));
             b.setTextSize(Math.max(12,Math.min(28,iconSizePx*0.48f))*fontScale());
             b.setGravity(Gravity.CENTER);
-            b.setOnClickListener(v->launchFloatingApp(pkg));
-            b.setOnLongClickListener(v->{
+            installDraggableItem(b,()->launchFloatingApp(pkg),()->{
                 new android.app.AlertDialog.Builder(this)
                         .setTitle("删除快捷键")
                         .setMessage("是否删除“"+displayName+"”这个悬浮窗口快捷键？")
                         .setNegativeButton("取消",null)
                         .setPositiveButton("删除",(d,w)->removeFloatingApp(pkg))
                         .show();
-                return true;
             });
             addView(b,iconSizePx,iconSizePx);
         }
@@ -462,14 +391,49 @@ public class FloatingService extends Service {
         if(addBack) addSystemButton(R.drawable.ic_back,"返回",ACTION_BACK);
         if(addHome) addSystemButton(R.drawable.ic_home,"首页",ACTION_HOME);
         if(addMenu) addSystemButton(R.drawable.ic_menu,"菜单",ACTION_MENU);
+    }
 
-        if(plusLast) addView(plus,iconSizePx,iconSizePx);
+    /** 所有悬浮窗图标都可以拖动；未移动时才执行点击操作。 */
+    void installDraggableItem(View v, final Runnable clickAction, final Runnable longAction){
+        final int[] down={0,0};
+        final int[] last={0,0};
+        final boolean[] moved={false};
+        final boolean[] longTriggered={false};
+        final Runnable[] longTask={null};
+        v.setOnTouchListener((view,event)->{
+            switch(event.getActionMasked()){
+                case MotionEvent.ACTION_DOWN:
+                    down[0]=(int)event.getRawX(); down[1]=(int)event.getRawY();
+                    last[0]=down[0]; last[1]=down[1]; moved[0]=false; longTriggered[0]=false;
+                    if(longAction!=null){
+                        longTask[0]=()->{ if(!moved[0]){longTriggered[0]=true; longAction.run();} };
+                        gestureHandler.postDelayed(longTask[0],520);
+                    }
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    int dx=(int)event.getRawX()-last[0], dy=(int)event.getRawY()-last[1];
+                    int totalDx=(int)event.getRawX()-down[0], totalDy=(int)event.getRawY()-down[1];
+                    if(Math.abs(totalDx)>8||Math.abs(totalDy)>8){
+                        moved[0]=true;
+                        if(longTask[0]!=null)gestureHandler.removeCallbacks(longTask[0]);
+                        if(!positionLocked) movePanelBy(dx,dy);
+                        last[0]=(int)event.getRawX(); last[1]=(int)event.getRawY();
+                    }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    if(longTask[0]!=null)gestureHandler.removeCallbacks(longTask[0]);
+                    if(!moved[0] && !longTriggered[0] && event.getActionMasked()==MotionEvent.ACTION_UP && clickAction!=null) clickAction.run();
+                    return true;
+            }
+            return true;
+        });
     }
 
     void addSystemButton(int icon,String desc,int action){
         ImageButton b=iconButton(icon);
         b.setContentDescription(desc);
-        b.setOnClickListener(v->globalAction(action));
+        installDraggableItem(b,()->globalAction(action),null);
         addView(b,iconSizePx,iconSizePx);
     }
 
@@ -530,9 +494,7 @@ public class FloatingService extends Service {
         addMenuItem(box,R.drawable.ic_menu,"菜单按钮", addMenu?"已添加，点击取消":"未添加，点击添加", v->{addMenu=!addMenu;saveButtonState();closeOverlay();showPanel();});
         addMenuItem(box,android.R.drawable.ic_menu_rotate,"切换方向", vertical?"当前：竖向，点击切换横向":"当前：横向，点击切换竖向", v->{
             vertical=!vertical;
-            if(!getSharedPreferences(MainActivity.PREF,0).contains("floating_plus_position")) plusPosition=vertical?"bottom":"right";
-            getSharedPreferences(MainActivity.PREF,0).edit().putBoolean("floating_vertical",vertical)
-                    .putString("floating_plus_position",plusPosition).apply();
+            getSharedPreferences(MainActivity.PREF,0).edit().putBoolean("floating_vertical",vertical).apply();
             closeOverlay();
             showPanel();
         });

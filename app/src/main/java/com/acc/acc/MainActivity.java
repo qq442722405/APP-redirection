@@ -474,6 +474,26 @@ public class MainActivity extends AppCompatActivity {
         TextView pt=mainText("窗口预设",51); pt.setTypeface(null,1);
         presetHeader.addView(pt,new LinearLayout.LayoutParams(-2,dp(60)));
 
+        // 左 / 中 / 右分类按钮：放在“窗口预设”和“悬浮窗选位”之间，靠左排列，每个宽 50。
+        presetCategoryButtons=new Button[3];
+        String[] presetCats={"左","中","右"};
+        for(int ci=0;ci<3;ci++){
+            final int cci=ci;
+            Button cb=button(presetCats[ci]);
+            cb.setTextSize(17*mainFontScale());
+            cb.setGravity(Gravity.CENTER);
+            presetCategoryButtons[ci]=cb;
+            cb.setBackgroundResource(cci==presetCategoryFilter?R.drawable.card_selected:R.drawable.button);
+            cb.setOnClickListener(v->{
+                presetCategoryFilter=cci;
+                for(int j=0;j<3;j++) presetCategoryButtons[j].setBackgroundResource(j==presetCategoryFilter?R.drawable.card_selected:R.drawable.button);
+                refresh();
+            });
+            LinearLayout.LayoutParams clp=new LinearLayout.LayoutParams(dp(50),dp(44));
+            clp.setMargins(dp(3),0,dp(3),0);
+            presetHeader.addView(cb,clp);
+        }
+
         // 直接通过悬浮选位器创建/修改窗口预设：拖动红框到目标位置，
         // 在红框中央填写宽高，确认后自动回填到“新建窗口预设”。
         if(hasOverlayPermission()){
@@ -486,29 +506,6 @@ public class MainActivity extends AppCompatActivity {
             presetHeader.addView(floatingPick,pickLp);
         }
         root.addView(presetHeader,new LinearLayout.LayoutParams(-1,dp(64)));
-
-        // 窗口预设分类：固定为左 / 中 / 右，点击后只显示对应分类。
-        LinearLayout presetCategoryRow=new LinearLayout(this);
-        presetCategoryRow.setOrientation(LinearLayout.HORIZONTAL);
-        presetCategoryRow.setGravity(Gravity.CENTER_VERTICAL);
-        presetCategoryButtons=new Button[3];
-        String[] presetCats={"左","中","右"};
-        for(int ci=0;ci<3;ci++){
-            final int cci=ci;
-            Button cb=button(presetCats[ci]);
-            cb.setTextSize(18*mainFontScale());
-            presetCategoryButtons[ci]=cb;
-            cb.setBackgroundResource(cci==presetCategoryFilter?R.drawable.card_selected:R.drawable.button);
-            cb.setOnClickListener(v->{
-                presetCategoryFilter=cci;
-                for(int j=0;j<3;j++) presetCategoryButtons[j].setBackgroundResource(j==presetCategoryFilter?R.drawable.card_selected:R.drawable.button);
-                refresh();
-            });
-            LinearLayout.LayoutParams clp=new LinearLayout.LayoutParams(0,dp(46),1);
-            clp.setMargins(dp(4),dp(2),dp(4),dp(2));
-            presetCategoryRow.addView(cb,clp);
-        }
-        root.addView(presetCategoryRow,new LinearLayout.LayoutParams(-1,dp(52)));
 
         HorizontalScrollView presetScroll=new HorizontalScrollView(this);
         presetScroll.setFillViewport(false);
@@ -967,6 +964,11 @@ public class MainActivity extends AppCompatActivity {
             floatSettings.setPadding(dp(14),0,dp(14),0);
             floatSettings.setOnClickListener(v->showFloatingWindowSettingsDialog());
             box.addView(floatSettings,new LinearLayout.LayoutParams(-1,dp(52)));
+            Button floatAppSettings=button("悬浮窗APP设置  ›");
+            floatAppSettings.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+            floatAppSettings.setPadding(dp(14),0,dp(14),0);
+            floatAppSettings.setOnClickListener(v->{if(settingsDialog[0]!=null)settingsDialog[0].dismiss();showFloatingAppSettingsDialog();});
+            box.addView(floatAppSettings,new LinearLayout.LayoutParams(-1,dp(52)));
         }
 
         Button permissions=button("权限与诊断");
@@ -989,13 +991,6 @@ public class MainActivity extends AppCompatActivity {
 
         settingsDialog[0]=new AlertDialog.Builder(this).setTitle("设置").setView(box).setNegativeButton("关闭",null).create();
         showFixed1000x800(settingsDialog[0]);
-    }
-
-    String plusDirectionLabel(String value){
-        if("left".equals(value)) return "横向：＋在左";
-        if("bottom".equals(value)) return "竖向：＋在下";
-        if("top".equals(value)) return "竖向：＋在上";
-        return "横向：＋在右";
     }
 
     void showFloatingWindowSettingsDialog(){
@@ -1027,22 +1022,12 @@ public class MainActivity extends AppCompatActivity {
         });
         box.addView(direction,new LinearLayout.LayoutParams(-1,dp(58)));
 
-        LinearLayout plusDirRow=new LinearLayout(this); plusDirRow.setGravity(Gravity.CENTER_VERTICAL);
-        plusDirRow.addView(text("悬浮窗＋号方向",14),new LinearLayout.LayoutParams(0,dp(52),1));
-        String savedPlusDir=prefs.getString("floating_plus_position", "right");
-        Button plusDirBtn=button(plusDirectionLabel(savedPlusDir));
-        plusDirBtn.setGravity(Gravity.CENTER);
-        plusDirRow.addView(plusDirBtn,new LinearLayout.LayoutParams(dp(150),dp(48)));
-        plusDirBtn.setOnClickListener(v->{
-            String cur=prefs.getString("floating_plus_position","right");
-            String[] vals={"right","left","bottom","top"};
-            int idx=0;
-            for(int i=0;i<vals.length;i++) if(vals[i].equals(cur)){idx=i;break;}
-            String next=vals[(idx+1)%vals.length];
-            prefs.edit().putString("floating_plus_position",next).apply();
-            plusDirBtn.setText(plusDirectionLabel(next));
-        });
-        box.addView(plusDirRow,new LinearLayout.LayoutParams(-1,dp(58)));
+        // 悬浮窗 APP 设置：统一管理悬浮窗上显示的 APP、返回/首页/菜单按钮。
+        Button appSettingsBtn=button("悬浮窗APP设置  ›");
+        appSettingsBtn.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+        appSettingsBtn.setPadding(dp(14),0,dp(14),0);
+        appSettingsBtn.setOnClickListener(v->showFloatingAppSettingsDialog());
+        box.addView(appSettingsBtn,new LinearLayout.LayoutParams(-1,dp(54)));
 
         EditText spacing=numberField("6",String.valueOf(prefs.getInt("floating_button_spacing_px",6)));
         box.addView(labeledSimpleNumberField("按钮图标间距",spacing),new LinearLayout.LayoutParams(-1,dp(54)));
@@ -1166,6 +1151,104 @@ public class MainActivity extends AppCompatActivity {
         if("menu".equals(value))return "菜单按钮";
         if(value.startsWith("app:"))return getAppLabelSafe(value.substring(4));
         return value;
+    }
+
+    void showFloatingAppSettingsDialog(){
+        LinearLayout root=new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(18),dp(8),dp(18),dp(10));
+
+        ScrollView scroll=new ScrollView(this);
+        LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+
+        Button add=button("添加 APP");
+        add.setGravity(Gravity.LEFT|Gravity.CENTER_VERTICAL);
+        add.setPadding(dp(14),0,dp(14),0);
+        box.addView(add,new LinearLayout.LayoutParams(-1,dp(52)));
+
+        TextView title=text("当前悬浮窗项目",14);
+        title.setTypeface(null,android.graphics.Typeface.BOLD);
+        box.addView(title,new LinearLayout.LayoutParams(-1,dp(42)));
+
+        LinearLayout list=new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        box.addView(list,new LinearLayout.LayoutParams(-1,dp(10)));
+
+        LinearLayout sysTitle=new LinearLayout(this);
+        sysTitle.setGravity(Gravity.CENTER_VERTICAL);
+        sysTitle.addView(text("系统按钮",14),new LinearLayout.LayoutParams(0,dp(44),1));
+        box.addView(sysTitle,new LinearLayout.LayoutParams(-1,dp(44)));
+
+        LinearLayout backRow=new LinearLayout(this); backRow.setGravity(Gravity.CENTER_VERTICAL);
+        backRow.addView(text("返回按钮",14),new LinearLayout.LayoutParams(0,dp(50),1));
+        Switch back=new Switch(this); back.setChecked(prefs.getBoolean("floating_back",false));
+        backRow.addView(back,new LinearLayout.LayoutParams(dp(58),dp(50))); box.addView(backRow,new LinearLayout.LayoutParams(-1,dp(52)));
+
+        LinearLayout homeRow=new LinearLayout(this); homeRow.setGravity(Gravity.CENTER_VERTICAL);
+        homeRow.addView(text("首页按钮",14),new LinearLayout.LayoutParams(0,dp(50),1));
+        Switch home=new Switch(this); home.setChecked(prefs.getBoolean("floating_home",false));
+        homeRow.addView(home,new LinearLayout.LayoutParams(dp(58),dp(50))); box.addView(homeRow,new LinearLayout.LayoutParams(-1,dp(52)));
+
+        LinearLayout menuRow=new LinearLayout(this); menuRow.setGravity(Gravity.CENTER_VERTICAL;
+        menuRow.addView(text("菜单按钮",14),new LinearLayout.LayoutParams(0,dp(50),1));
+        Switch menu=new Switch(this); menu.setChecked(prefs.getBoolean("floating_menu",false));
+        menuRow.addView(menu,new LinearLayout.LayoutParams(dp(58),dp(50))); box.addView(menuRow,new LinearLayout.LayoutParams(-1,dp(52)));
+
+        Runnable rebuild=()->{
+            list.removeAllViews();
+            try{
+                JSONArray a=new JSONArray(prefs.getString("floating_apps","[]"));
+                for(int i=0;i<a.length();i++){
+                    JSONObject o=a.optJSONObject(i); if(o==null)continue;
+                    final String pkg=o.optString("pkg","");
+                    if(pkg.isEmpty())continue;
+                    String name=o.optString("name",pkg);
+                    LinearLayout row=new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(dp(10),0,dp(6),0);
+                    ImageView iv=new ImageView(this);
+                    try{iv.setImageDrawable(getPackageManager().getApplicationIcon(pkg));}catch(Exception ignored){}
+                    row.addView(iv,new LinearLayout.LayoutParams(dp(44),dp(44)));
+                    TextView tv=text(name,14); row.addView(tv,new LinearLayout.LayoutParams(0,dp(50),1));
+                    Button del=button("删除");
+                    del.setOnClickListener(v->{
+                        try{
+                            JSONArray cur=new JSONArray(prefs.getString("floating_apps","[]")); JSONArray out=new JSONArray();
+                            for(int j=0;j<cur.length();j++){JSONObject x=cur.optJSONObject(j); if(x!=null&&!pkg.equals(x.optString("pkg","")))out.put(x);}
+                            prefs.edit().putString("floating_apps",out.toString()).remove("floating_preset_"+pkg).apply();
+                            rebuild.run();
+                        }catch(Exception ignored){}
+                    });
+                    row.addView(del,new LinearLayout.LayoutParams(dp(72),dp(46)));
+                    list.addView(row,new LinearLayout.LayoutParams(-1,dp(54)));
+                }
+            }catch(Exception ignored){}
+            if(list.getChildCount()==0){TextView empty=text("暂无 APP 快捷键",12); empty.setTextColor(Color.GRAY); list.addView(empty,new LinearLayout.LayoutParams(-1,dp(42)));}
+        };
+        rebuild.run();
+
+        scroll.addView(box,new ScrollView.LayoutParams(-1,-2));
+        root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout actions=new LinearLayout(this); actions.setGravity(Gravity.CENTER); actions.setPadding(dp(4),dp(8),dp(4),0);
+        Button cancel=button("返回"), save=button("保存");
+        actions.addView(cancel,new LinearLayout.LayoutParams(0,dp(50),1)); actions.addView(save,new LinearLayout.LayoutParams(0,dp(50),1));
+        root.addView(actions,new LinearLayout.LayoutParams(-1,dp(64)));
+
+        AlertDialog dlg=new AlertDialog.Builder(this).setTitle("悬浮窗APP设置").setView(root).create();
+        add.setOnClickListener(v->{dlg.dismiss(); showFloatingAppChooser();});
+        cancel.setOnClickListener(v->dlg.dismiss());
+        save.setOnClickListener(v->{prefs.edit().putBoolean("floating_back",back.isChecked()).putBoolean("floating_home",home.isChecked()).putBoolean("floating_menu",menu.isChecked()).apply(); stopFloatingService(); if(prefs.getBoolean("floating_enabled",false))startFloatingService(); Toast.makeText(this,"悬浮窗APP设置已保存",Toast.LENGTH_SHORT).show();});
+        showFixed1000x800(dlg);
+    }
+
+    void showFloatingAppChooser(){
+        PackageManager pm=getPackageManager(); ArrayList<ApplicationInfo> list=new ArrayList<>();
+        try{for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){if(!ai.packageName.equals(getPackageName())&&pm.getLaunchIntentForPackage(ai.packageName)!=null)list.add(ai);}}catch(Exception ignored){}
+        Collections.sort(list,(a,b)->getAppLabelSafe(a.packageName).compareToIgnoreCase(getAppLabelSafe(b.packageName)));
+        LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(12),dp(6),dp(12),dp(10));
+        EditText search=new EditText(this); search.setHint("搜索 APP 名称或包名"); search.setSingleLine(true); search.setTextColor(Color.WHITE); search.setHintTextColor(Color.GRAY); root.addView(search,new LinearLayout.LayoutParams(-1,dp(48)));
+        ScrollView sv=new ScrollView(this); LinearLayout rows=new LinearLayout(this); rows.setOrientation(LinearLayout.VERTICAL); sv.addView(rows,new ScrollView.LayoutParams(-1,-2)); root.addView(sv,new LinearLayout.LayoutParams(-1,0,1));
+        Runnable[] refresh={null}; refresh[0]=()->{rows.removeAllViews(); String q=search.getText().toString().trim().toLowerCase(Locale.ROOT); int count=0; LinearLayout row=null; int col=0; for(ApplicationInfo ai:list){String name=getAppLabelSafe(ai.packageName); if(!q.isEmpty()&&!name.toLowerCase(Locale.ROOT).contains(q)&&!ai.packageName.toLowerCase(Locale.ROOT).contains(q))continue; if(col==0){row=new LinearLayout(this);row.setGravity(Gravity.CENTER);rows.addView(row,new LinearLayout.LayoutParams(-1,dp(104)));} LinearLayout tile=new LinearLayout(this);tile.setOrientation(LinearLayout.VERTICAL);tile.setGravity(Gravity.CENTER); ImageView iv=new ImageView(this);try{iv.setImageDrawable(pm.getApplicationIcon(ai));}catch(Exception ignored){} tile.addView(iv,new LinearLayout.LayoutParams(dp(54),dp(54))); TextView tv=text(name,11);tv.setGravity(Gravity.CENTER);tv.setMaxLines(2);tile.addView(tv,new LinearLayout.LayoutParams(-1,dp(34))); final String pkg=ai.packageName; final String nm=name; tile.setOnClickListener(v->{try{JSONArray a=new JSONArray(prefs.getString("floating_apps","[]"));boolean exists=false;for(int i=0;i<a.length();i++)if(pkg.equals(a.optJSONObject(i).optString("pkg","")))exists=true;if(!exists)a.put(new JSONObject().put("pkg",pkg).put("name",nm));prefs.edit().putString("floating_apps",a.toString()).apply();Toast.makeText(this,"已添加到悬浮窗："+nm,Toast.LENGTH_SHORT).show();}catch(Exception ignored){} }); row.addView(tile,new LinearLayout.LayoutParams(0,dp(96),1));col=(col+1)%6;count++;} if(count==0){TextView e=text("没有找到 APP",12);e.setGravity(Gravity.CENTER);rows.addView(e,new LinearLayout.LayoutParams(-1,dp(60)));}}; refresh[0].run(); search.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int b,int c){}public void onTextChanged(CharSequence s,int a,int b,int c){refresh[0].run();}public void afterTextChanged(android.text.Editable e){}});
+        new AlertDialog.Builder(this).setTitle("添加到悬浮窗口").setView(root).setNegativeButton("完成",null).show();
     }
 
     void showGestureChooser(String key,String title,Button target){
