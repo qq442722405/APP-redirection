@@ -563,6 +563,22 @@ public class MainActivity extends AppCompatActivity {
         note.setOnClickListener(v->showNotes());
         actionRow.addView(note,new LinearLayout.LayoutParams(dp(68),dp(50)));
 
+        // 主界面控制当前已选 APP：返回 / 关闭。
+        // 这两个按钮只对“当前选中的 APP”生效，不与悬浮窗口功能绑定。
+        TextView selectedBack=plusButton();
+        selectedBack.setText("返回");
+        selectedBack.setTextSize(17*mainFontScale());
+        selectedBack.setContentDescription("返回当前选中 APP");
+        selectedBack.setOnClickListener(v->controlSelectedApp(false));
+        actionRow.addView(selectedBack,new LinearLayout.LayoutParams(dp(68),dp(50)));
+
+        TextView selectedClose=plusButton();
+        selectedClose.setText("关闭");
+        selectedClose.setTextSize(17*mainFontScale());
+        selectedClose.setContentDescription("关闭当前选中 APP");
+        selectedClose.setOnClickListener(v->controlSelectedApp(true));
+        actionRow.addView(selectedClose,new LinearLayout.LayoutParams(dp(68),dp(50)));
+
         TextView settings=plusButton();
         settings.setText("⚙");
         settings.setTextSize(24*mainFontScale());
@@ -1066,6 +1082,7 @@ public class MainActivity extends AppCompatActivity {
             if(prefs.getBoolean("floating_back",false)) addCurrentButtonChip(currentRow,"返回",()->{prefs.edit().putBoolean("floating_back",false).apply();refreshCurrentButtons[0].run();restartFloatingServiceSafe();});
             if(prefs.getBoolean("floating_home",false)) addCurrentButtonChip(currentRow,"主页",()->{prefs.edit().putBoolean("floating_home",false).apply();refreshCurrentButtons[0].run();restartFloatingServiceSafe();});
             if(prefs.getBoolean("floating_menu",false)) addCurrentButtonChip(currentRow,"菜单",()->{prefs.edit().putBoolean("floating_menu",false).apply();refreshCurrentButtons[0].run();restartFloatingServiceSafe();});
+            if(prefs.getBoolean("floating_close",false)) addCurrentButtonChip(currentRow,"关闭",()->{prefs.edit().putBoolean("floating_close",false).apply();refreshCurrentButtons[0].run();restartFloatingServiceSafe();});
             if(currentRow.getChildCount()==0){TextView empty=text("暂无",10);empty.setTextColor(Color.GRAY);currentRow.addView(empty,new LinearLayout.LayoutParams(dp(55),dp(48)));}
         };
         refreshCurrentButtons[0].run();
@@ -1404,7 +1421,9 @@ public class MainActivity extends AppCompatActivity {
                     if("back".equals(id)) ed.putBoolean("floating_back",true);
                     else if("home".equals(id)) ed.putBoolean("floating_home",true);
                     else if("menu".equals(id)) ed.putBoolean("floating_menu",true);
+                    else if("close".equals(id)) ed.putBoolean("floating_close",true);
                     ed.apply();
+                    restartFloatingServiceSafe();
                     Toast.makeText(this,"已添加悬浮窗按钮",Toast.LENGTH_SHORT).show();
                     dlg.dismiss();
                     return;
@@ -1424,6 +1443,7 @@ public class MainActivity extends AppCompatActivity {
                 if(!exists)a.put(new JSONObject().put("pkg",pkg).put("name",getAppLabelSafe(pkg)));
                 prefs.edit().putString("floating_apps",a.toString())
                         .putInt("floating_preset_"+pkg,selectedPreset[0]).apply();
+                restartFloatingServiceSafe();
                 Toast.makeText(this,"已添加到悬浮窗口："+getAppLabelSafe(pkg),Toast.LENGTH_SHORT).show();
                 dlg.dismiss();
             }catch(Exception e){
@@ -1435,7 +1455,7 @@ public class MainActivity extends AppCompatActivity {
 
     void refreshFloatingChooserButtons(LinearLayout rows, String[] selectedPkg){
         rows.removeAllViews();
-        String[][] buttons={{"back","返回","返回上一级"},{"home","主页","返回车机主页"},{"menu","菜单","打开菜单操作"}};
+        String[][] buttons={{"back","返回","返回上一级"},{"home","主页","返回车机主页"},{"menu","菜单","打开菜单操作"},{"close","关闭","关闭当前 APP"}};
         for(String[] item:buttons){
             final String value="button:"+item[0];
             LinearLayout tile=new LinearLayout(this); tile.setGravity(Gravity.CENTER_VERTICAL); tile.setPadding(dp(12),dp(6),dp(12),dp(6));
@@ -2544,6 +2564,76 @@ public class MainActivity extends AppCompatActivity {
         try{Window w=dialog.getWindow();if(w!=null){android.graphics.Point screen=getRealScreenSize();w.setLayout(w.getAttributes().width,Math.max(dp(420),screen.y-dp(TOP_BLANK+BOTTOM_BLANK)));}}catch(Exception ignored){}
     }
 
+    /**
+     * 控制主界面当前选中的 APP。
+     *
+     * 车机没有任务管理器，而且普通 Activity 无法直接把“返回键”发送给
+     * 已经退到后台的第三方 APP。这里使用已启用的无障碍服务先把选中的 APP
+     * 带回前台，再执行系统级返回，因此不会把返回键误发送给其他 APP。
+     * 关闭操作在返回后再补一次返回，尽量让 APP 退出当前任务。
+     */
+    void controlSelectedApp(boolean close){
+        if(selectedPackage==null || selectedPackage.isEmpty()){
+            Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final String pkg=selectedPackage;
+        final String name=selectedName==null?getAppLabelSafe(pkg):selectedName;
+
+        if(!isAccessibilityServiceEnabled()){
+            new AlertDialog.Builder(this)
+                    .setTitle("需要无障碍权限")
+                    .setMessage("车机没有任务管理器。为了让主界面的“返回/关闭”只作用于当前选中的 APP，需要开启本 APP 的无障碍服务。")
+                    .setNegativeButton("取消",null)
+                    .setPositiveButton("去开启",(d,w)->openAccessibilitySettings())
+                    .show();
+            return;
+        }
+
+        // 先把选中的 APP 带到前台；如果已有任务，Android 通常会恢复该任务。
+        Intent launch=getPackageManager().getLaunchIntentForPackage(pkg);
+        if(launch==null){
+            Toast.makeText(this,"无法找到 APP："+name,Toast.LENGTH_SHORT).show();
+            return;
+        }
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+        try{
+            JSONObject saved=getSavedAppBounds(pkg);
+            if(saved!=null){
+                launchIntentWithBounds(launch,pkg,
+                        saved.optInt("x",0),saved.optInt("y",0),
+                        saved.optInt("w",getRealScreenSize().x),saved.optInt("h",getRealScreenSize().y),
+                        saved.optInt("displayId",-1),saved.optBoolean("fullscreen",false),name);
+            }else{
+                startActivity(launch);
+            }
+        }catch(Exception e){
+            try{startActivity(launch);}catch(Exception ignored){
+                Toast.makeText(this,"无法打开 APP："+name,Toast.LENGTH_SHORT).show();
+                return;
+            }
+        }
+
+        new Handler(Looper.getMainLooper()).postDelayed(()->{
+            AccessibilityServiceBridge.performBackThen(close);
+        },350);
+        info.setText((close?"关闭":"返回")+"当前选中 APP："+name);
+    }
+
+    boolean isAccessibilityServiceEnabled(){
+        try{
+            int enabled=Settings.Secure.getInt(getContentResolver(),Settings.Secure.ACCESSIBILITY_ENABLED,0);
+            if(enabled!=1)return false;
+            String services=Settings.Secure.getString(getContentResolver(),Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            return services!=null && services.toLowerCase(Locale.US).contains(getPackageName().toLowerCase(Locale.US));
+        }catch(Exception e){return false;}
+    }
+
+    void openAccessibilitySettings(){
+        try{startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));}
+        catch(Exception e){Toast.makeText(this,"无法打开无障碍设置",Toast.LENGTH_SHORT).show();}
+    }
+
     JSONObject getSavedAppBounds(String pkg){
         try{
             JSONObject all=new JSONObject(prefs.getString("app_last_bounds","{}"));
@@ -2579,10 +2669,9 @@ public class MainActivity extends AppCompatActivity {
                 m.invoke(options,targetDisplay.getDisplayId());
             }catch(Exception ignored){}
         }
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS|Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
         // 不使用 RESET_TASK_IF_NEEDED，避免车机 Launcher 把已有任务重新计算成左上角全屏。
         // MULTIPLE_TASK 让不同 APP 的任务彼此独立，切换第二个 APP 不会清掉第一个任务。
-        if(Build.VERSION.SDK_INT>=21) intent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
         intent.putExtra("com.acc.acc.target_x",left);
         intent.putExtra("com.acc.acc.target_y",top);
         intent.putExtra("com.acc.acc.target_w",right-left);
@@ -2669,8 +2758,7 @@ public class MainActivity extends AppCompatActivity {
             }catch(Exception ignored){}
         }
 
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS);
-        if(Build.VERSION.SDK_INT>=21) intent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
         intent.putExtra("com.acc.acc.target_x",left);
         intent.putExtra("com.acc.acc.target_y",top);
         intent.putExtra("com.acc.acc.target_w",right-left);

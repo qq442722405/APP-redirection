@@ -30,10 +30,10 @@ public class FloatingService extends Service {
 
     boolean vertical;
     int buttonSpacingPx=6, iconSizePx=44, backgroundOpacity=80;
-    boolean addBack=false, addHome=false, addMenu=false;
+    boolean addBack=false, addHome=false, addMenu=false, addClose=false;
     boolean singleIconMode=false, positionLocked=false;
     String singleIconShape="rounded";
-    final int ACTION_BACK=1,ACTION_HOME=2,ACTION_MENU=3;
+    final int ACTION_BACK=1,ACTION_HOME=2,ACTION_MENU=3,ACTION_CLOSE=4;
     Handler gestureHandler=new Handler(Looper.getMainLooper());
     Runnable longPressRunnable;
     int touchDownX,touchDownY; long touchDownTime; boolean moved; int tapCount; int lastDragDx,lastDragDy;
@@ -68,6 +68,7 @@ public class FloatingService extends Service {
         addBack=p.getBoolean("floating_back",false);
         addHome=p.getBoolean("floating_home",false);
         addMenu=p.getBoolean("floating_menu",false);
+        addClose=p.getBoolean("floating_close",false);
         singleIconMode=p.getBoolean("floating_single_icon_mode",false);
         positionLocked=p.getBoolean("floating_position_locked",false);
         singleIconShape=p.getString("floating_single_icon_shape","rounded");
@@ -294,6 +295,7 @@ public class FloatingService extends Service {
         if("back".equals(action)){globalAction(ACTION_BACK);return;}
         if("home".equals(action)){globalAction(ACTION_HOME);return;}
         if("menu".equals(action)){globalAction(ACTION_MENU);return;}
+        if("close".equals(action)){AccessibilityServiceBridge.performBackThen(true);return;}
         if(action.startsWith("app:")){
             launchFloatingApp(action.substring(4));
         }
@@ -309,10 +311,39 @@ public class FloatingService extends Service {
     void launchFloatingApp(String pkg){
         Intent in=getPackageManager().getLaunchIntentForPackage(pkg);
         if(in==null)return;
-        in.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS);
-        if(Build.VERSION.SDK_INT>=21) in.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+        in.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS|Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+
         try{
             android.content.SharedPreferences sp=getSharedPreferences(MainActivity.PREF,0);
+            // 悬浮窗快捷键绑定了窗口预设时，每次点击都以该预设为准。
+            // 不再优先使用旧的 app_last_bounds，这样切换/修改预设后可以立即应用新的位置和大小。
+            int presetIndex=sp.getInt("floating_preset_"+pkg,-1);
+            if(presetIndex>=0){
+                JSONArray pa=new JSONArray(sp.getString(MainActivity.PRESETS,"[]"));
+                JSONObject po=presetIndex<pa.length()?pa.optJSONObject(presetIndex):null;
+                if(po!=null){
+                    android.view.Display d=wm.getDefaultDisplay();
+                    android.graphics.Point real=new android.graphics.Point();
+                    try{d.getRealSize(real);}catch(Exception e){android.util.DisplayMetrics dm=new android.util.DisplayMetrics();d.getMetrics(dm);real.x=dm.widthPixels;real.y=dm.heightPixels;}
+                    int x=Math.max(0,Math.min(po.optInt("x",0),real.x-1));
+                    int y=Math.max(0,Math.min(po.optInt("y",0),real.y-1));
+                    int w=Math.max(1,Math.min(po.optInt("w",real.x),real.x-x));
+                    int h=Math.max(1,Math.min(po.optInt("h",real.y),real.y-y));
+                    boolean fullscreen=po.optInt("mode",1)==6;
+                    if(fullscreen){x=0;y=0;w=real.x;h=real.y;}
+                    ActivityOptions ao=ActivityOptions.makeBasic();
+                    ao.setLaunchBounds(new android.graphics.Rect(x,y,x+w,y+h));
+                    if(Build.VERSION.SDK_INT>=26){try{java.lang.reflect.Method m=ActivityOptions.class.getMethod("setLaunchDisplayId",int.class);m.invoke(ao,d.getDisplayId());}catch(Exception ignored){}}
+                    in.putExtra("com.acc.acc.target_x",x);in.putExtra("com.acc.acc.target_y",y);
+                    in.putExtra("com.acc.acc.target_w",w);in.putExtra("com.acc.acc.target_h",h);
+                    in.putExtra("com.acc.acc.target_display_id",d.getDisplayId());in.putExtra("com.acc.acc.fullscreen",fullscreen);
+                    startActivity(in,ao.toBundle());
+                    saveFloatingAppBounds(pkg,x,y,w,h,d.getDisplayId(),fullscreen);
+                    return;
+                }
+            }
+
+            // 没有绑定窗口预设时，恢复该 APP 最近一次窗口位置。
             String raw=sp.getString("app_last_bounds","{}");
             JSONObject all=new JSONObject(raw);
             JSONObject b=all.optJSONObject(pkg);
@@ -328,42 +359,24 @@ public class FloatingService extends Service {
                 if(fullscreen){x=0;y=0;w=real.x;h=real.y;}
                 ActivityOptions ao=ActivityOptions.makeBasic();
                 ao.setLaunchBounds(new android.graphics.Rect(x,y,x+w,y+h));
-                if(Build.VERSION.SDK_INT>=26){
-                    try{
-                        java.lang.reflect.Method m=ActivityOptions.class.getMethod("setLaunchDisplayId",int.class);
-                        m.invoke(ao,d.getDisplayId());
-                    }catch(Exception ignored){}
-                }
+                if(Build.VERSION.SDK_INT>=26){try{java.lang.reflect.Method m=ActivityOptions.class.getMethod("setLaunchDisplayId",int.class);m.invoke(ao,d.getDisplayId());}catch(Exception ignored){}}
                 startActivity(in,ao.toBundle());
                 return;
-            }
-            // 首次通过悬浮窗快捷键启动时，使用该快捷键绑定的窗口预设。
-            int presetIndex=sp.getInt("floating_preset_"+pkg,-1);
-            if(presetIndex>=0){
-                try{
-                    JSONArray pa=new JSONArray(sp.getString(MainActivity.PRESETS,"[]"));
-                    JSONObject po=presetIndex<pa.length()?pa.optJSONObject(presetIndex):null;
-                    if(po!=null){
-                        android.view.Display d=wm.getDefaultDisplay();
-                        android.graphics.Point real=new android.graphics.Point();
-                        try{d.getRealSize(real);}catch(Exception e){android.util.DisplayMetrics dm=new android.util.DisplayMetrics();d.getMetrics(dm);real.x=dm.widthPixels;real.y=dm.heightPixels;}
-                        int x=Math.max(0,Math.min(po.optInt("x",0),real.x-1));
-                        int y=Math.max(0,Math.min(po.optInt("y",0),real.y-1));
-                        int w=Math.max(1,Math.min(po.optInt("w",real.x),real.x-x));
-                        int h=Math.max(1,Math.min(po.optInt("h",real.y),real.y-y));
-                        if(po.optInt("mode",1)==6){x=0;y=0;w=real.x;h=real.y;}
-                        ActivityOptions ao=ActivityOptions.makeBasic();
-                        ao.setLaunchBounds(new android.graphics.Rect(x,y,x+w,y+h));
-                        if(Build.VERSION.SDK_INT>=26){try{java.lang.reflect.Method m=ActivityOptions.class.getMethod("setLaunchDisplayId",int.class);m.invoke(ao,d.getDisplayId());}catch(Exception ignored){}}
-                        startActivity(in,ao.toBundle());
-                        return;
-                    }
-                }catch(Exception ignored){}
             }
             startActivity(in);
         }catch(Exception ignored){
             try{startActivity(in);}catch(Exception ignored2){}
         }
+    }
+
+    void saveFloatingAppBounds(String pkg,int x,int y,int w,int h,int displayId,boolean fullscreen){
+        try{
+            SharedPreferences sp=getSharedPreferences(MainActivity.PREF,0);
+            JSONObject all=new JSONObject(sp.getString("app_last_bounds","{}"));
+            JSONObject o=new JSONObject();
+            o.put("x",x);o.put("y",y);o.put("w",w);o.put("h",h);o.put("displayId",displayId);o.put("fullscreen",fullscreen);
+            all.put(pkg,o);sp.edit().putString("app_last_bounds",all.toString()).apply();
+        }catch(Exception ignored){}
     }
 
     void rebuildButtons(){
@@ -391,6 +404,7 @@ public class FloatingService extends Service {
         if(addBack) addSystemButton(R.drawable.ic_back,"返回",ACTION_BACK);
         if(addHome) addSystemButton(R.drawable.ic_home,"首页",ACTION_HOME);
         if(addMenu) addSystemButton(R.drawable.ic_menu,"菜单",ACTION_MENU);
+        if(addClose) addSystemButton(android.R.drawable.ic_menu_close_clear_cancel,"关闭",ACTION_CLOSE);
     }
 
     /** 所有悬浮窗图标都可以拖动；未移动时才执行点击操作。 */
@@ -438,6 +452,7 @@ public class FloatingService extends Service {
     }
 
     void globalAction(int action){
+        if(action==ACTION_CLOSE){AccessibilityServiceBridge.performBackThen(true);return;}
         AccessibilityServiceBridge.perform(this,action);
         if(action==ACTION_HOME){
             Intent i=new Intent(Intent.ACTION_MAIN);
@@ -535,6 +550,7 @@ public class FloatingService extends Service {
                 .putBoolean("floating_back",addBack)
                 .putBoolean("floating_home",addHome)
                 .putBoolean("floating_menu",addMenu)
+                .putBoolean("floating_close",addClose)
                 .apply();
     }
 
