@@ -32,6 +32,8 @@ public class MainActivity extends AppCompatActivity {
 
     SharedPreferences prefs;
     LinearLayout presetRow, appGrid;
+    int presetCategoryFilter=0; // 0=左, 1=中, 2=右
+    Button[] presetCategoryButtons;
     TextView info;
     String selectedPackage=null;
     String selectedName=null;
@@ -51,11 +53,19 @@ public class MainActivity extends AppCompatActivity {
 
     static class Preset {
         String name;
-        int x,y,w,h,displayId,mode;
-        Preset(String n,int x,int y,int w,int h){this(n,x,y,w,h,-1,1);}
-        Preset(String n,int x,int y,int w,int h,int displayId,int mode){
-            this.name=n; this.x=x; this.y=y; this.w=w; this.h=h; this.displayId=displayId; this.mode=mode;
+        int x,y,w,h,displayId,mode,category;
+        Preset(String n,int x,int y,int w,int h){this(n,x,y,w,h,-1,1,0);}
+        Preset(String n,int x,int y,int w,int h,int displayId,int mode){this(n,x,y,w,h,displayId,mode,0);}
+        Preset(String n,int x,int y,int w,int h,int displayId,int mode,int category){
+            this.name=n; this.x=x; this.y=y; this.w=w; this.h=h; this.displayId=displayId; this.mode=mode; this.category=Math.max(0,Math.min(2,category));
         }
+    }
+
+    int inferPresetCategory(String name){
+        String n=name==null?"":name.trim();
+        if(n.startsWith("左")) return 0;
+        if(n.startsWith("右")) return 2;
+        return 1;
     }
 
     float uiScale(){
@@ -359,14 +369,14 @@ public class MainActivity extends AppCompatActivity {
     String defaultPresetJson(){
         JSONArray a=new JSONArray();
         try{
-            a.put(new JSONObject().put("name","左 1/1").put("x",105).put("y",0).put("w",2183).put("h",960).put("displayId",-1).put("mode",1));
-            a.put(new JSONObject().put("name","左 2/3").put("x",638).put("y",0).put("w",1650).put("h",960).put("displayId",-1).put("mode",1));
-            a.put(new JSONObject().put("name","左 1/2").put("x",1088).put("y",0).put("w",1200).put("h",960).put("displayId",-1).put("mode",1));
-            a.put(new JSONObject().put("name","左 1/4").put("x",1688).put("y",0).put("w",600).put("h",960).put("displayId",-1).put("mode",1));
-            a.put(new JSONObject().put("name","中 上-80").put("x",2288).put("y",80).put("w",2160).put("h",772).put("displayId",-1).put("mode",1));
-            a.put(new JSONObject().put("name","中 1/1").put("x",2288).put("y",0).put("w",2160).put("h",960).put("displayId",-1).put("mode",1));
-            a.put(new JSONObject().put("name","右 1/1").put("x",4320).put("y",0).put("w",2160).put("h",960).put("displayId",-1).put("mode",1));
-            a.put(new JSONObject().put("name","测试").put("x",0).put("y",0).put("w",0).put("h",0).put("displayId",-1).put("mode",6));
+            a.put(new JSONObject().put("name","左 1/1").put("x",105).put("y",0).put("w",2183).put("h",960).put("displayId",-1).put("mode",1).put("category",0));
+            a.put(new JSONObject().put("name","左 2/3").put("x",638).put("y",0).put("w",1650).put("h",960).put("displayId",-1).put("mode",1).put("category",0));
+            a.put(new JSONObject().put("name","左 1/2").put("x",1088).put("y",0).put("w",1200).put("h",960).put("displayId",-1).put("mode",1).put("category",0));
+            a.put(new JSONObject().put("name","左 1/4").put("x",1688).put("y",0).put("w",600).put("h",960).put("displayId",-1).put("mode",1).put("category",0));
+            a.put(new JSONObject().put("name","中 上-80").put("x",2288).put("y",80).put("w",2160).put("h",772).put("displayId",-1).put("mode",1).put("category",1));
+            a.put(new JSONObject().put("name","中 1/1").put("x",2288).put("y",0).put("w",2160).put("h",960).put("displayId",-1).put("mode",1).put("category",1));
+            a.put(new JSONObject().put("name","右 1/1").put("x",4320).put("y",0).put("w",2160).put("h",960).put("displayId",-1).put("mode",1).put("category",2));
+            a.put(new JSONObject().put("name","测试").put("x",0).put("y",0).put("w",0).put("h",0).put("displayId",-1).put("mode",6).put("category",1));
         }catch(Exception ignored){}
         return a.toString();
     }
@@ -388,9 +398,11 @@ public class MainActivity extends AppCompatActivity {
             JSONArray a=new JSONArray(prefs.getString(PRESETS,"[]"));
             for(int i=0;i<a.length();i++){
                 JSONObject o=a.getJSONObject(i);
+                String pn=o.optString("name","");
+                int pc=o.has("category") ? o.optInt("category",1) : inferPresetCategory(pn);
                 presets.add(new Preset(
-                        o.getString("name"),o.getInt("x"),o.getInt("y"),
-                        o.getInt("w"),o.getInt("h"),o.optInt("displayId",-1),o.optInt("mode",1)
+                        pn,o.optInt("x",0),o.optInt("y",0),
+                        o.optInt("w",0),o.optInt("h",0),o.optInt("displayId",-1),o.optInt("mode",1),pc
                 ));
             }
         }catch(Exception ignored){}
@@ -408,7 +420,7 @@ public class MainActivity extends AppCompatActivity {
             for(Preset p:presets){
                 JSONObject o=new JSONObject();
                 o.put("name",p.name); o.put("x",p.x); o.put("y",p.y);
-                o.put("w",p.w); o.put("h",p.h); o.put("displayId",p.displayId); o.put("mode",p.mode);
+                o.put("w",p.w); o.put("h",p.h); o.put("displayId",p.displayId); o.put("mode",p.mode); o.put("category",p.category);
                 a.put(o);
             }
         }catch(Exception ignored){}
@@ -474,6 +486,29 @@ public class MainActivity extends AppCompatActivity {
             presetHeader.addView(floatingPick,pickLp);
         }
         root.addView(presetHeader,new LinearLayout.LayoutParams(-1,dp(64)));
+
+        // 窗口预设分类：固定为左 / 中 / 右，点击后只显示对应分类。
+        LinearLayout presetCategoryRow=new LinearLayout(this);
+        presetCategoryRow.setOrientation(LinearLayout.HORIZONTAL);
+        presetCategoryRow.setGravity(Gravity.CENTER_VERTICAL);
+        presetCategoryButtons=new Button[3];
+        String[] presetCats={"左","中","右"};
+        for(int ci=0;ci<3;ci++){
+            final int cci=ci;
+            Button cb=button(presetCats[ci]);
+            cb.setTextSize(18*mainFontScale());
+            presetCategoryButtons[ci]=cb;
+            cb.setBackgroundResource(cci==presetCategoryFilter?R.drawable.card_selected:R.drawable.button);
+            cb.setOnClickListener(v->{
+                presetCategoryFilter=cci;
+                for(int j=0;j<3;j++) presetCategoryButtons[j].setBackgroundResource(j==presetCategoryFilter?R.drawable.card_selected:R.drawable.button);
+                refresh();
+            });
+            LinearLayout.LayoutParams clp=new LinearLayout.LayoutParams(0,dp(46),1);
+            clp.setMargins(dp(4),dp(2),dp(4),dp(2));
+            presetCategoryRow.addView(cb,clp);
+        }
+        root.addView(presetCategoryRow,new LinearLayout.LayoutParams(-1,dp(52)));
 
         HorizontalScrollView presetScroll=new HorizontalScrollView(this);
         presetScroll.setFillViewport(false);
@@ -569,6 +604,7 @@ public class MainActivity extends AppCompatActivity {
             for(int i=0;i<presets.size();i++){
                 final int index=i;
                 Preset p=presets.get(i);
+                if(p.category!=presetCategoryFilter) continue;
 
                 LinearLayout card=new LinearLayout(this);
                 card.setOrientation(LinearLayout.VERTICAL);
@@ -607,8 +643,10 @@ public class MainActivity extends AppCompatActivity {
                 presetRow.addView(card,lp);
             }
 
-            if(presets.isEmpty()){
-                TextView empty=mainText("点击左侧“+”新建窗口预设",39);
+            boolean hasVisiblePreset=false;
+            for(Preset p:presets){ if(p.category==presetCategoryFilter){ hasVisiblePreset=true; break; } }
+            if(!hasVisiblePreset){
+                TextView empty=mainText(presets.isEmpty()?"点击左侧“+”新建窗口预设":"当前分类暂无窗口预设",39);
                 empty.setTextColor(Color.GRAY);
                 empty.setGravity(Gravity.CENTER);
                 presetRow.addView(empty,new LinearLayout.LayoutParams(dp(200),dp(180)));
@@ -1621,7 +1659,7 @@ public class MainActivity extends AppCompatActivity {
     void editPreset(int index){
         if(index<0){
             android.graphics.Point rs=getRealScreenSize();
-            Preset old=new Preset("",0,0,0,0,-1,1);
+            Preset old=new Preset("",0,0,0,0,-1,1,1);
             showPresetEditor(-1,old);
             return;
         }
@@ -1629,19 +1667,20 @@ public class MainActivity extends AppCompatActivity {
         showPresetEditor(index,old);
     }
 
-    String presetClipboardText(EditText name,EditText x,EditText y,EditText width,EditText height,int mode){
+    String presetClipboardText(EditText name,EditText x,EditText y,EditText width,EditText height,int mode,int category){
         try{
             JSONObject o=new JSONObject();
             o.put("name",name.getText().toString());
             o.put("x",number(x,0)); o.put("y",number(y,0));
             o.put("w",number(width,0)); o.put("h",number(height,0));
             o.put("mode",mode);
+            o.put("category",category);
             return o.toString();
         }catch(Exception e){ return ""; }
     }
 
-    void copyPresetToClipboard(EditText name,EditText x,EditText y,EditText width,EditText height,int mode){
-        String data=presetClipboardText(name,x,y,width,height,mode);
+    void copyPresetToClipboard(EditText name,EditText x,EditText y,EditText width,EditText height,int mode,int category){
+        String data=presetClipboardText(name,x,y,width,height,mode,category);
         try{
             android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
             cm.setPrimaryClip(android.content.ClipData.newPlainText("窗口预设参数",data));
@@ -1649,7 +1688,7 @@ public class MainActivity extends AppCompatActivity {
         }catch(Exception e){ Toast.makeText(this,"复制失败",Toast.LENGTH_SHORT).show(); }
     }
 
-    boolean pastePresetFromClipboard(EditText name,EditText x,EditText y,EditText width,EditText height, int[] modeHolder, Button[] modeButtons){
+    boolean pastePresetFromClipboard(EditText name,EditText x,EditText y,EditText width,EditText height, int[] modeHolder, Button[] modeButtons, int[] categoryHolder, Button[] categoryButtons){
         try{
             android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
             if(!cm.hasPrimaryClip()) { Toast.makeText(this,"剪贴板没有窗口参数",Toast.LENGTH_SHORT).show(); return false; }
@@ -1660,6 +1699,8 @@ public class MainActivity extends AppCompatActivity {
             width.setText(String.valueOf(o.optInt("w",0))); height.setText(String.valueOf(o.optInt("h",0)));
             int m=Math.max(1,Math.min(6,o.optInt("mode",1))); modeHolder[0]=m;
             if(modeButtons!=null) for(int i=0;i<modeButtons.length;i++) modeButtons[i].setBackgroundResource(i==m-1?R.drawable.card_selected:R.drawable.button);
+            int c=Math.max(0,Math.min(2,o.optInt("category",1))); categoryHolder[0]=c;
+            if(categoryButtons!=null) for(int i=0;i<categoryButtons.length;i++) categoryButtons[i].setBackgroundResource(i==c?R.drawable.card_selected:R.drawable.button);
             Toast.makeText(this,"面板参数已粘贴",Toast.LENGTH_SHORT).show();
             return true;
         }catch(Exception e){
@@ -1682,6 +1723,29 @@ public class MainActivity extends AppCompatActivity {
         box.addView(labeledNumberField("上间距",y));
         box.addView(labeledNumberField("窗口宽度",width));
         box.addView(labeledNumberField("窗口高度",height));
+
+        TextView categoryTitle=text("分类",14);
+        categoryTitle.setPadding(dp(115),dp(6),0,dp(2));
+        box.addView(categoryTitle,new LinearLayout.LayoutParams(-1,dp(32)));
+        LinearLayout categoryRow=new LinearLayout(this);
+        categoryRow.setOrientation(LinearLayout.HORIZONTAL);
+        categoryRow.setPadding(dp(115),0,dp(4),dp(4));
+        Button[] categoryButtons=new Button[3];
+        final int[] categoryHolder={old.category};
+        String[] categoryNames={"左","中","右"};
+        for(int c=0;c<3;c++){
+            final int cc=c;
+            Button cb=button(categoryNames[c]);
+            cb.setTextSize(12*fontScale());
+            categoryButtons[c]=cb;
+            if(categoryHolder[0]==c) cb.setBackgroundResource(R.drawable.card_selected);
+            cb.setOnClickListener(v->{
+                categoryHolder[0]=cc;
+                for(Button q:categoryButtons) q.setBackgroundResource(q==v?R.drawable.card_selected:R.drawable.button);
+            });
+            categoryRow.addView(cb,new LinearLayout.LayoutParams(0,dp(42),1));
+        }
+        box.addView(categoryRow,new LinearLayout.LayoutParams(-1,dp(48)));
 
         TextView modeTitle=text("启动模式",14);
         modeTitle.setPadding(dp(115),dp(6),0,dp(2));
@@ -1724,11 +1788,12 @@ public class MainActivity extends AppCompatActivity {
         content.addView(actionRow,new LinearLayout.LayoutParams(-1,dp(62)));
 
         final Button[] modeButtonsHolder=modeButtons;
+        final Button[] categoryButtonsHolder=categoryButtons;
         AlertDialog dialog=new AlertDialog.Builder(this)
                 .setTitle(index<0?"新建窗口预设":"编辑窗口预设")
                 .setView(content).create();
-        copy.setOnClickListener(v->copyPresetToClipboard(name,x,y,width,height,modeHolder[0]));
-        paste.setOnClickListener(v->pastePresetFromClipboard(name,x,y,width,height,modeHolder,modeButtonsHolder));
+        copy.setOnClickListener(v->copyPresetToClipboard(name,x,y,width,height,modeHolder[0],categoryHolder[0]));
+        paste.setOnClickListener(v->pastePresetFromClipboard(name,x,y,width,height,modeHolder,modeButtonsHolder,categoryHolder,categoryButtonsHolder));
         cancel.setOnClickListener(v->dialog.dismiss());
         save.setOnClickListener(v->{
             String n=name.getText().toString().trim();
@@ -1738,7 +1803,7 @@ public class MainActivity extends AppCompatActivity {
                     Math.max(0,number(y,old.y)),
                     Math.max(0,number(width,old.w)),
                     Math.max(0,number(height,old.h)),
-                    -1,modeHolder[0]);
+                    -1,modeHolder[0],categoryHolder[0]);
             if(index<0) presets.add(p); else presets.set(index,p);
             savePresets(); refresh(); dialog.dismiss();
         });
