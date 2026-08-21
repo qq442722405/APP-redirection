@@ -1345,7 +1345,7 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
-        // 第二排：应用分类，顺序固定为 用户 / 系统 / 全部。
+        // 第二排：应用分类，顺序固定为 用户 / 系统 / 全部 / 按钮。
         LinearLayout categoryRow=new LinearLayout(this);
         categoryRow.setGravity(Gravity.CENTER_VERTICAL);
         String[] categories={"用户","系统","全部","按钮"};
@@ -1355,7 +1355,7 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout appRows=new LinearLayout(this);
         appRows.setOrientation(LinearLayout.VERTICAL);
         Button[] categoryButtons=new Button[4];
-        for(int ci=0;ci<3;ci++){
+        for(int ci=0;ci<4;ci++){
             final int cc=ci;
             Button cb=button(categories[ci]);
             cb.setTextSize(12);
