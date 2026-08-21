@@ -337,19 +337,8 @@ public class FloatingService extends Service {
                 startActivity(in,ao.toBundle());
                 return;
             }
-            // 首次通过悬浮窗快捷键启动时，优先使用快捷键自身绑定的窗口预设。
-            int presetIndex=-1;
-            try{
-                JSONArray fa=new JSONArray(sp.getString("floating_apps","[]"));
-                for(int fi=0;fi<fa.length();fi++){
-                    JSONObject fo=fa.optJSONObject(fi);
-                    if(fo!=null && pkg.equals(fo.optString("pkg",""))){
-                        presetIndex=fo.optInt("preset",-1);
-                        break;
-                    }
-                }
-            }catch(Exception ignored){}
-            if(presetIndex<0) presetIndex=sp.getInt("floating_preset_"+pkg,sp.getInt("floating_default_preset",-1));
+            // 首次通过悬浮窗快捷键启动时，使用该快捷键绑定的窗口预设。
+            int presetIndex=sp.getInt("floating_preset_"+pkg,-1);
             if(presetIndex>=0){
                 try{
                     JSONArray pa=new JSONArray(sp.getString(MainActivity.PRESETS,"[]"));
