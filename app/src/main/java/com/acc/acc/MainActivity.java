@@ -705,18 +705,18 @@ public class MainActivity extends AppCompatActivity {
                     final GestureDetector appGesture=new GestureDetector(this,new GestureDetector.SimpleOnGestureListener(){
                         @Override public boolean onDown(MotionEvent e){return true;}
                         @Override public boolean onSingleTapConfirmed(MotionEvent e){
-                            selectedPackage=item.pkg; selectedName=item.name; info.setText("当前 APP："+item.name); refresh();
+                            selectedPackage=item.pkg; selectedName=item.name; prefs.edit().putString("selected_control_package",item.pkg).apply(); info.setText("当前 APP："+item.name); refresh();
                             return true;
                         }
                         @Override public boolean onDoubleTap(MotionEvent e){
-                            selectedPackage=item.pkg; selectedName=item.name; info.setText("当前 APP："+item.name);
+                            selectedPackage=item.pkg; selectedName=item.name; prefs.edit().putString("selected_control_package",item.pkg).apply(); info.setText("当前 APP："+item.name);
                             launchAppDirect(item.pkg,item.name);
                             return true;
                         }
                         @Override public void onLongPress(MotionEvent e){
                             new AlertDialog.Builder(MainActivity.this).setTitle(item.name)
                                 .setItems(new String[]{"删除 APP"},(d,w)->{if(w==0){
-                                    if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;}
+                                    if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;prefs.edit().remove("selected_control_package").apply();}
                                     apps.remove(itemIndex);saveApps();refresh();
                                 }}).show();
                         }
@@ -1320,7 +1320,7 @@ public class MainActivity extends AppCompatActivity {
         ArrayList<ApplicationInfo> allApps=new ArrayList<>();
         try{
             for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){
-                // 本程序也作为可添加 APP 显示在“用户”分类中。
+                if(ai.packageName.equals(getPackageName())) continue;
                 if(pm.getLaunchIntentForPackage(ai.packageName)!=null) allApps.add(ai);
             }
         }catch(Exception ignored){}
@@ -1816,7 +1816,7 @@ public class MainActivity extends AppCompatActivity {
                 tile.setOnClickListener(v->{
                     boolean exists=false; for(AppItem a:apps) if(a.pkg.equals(ai.packageName)){exists=true;break;}
                     if(!exists){apps.add(new AppItem(ai.packageName,name));saveApps();}
-                    selectedPackage=ai.packageName; selectedName=name; refresh(); dialog.dismiss();
+                    selectedPackage=ai.packageName; selectedName=name; prefs.edit().putString("selected_control_package",ai.packageName).apply(); refresh(); dialog.dismiss();
                 });
                 LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(tileDp),dp(112));
                 lp.setMargins(dp(4),dp(4),dp(4),dp(4));
@@ -2233,10 +2233,13 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this,"已重新检查并请求可申请的权限",Toast.LENGTH_SHORT).show();
             }
         });
+        Button accessibilityButton=button(isAccessibilityServiceEnabled()?"无障碍服务已开启（重新设置）":"开启无障碍服务");
+        accessibilityButton.setOnClickListener(v->openAccessibilitySettings());
+        actionRow.addView(accessibilityButton,new LinearLayout.LayoutParams(-1,dp(48)));
         actionRow.addView(checkButton,new LinearLayout.LayoutParams(-1,dp(48)));
         Button back=button("返回");
         actionRow.addView(back,new LinearLayout.LayoutParams(-1,dp(48)));
-        diagBox.addView(actionRow,new LinearLayout.LayoutParams(-1,dp(158)));
+        diagBox.addView(actionRow,new LinearLayout.LayoutParams(-1,dp(210)));
 
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("权限与诊断")
                 .setView(diagBox).create();
@@ -2583,41 +2586,29 @@ public class MainActivity extends AppCompatActivity {
         if(!isAccessibilityServiceEnabled()){
             new AlertDialog.Builder(this)
                     .setTitle("需要无障碍权限")
-                    .setMessage("车机没有任务管理器。为了让主界面的“返回/关闭”只作用于当前选中的 APP，需要开启本 APP 的无障碍服务。")
+                    .setMessage("为了让主界面的“返回/关闭”只作用于当前选中的 APP，请先开启本 APP 的无障碍服务。")
                     .setNegativeButton("取消",null)
                     .setPositiveButton("去开启",(d,w)->openAccessibilitySettings())
                     .show();
             return;
         }
 
-        // 先把选中的 APP 带到前台；如果已有任务，Android 通常会恢复该任务。
-        Intent launch=getPackageManager().getLaunchIntentForPackage(pkg);
-        if(launch==null){
-            Toast.makeText(this,"无法找到 APP："+name,Toast.LENGTH_SHORT).show();
+        // 关键修复：绝不为了执行返回/关闭而启动目标 APP。
+        // 只有当“当前前台 APP”就是用户选择的 APP 时才执行操作。
+        if(!AccessibilityServiceBridge.isTargetForeground(pkg)){
+            String current=AccessibilityServiceBridge.getCurrentPackage();
+            String msg=(current==null||current.isEmpty())
+                    ? "当前没有可控制的目标 APP"
+                    : "当前前台不是所选 APP（"+name+"），不执行返回/关闭";
+            Toast.makeText(this,msg,Toast.LENGTH_SHORT).show();
             return;
         }
-        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-        try{
-            JSONObject saved=getSavedAppBounds(pkg);
-            if(saved!=null){
-                launchIntentWithBounds(launch,pkg,
-                        saved.optInt("x",0),saved.optInt("y",0),
-                        saved.optInt("w",getRealScreenSize().x),saved.optInt("h",getRealScreenSize().y),
-                        saved.optInt("displayId",-1),saved.optBoolean("fullscreen",false),name);
-            }else{
-                startActivity(launch);
-            }
-        }catch(Exception e){
-            try{startActivity(launch);}catch(Exception ignored){
-                Toast.makeText(this,"无法打开 APP："+name,Toast.LENGTH_SHORT).show();
-                return;
-            }
-        }
 
-        new Handler(Looper.getMainLooper()).postDelayed(()->{
-            AccessibilityServiceBridge.performBackThen(close);
-        },350);
-        info.setText((close?"关闭":"返回")+"当前选中 APP："+name);
+        if(AccessibilityServiceBridge.performBackForTarget(pkg,close)){
+            info.setText((close?"关闭":"返回")+"当前选中 APP："+name);
+        }else{
+            Toast.makeText(this,"当前 APP 不可控制",Toast.LENGTH_SHORT).show();
+        }
     }
 
     boolean isAccessibilityServiceEnabled(){

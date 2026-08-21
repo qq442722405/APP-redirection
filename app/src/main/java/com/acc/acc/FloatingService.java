@@ -292,10 +292,10 @@ public class FloatingService extends Service {
     void performConfiguredGesture(String key){
         String action=getSharedPreferences(MainActivity.PREF,0).getString("floating_gesture_"+key,"none");
         if(action==null||"none".equals(action))return;
-        if("back".equals(action)){globalAction(ACTION_BACK);return;}
+        if("back".equals(action)){performSelectedTargetAction(false);return;}
         if("home".equals(action)){globalAction(ACTION_HOME);return;}
         if("menu".equals(action)){globalAction(ACTION_MENU);return;}
-        if("close".equals(action)){AccessibilityServiceBridge.performBackThen(true);return;}
+        if("close".equals(action)){performSelectedTargetAction(true);return;}
         if(action.startsWith("app:")){
             launchFloatingApp(action.substring(4));
         }
@@ -309,6 +309,7 @@ public class FloatingService extends Service {
     }
 
     void launchFloatingApp(String pkg){
+        getSharedPreferences(MainActivity.PREF,0).edit().putString("selected_control_package",pkg).apply();
         Intent in=getPackageManager().getLaunchIntentForPackage(pkg);
         if(in==null)return;
         in.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS|Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
@@ -447,8 +448,22 @@ public class FloatingService extends Service {
     void addSystemButton(int icon,String desc,int action){
         ImageButton b=iconButton(icon);
         b.setContentDescription(desc);
-        installDraggableItem(b,()->globalAction(action),null);
+        installDraggableItem(b,()->{ if(action==ACTION_BACK) performSelectedTargetAction(false); else if(action==ACTION_CLOSE) performSelectedTargetAction(true); else globalAction(action); },null);
         addView(b,iconSizePx,iconSizePx);
+    }
+
+    void performSelectedTargetAction(boolean close){
+        String pkg=getSharedPreferences(MainActivity.PREF,0).getString("selected_control_package","");
+        if(pkg==null || pkg.isEmpty()){
+            Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if(!AccessibilityServiceBridge.isTargetForeground(pkg)){
+            String current=AccessibilityServiceBridge.getCurrentPackage();
+            Toast.makeText(this,"当前前台不是所选 APP，不执行"+(close?"关闭":"返回"),Toast.LENGTH_SHORT).show();
+            return;
+        }
+        AccessibilityServiceBridge.performBackForTarget(pkg,close);
     }
 
     void globalAction(int action){
@@ -623,13 +638,7 @@ public class FloatingService extends Service {
 
         ScrollView sv=new ScrollView(this); LinearLayout rows=new LinearLayout(this); rows.setOrientation(LinearLayout.VERTICAL); rows.setGravity(Gravity.CENTER_HORIZONTAL); sv.addView(rows,new ScrollView.LayoutParams(-1,-2)); box.addView(sv,new LinearLayout.LayoutParams(-1,0,1));
         PackageManager pm=getPackageManager(); ArrayList<ApplicationInfo> list=new ArrayList<>();
-        try{
-            // 本程序也允许作为悬浮窗 APP 添加。
-            for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){
-                if(pm.getLaunchIntentForPackage(ai.packageName)!=null) list.add(ai);
-            }
-            Collections.sort(list,(a,b)->String.valueOf(pm.getApplicationLabel(a)).compareToIgnoreCase(String.valueOf(pm.getApplicationLabel(b))));
-        }catch(Exception ignored){}
+        try{for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){if(!ai.packageName.equals(getPackageName()))list.add(ai);} Collections.sort(list,(a,b)->String.valueOf(pm.getApplicationLabel(a)).compareToIgnoreCase(String.valueOf(pm.getApplicationLabel(b))));}catch(Exception ignored){}
         refreshApps[0]=()->{
             rows.removeAllViews(); String q=search.getText().toString().trim().toLowerCase(Locale.ROOT); int count=0,inRow=0; LinearLayout row=null;
             for(ApplicationInfo ai:list){
