@@ -15,10 +15,13 @@ import android.widget.Toast;
 
 public class MainActivity extends Activity {
 
+    // 补全 FloatingService 和 BootReceiver 所需的静态常量
+    public static final String PREF = "app_prefs";
+    public static final String PRESETS = "presets_key";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        
         checkOverlayPermission();
         setContentView(createMainLayout());
     }
@@ -45,7 +48,6 @@ public class MainActivity extends Activity {
         tvTitle.setPadding(0, 20, 0, 30);
         layout.addView(tvTitle);
 
-        // 1. 无障碍服务开启入口
         Button btnAcc = new Button(this);
         btnAcc.setText("开启无障碍服务");
         btnAcc.setOnClickListener(v -> {
@@ -54,7 +56,6 @@ public class MainActivity extends Activity {
         });
         layout.addView(btnAcc);
 
-        // 2. 悬浮控制条入口
         Button btnFloat = new Button(this);
         btnFloat.setText("启动悬浮控制条");
         btnFloat.setOnClickListener(v -> {
@@ -63,13 +64,12 @@ public class MainActivity extends Activity {
         });
         layout.addView(btnFloat);
 
-        // 3. 替代原记事本位置的“测试”按钮
         Button btnTest = new Button(this);
         btnTest.setText("测试控制台窗口");
         btnTest.setTextSize(18);
         btnTest.setBackgroundColor(0xFF2196F3);
         btnTest.setTextColor(0xFFFFFFFF);
-        
+
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
