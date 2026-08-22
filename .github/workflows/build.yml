@@ -62,4 +62,4 @@ jobs:
           name: APP窗口启动器
           path: app/build/outputs/apk/debug/APP窗口启动器.apk
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
