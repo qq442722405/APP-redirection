@@ -22,6 +22,8 @@ import androidx.appcompat.app.*;
 import org.json.*;
 import java.util.*;
 import java.io.*;
+import java.net.*;
+import java.nio.charset.Charset;
 import android.content.res.AssetFileDescriptor;
 
 public class MainActivity extends AppCompatActivity {
@@ -556,12 +558,13 @@ public class MainActivity extends AppCompatActivity {
         actionRow.setOrientation(LinearLayout.HORIZONTAL);
         actionRow.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
 
-        TextView note=plusButton();
-        note.setText("📝");
-        note.setTextSize(22*mainFontScale());
-        note.setContentDescription("记事本");
-        note.setOnClickListener(v->showNotes());
-        actionRow.addView(note,new LinearLayout.LayoutParams(dp(68),dp(50)));
+        // 原“记事本”位置改为“测试”入口。
+        TextView test=plusButton();
+        test.setText("测试");
+        test.setTextSize(17*mainFontScale());
+        test.setContentDescription("窗口与 ADB 测试");
+        test.setOnClickListener(v->showWindowTestDialog());
+        actionRow.addView(test,new LinearLayout.LayoutParams(dp(78),dp(50)));
 
         // 主界面控制当前已选 APP：返回 / 关闭。
         // 这两个按钮只对“当前选中的 APP”生效，不与悬浮窗口功能绑定。
@@ -1841,11 +1844,211 @@ public class MainActivity extends AppCompatActivity {
         refreshHolder[0].run();
     }
 
-    void showNotes(){
-        EditText edit=new EditText(this); edit.setText(prefs.getString("notes","")); edit.setTextColor(Color.WHITE); edit.setHintTextColor(Color.GRAY); edit.setGravity(Gravity.TOP|Gravity.LEFT); edit.setHint("在这里记录内容……"); edit.setSingleLine(false); edit.setMinLines(12); edit.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE|android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES); edit.setPadding(dp(12),dp(12),dp(12),dp(12));
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("记事本").setView(edit).setNegativeButton("取消",null).setPositiveButton("保存",(d,w)->{prefs.edit().putString("notes",edit.getText().toString()).apply(); Toast.makeText(this,"已保存",Toast.LENGTH_SHORT).show();}).create();
-        showFixed1000x800(dialog,dp(80));
+    /**
+     * 窗口/ADB 测试面板。
+     * 这里专门用于车机调试，不再保留原来的“记事本”入口。
+     * APP 实际仍由系统 WindowManager 管理；“APP窗口区域”用当前选中 APP 的
+     * LaunchBounds 实时测试，左右宽度按钮每次点击都会重新提交窗口边界。
+     */
+    void showWindowTestDialog(){
+        final int screenW=getRealScreenSize().x;
+        final int screenH=getRealScreenSize().y;
+        final String pkg=selectedPackage;
+        final String name=selectedName==null?(pkg==null?"未选择 APP":getAppLabelSafe(pkg)):selectedName;
+        final int[] winW={Math.max(dp(420),Math.min(screenW-dp(160),pkg==null?screenW/2:Math.max(dp(420),screenW/2)))};
+        final int[] winX={Math.max(0,(screenW-winW[0])/2)};
+
+        LinearLayout root=new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(12),dp(8),dp(12),dp(10));
+
+        TextView target=text("当前 APP："+name,15);
+        target.setTextColor(Color.WHITE);
+        root.addView(target,new LinearLayout.LayoutParams(-1,dp(42)));
+
+        TextView adbState=text("ADB：未测试  127.0.0.1:5555",13);
+        adbState.setTextColor(Color.LTGRAY);
+        root.addView(adbState,new LinearLayout.LayoutParams(-1,dp(36)));
+
+        LinearLayout adbRow=new LinearLayout(this);
+        adbRow.setGravity(Gravity.CENTER_VERTICAL);
+        Button adbTest=button("测试 ADB");
+        Button adbClose=button("测试 ADB 关闭程序");
+        adbRow.addView(adbTest,new LinearLayout.LayoutParams(0,dp(48),1));
+        adbRow.addView(adbClose,new LinearLayout.LayoutParams(0,dp(48),1));
+        root.addView(adbRow,new LinearLayout.LayoutParams(-1,dp(54)));
+
+        TextView area=text("APP 窗口测试区域\n宽度："+winW[0]+"    左："+winX[0]+"    高度："+Math.max(1,screenH-TOP_BLANK-BOTTOM_BLANK),14);
+        area.setGravity(Gravity.CENTER);
+        area.setTextColor(Color.WHITE);
+        GradientDrawable areaBg=new GradientDrawable();
+        areaBg.setColor(Color.rgb(30,30,30));
+        areaBg.setStroke(dp(2),Color.GRAY);
+        area.setBackground(areaBg);
+        root.addView(area,new LinearLayout.LayoutParams(-1,dp(86)));
+
+        LinearLayout widthRow=new LinearLayout(this);
+        widthRow.setGravity(Gravity.CENTER_VERTICAL);
+        Button left=button("← 缩小");
+        Button right=button("扩大 →");
+        Button center=button("居中");
+        widthRow.addView(left,new LinearLayout.LayoutParams(0,dp(50),1));
+        widthRow.addView(center,new LinearLayout.LayoutParams(0,dp(50),1));
+        widthRow.addView(right,new LinearLayout.LayoutParams(0,dp(50),1));
+        root.addView(widthRow,new LinearLayout.LayoutParams(-1,dp(58)));
+
+        LinearLayout testRow1=new LinearLayout(this);
+        testRow1.setGravity(Gravity.CENTER_VERTICAL);
+        Button appShow=button("让 APP 显示在窗口");
+        Button split=button("分屏测试");
+        Button multi=button("多窗口测试");
+        testRow1.addView(appShow,new LinearLayout.LayoutParams(0,dp(50),1));
+        testRow1.addView(split,new LinearLayout.LayoutParams(0,dp(50),1));
+        testRow1.addView(multi,new LinearLayout.LayoutParams(0,dp(50),1));
+        root.addView(testRow1,new LinearLayout.LayoutParams(-1,dp(58)));
+
+        LinearLayout testRow2=new LinearLayout(this);
+        testRow2.setGravity(Gravity.CENTER_VERTICAL);
+        Button floating=button("悬浮窗口测试");
+        Button leftHalf=button("左半屏");
+        Button rightHalf=button("右半屏");
+        testRow2.addView(floating,new LinearLayout.LayoutParams(0,dp(50),1));
+        testRow2.addView(leftHalf,new LinearLayout.LayoutParams(0,dp(50),1));
+        testRow2.addView(rightHalf,new LinearLayout.LayoutParams(0,dp(50),1));
+        root.addView(testRow2,new LinearLayout.LayoutParams(-1,dp(58)));
+
+        TextView hint=text("说明：窗口宽度按钮会立即重新提交当前 APP 的窗口边界。\n车机是否真正支持自由调整大小，由车机 WindowManager/多窗口策略决定。",11);
+        hint.setTextColor(Color.LTGRAY);
+        root.addView(hint,new LinearLayout.LayoutParams(-1,dp(58)));
+
+        final Runnable updateArea=()->{
+            area.setText("APP 窗口测试区域\n宽度："+winW[0]+"    左："+winX[0]+"    高度："+Math.max(1,screenH-TOP_BLANK-BOTTOM_BLANK));
+        };
+        final Runnable resize=()->{
+            if(pkg==null||pkg.isEmpty()){
+                Toast.makeText(this,"请先在主界面选择 APP",Toast.LENGTH_SHORT).show();
+                return;
+            }
+            Intent intent=getPackageManager().getLaunchIntentForPackage(pkg);
+            if(intent==null){Toast.makeText(this,"无法启动所选 APP",Toast.LENGTH_SHORT).show();return;}
+            int h=Math.max(1,screenH-TOP_BLANK-BOTTOM_BLANK);
+            launchIntentWithBounds(intent,pkg,winX[0],TOP_BLANK,winW[0],h,-1,false,name);
+            updateArea.run();
+        };
+
+        left.setOnClickListener(v->{
+            int old=winW[0];
+            winW[0]=Math.max(dp(260),winW[0]-dp(120));
+            if(winW[0]!=old)winX[0]=Math.max(0,Math.min(winX[0]+dp(60),screenW-winW[0]));
+            resize.run();
+        });
+        right.setOnClickListener(v->{
+            int old=winW[0];
+            winW[0]=Math.min(screenW,winW[0]+dp(120));
+            if(winW[0]!=old)winX[0]=Math.max(0,Math.min(winX[0]-dp(60),screenW-winW[0]));
+            resize.run();
+        });
+        center.setOnClickListener(v->{winX[0]=Math.max(0,(screenW-winW[0])/2);resize.run();});
+        appShow.setOnClickListener(v->resize.run());
+        split.setOnClickListener(v->{
+            if(pkg==null||pkg.isEmpty()){Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show();return;}
+            winW[0]=screenW/2; winX[0]=0; resize.run();
+        });
+        multi.setOnClickListener(v->{
+            if(pkg==null||pkg.isEmpty()){Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show();return;}
+            winW[0]=Math.max(dp(420),screenW*2/3); winX[0]=Math.max(0,(screenW-winW[0])/2); resize.run();
+        });
+        floating.setOnClickListener(v->{
+            if(!hasOverlayPermission()){
+                Toast.makeText(this,"请先开启悬浮窗权限",Toast.LENGTH_SHORT).show();
+                try{startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+getPackageName())));}catch(Exception ignored){}
+                return;
+            }
+            restartFloatingServiceSafe();
+            Toast.makeText(this,"已执行悬浮窗口测试",Toast.LENGTH_SHORT).show();
+        });
+        leftHalf.setOnClickListener(v->{
+            if(pkg==null||pkg.isEmpty()){Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show();return;}
+            winW[0]=screenW/2;winX[0]=0;resize.run();
+        });
+        rightHalf.setOnClickListener(v->{
+            if(pkg==null||pkg.isEmpty()){Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show();return;}
+            winW[0]=screenW/2;winX[0]=screenW/2;resize.run();
+        });
+
+        adbTest.setOnClickListener(v->testLocalAdb(adbState));
+        adbClose.setOnClickListener(v->{
+            if(pkg==null||pkg.isEmpty()){Toast.makeText(this,"请先在主界面选择 APP",Toast.LENGTH_SHORT).show();return;}
+            new Thread(()->{
+                final String result=adbShell("am force-stop "+pkg);
+                runOnUiThread(()->{adbState.setText("ADB："+result);Toast.makeText(this,result,Toast.LENGTH_LONG).show();});
+            }).start();
+        });
+
+        AlertDialog dlg=new AlertDialog.Builder(this).setTitle("窗口 / ADB 测试").setView(root).setNegativeButton("关闭",null).create();
+        showFixed1000x800(dlg,dp(80));
     }
+
+    void testLocalAdb(TextView state){
+        new Thread(()->{
+            String result;
+            Socket socket=null;
+            try{
+                socket=new Socket();
+                socket.connect(new InetSocketAddress("127.0.0.1",5555),1000);
+                result="已连接 127.0.0.1:5555";
+            }catch(Exception e){result="连接失败："+e.getMessage();}
+            finally{try{if(socket!=null)socket.close();}catch(Exception ignored){}}
+            final String r=result;
+            runOnUiThread(()->{state.setText("ADB："+r);Toast.makeText(this,r,Toast.LENGTH_SHORT).show();});
+        }).start();
+    }
+
+    /** 通过本机 ADB TCP 5555 执行一个 shell 命令。车机已开启 ADB 时用于测试。 */
+    String adbShell(String command){
+        Socket s=null;
+        try{
+            s=new Socket();
+            s.connect(new InetSocketAddress("127.0.0.1",5555),1500);
+            s.setSoTimeout(2500);
+            OutputStream out=s.getOutputStream();
+            InputStream in=s.getInputStream();
+            sendAdbPacket(out,"CNXN",0x01000000,4096,"host::\0");
+            int[] header=readAdbHeader(in);
+            if(header==null) return "ADB 连接成功，但 CNXN 握手失败";
+            String dest="shell:"+command+"\0";
+            sendAdbPacket(out,"OPEN",1,0,dest);
+            long end=System.currentTimeMillis()+2200;
+            byte[] buf=new byte[4096];
+            while(System.currentTimeMillis()<end){
+                int[] h=readAdbHeader(in);
+                if(h==null)break;
+                if(h[0]==0x45545257 || h[0]==0x45534c43){
+                    if(h[3]>0) readFully(in,Math.min(h[3],buf.length));
+                    if(h[0]==0x45534c43)break;
+                }else if(h[3]>0){readFully(in,Math.min(h[3],buf.length));}
+            }
+            return "ADB 已执行："+command;
+        }catch(Exception e){return "ADB 执行失败："+e.getMessage();}
+        finally{try{if(s!=null)s.close();}catch(Exception ignored){}}
+    }
+
+    void sendAdbPacket(OutputStream out,String cmd,int arg0,int arg1,String payload)throws IOException{
+        byte[] p=payload.getBytes(Charset.forName("UTF-8"));
+        byte[] c=cmd.getBytes(Charset.forName("US-ASCII"));
+        int command=(c[0]&255)|((c[1]&255)<<8)|((c[2]&255)<<16)|((c[3]&255)<<24);
+        int checksum=0;for(byte b:p)checksum+=(b&255);
+        byte[] h=new byte[24];writeIntLE(h,0,command);writeIntLE(h,4,arg0);writeIntLE(h,8,arg1);writeIntLE(h,12,p.length);writeIntLE(h,16,checksum);writeIntLE(h,20,command^0xffffffff);
+        out.write(h);out.write(p);out.flush();
+    }
+    int[] readAdbHeader(InputStream in)throws IOException{
+        byte[] h=new byte[24];if(!readFully(in,h))return null;
+        return new int[]{readIntLE(h,0),readIntLE(h,4),readIntLE(h,8),readIntLE(h,12),readIntLE(h,16),readIntLE(h,20)};
+    }
+    boolean readFully(InputStream in,byte[] b)throws IOException{int off=0;while(off<b.length){int n=in.read(b,off,b.length-off);if(n<0)return false;off+=n;}return true;}
+    void readFully(InputStream in,int n)throws IOException{byte[] b=new byte[Math.max(0,n)];readFully(in,b);}
+    int readIntLE(byte[] b,int o){return (b[o]&255)|((b[o+1]&255)<<8)|((b[o+2]&255)<<16)|((b[o+3]&255)<<24);}
+    void writeIntLE(byte[] b,int o,int v){b[o]=(byte)v;b[o+1]=(byte)(v>>8);b[o+2]=(byte)(v>>16);b[o+3]=(byte)(v>>24);}
 
     void presetMenu(int index){
         Preset p=presets.get(index);
