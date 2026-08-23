@@ -23,7 +23,6 @@ import org.json.*;
 import java.util.*;
 import java.io.*;
 import java.net.*;
-import java.nio.charset.Charset;
 import android.content.res.AssetFileDescriptor;
 
 public class MainActivity extends AppCompatActivity {
@@ -100,8 +99,8 @@ public class MainActivity extends AppCompatActivity {
         return mainUiContext ? mainFontScale() : menuFontScale();
     }
 
-    int touchOffsetLeft(){ return prefs==null?0:prefs.getInt("touch_offset_left_px",0); }
-    int touchOffsetTop(){ return prefs==null?0:prefs.getInt("touch_offset_top_px",0); }
+    int touchCorrectionX(){ return prefs==null?0:prefs.getInt("touch_correction_x",0); }
+    int touchCorrectionY(){ return prefs==null?0:prefs.getInt("touch_correction_y",0); }
 
     int dp(int v){
         return (int)(v*getResources().getDisplayMetrics().density*uiScale()+.5f);
@@ -270,8 +269,6 @@ public class MainActivity extends AppCompatActivity {
         if(!prefs.contains("font_scale") || prefs.getFloat("font_scale",1.0f) <= 0.2001f) defaults.putFloat("font_scale",1.20f);
         if(!prefs.contains("main_font_scale") || prefs.getFloat("main_font_scale",1.0f) <= 0.2001f) defaults.putFloat("main_font_scale",1.00f);
         if(!prefs.contains("ui_scale")) defaults.putFloat("ui_scale",1.30f);
-        if(!prefs.contains("touch_offset_top_px")) defaults.putInt("touch_offset_top_px",0);
-        if(!prefs.contains("touch_offset_left_px")) defaults.putInt("touch_offset_left_px",0);
         if(!prefs.contains("main_app_columns")) defaults.putInt("main_app_columns",10);
         if(!prefs.contains("main_top_blank")) defaults.putInt("main_top_blank",80);
         if(!prefs.contains("main_bottom_blank")) defaults.putInt("main_bottom_blank",120);
@@ -378,7 +375,6 @@ public class MainActivity extends AppCompatActivity {
             a.put(new JSONObject().put("name","中 上-80").put("x",2288).put("y",80).put("w",2160).put("h",772).put("displayId",-1).put("mode",1).put("category",1));
             a.put(new JSONObject().put("name","中 1/1").put("x",2288).put("y",0).put("w",2160).put("h",960).put("displayId",-1).put("mode",1).put("category",1));
             a.put(new JSONObject().put("name","右 1/1").put("x",4320).put("y",0).put("w",2160).put("h",960).put("displayId",-1).put("mode",1).put("category",2));
-            a.put(new JSONObject().put("name","测试").put("x",0).put("y",0).put("w",0).put("h",0).put("displayId",-1).put("mode",6).put("category",1));
         }catch(Exception ignored){}
         return a.toString();
     }
@@ -558,13 +554,6 @@ public class MainActivity extends AppCompatActivity {
         actionRow.setOrientation(LinearLayout.HORIZONTAL);
         actionRow.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
 
-        // 原“记事本”位置改为“测试”入口。
-        TextView test=plusButton();
-        test.setText("测试");
-        test.setTextSize(17*mainFontScale());
-        test.setContentDescription("窗口与 ADB 测试");
-        test.setOnClickListener(v->showWindowTestDialog());
-        actionRow.addView(test,new LinearLayout.LayoutParams(dp(78),dp(50)));
 
         // 主界面控制当前已选 APP：返回 / 关闭。
         // 这两个按钮只对“当前选中的 APP”生效，不与悬浮窗口功能绑定。
@@ -868,7 +857,7 @@ public class MainActivity extends AppCompatActivity {
         final Window window=dialog.getWindow();
         final Window.Callback original=window.getCallback();
         if(original==null || original instanceof TouchCorrectingCallback) return;
-        window.setCallback(new TouchCorrectingCallback(original, touchOffsetLeft(), touchOffsetTop()));
+        window.setCallback(new TouchCorrectingCallback(original, touchCorrectionX(), touchCorrectionY()));
     }
 
     static class TouchCorrectingCallback implements Window.Callback{
@@ -920,8 +909,10 @@ public class MainActivity extends AppCompatActivity {
                 b.setTextColor(Color.WHITE);
                 b.setTextSize(14*fontScale());
                 b.setBackgroundResource(R.drawable.button);
-                b.setMinHeight(dp(46));
+                b.setMinHeight(dp(50));
                 b.setMinWidth(dp(100));
+                b.setMaxHeight(dp(50));
+                b.setWidth(dp(100));
                 b.setPadding(dp(14),0,dp(14),0);
             }
         }catch(Exception ignored){}
@@ -935,27 +926,10 @@ public class MainActivity extends AppCompatActivity {
         placeDialogBelowTop(dialog);
     }
 
-    // 用户指定的标准设置/编辑页面尺寸：1000×800 物理像素。
-    // 在显示器小于该尺寸时保持居中并由系统裁剪，避免根据屏幕 density 改变页面设计尺寸。
-    void showFixed1000x800(AlertDialog dialog){
-        showFixed1000x800(dialog,0);
-    }
-
-    void showFixed1000x800(AlertDialog dialog,int bottomOffsetPx){
-        if(dialog==null) return;
-        dialog.show();
-        styleDialogActionButtons(dialog);
-        adaptDialogBoxes(dialog);
-        Window w=dialog.getWindow();
-        if(w!=null){
-            w.setLayout(1000,800);
-            w.setGravity(Gravity.CENTER);
-            if(bottomOffsetPx!=0){
-                WindowManager.LayoutParams a=w.getAttributes();
-                a.y=-bottomOffsetPx;
-                w.setAttributes(a);
-            }
-        }
+    // 统一设置/编辑窗口设计区域：900×960；实际可用内容从顶部 80px 开始。
+    void showFixed900x960(AlertDialog dialog){
+        if(dialog==null)return; dialog.show(); styleDialogActionButtons(dialog); adaptDialogBoxes(dialog);
+        Window w=dialog.getWindow(); if(w!=null){ w.setLayout(900,880); w.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL); WindowManager.LayoutParams lp=w.getAttributes(); lp.x=0; lp.y=80; w.setAttributes(lp); }
     }
 
     void showSettingsMenu(){
@@ -1011,7 +985,7 @@ public class MainActivity extends AppCompatActivity {
         box.addView(importButton,new LinearLayout.LayoutParams(-1,dp(48)));
 
         settingsDialog[0]=new AlertDialog.Builder(this).setTitle("设置").setView(box).setNegativeButton("关闭",null).create();
-        showFixed1000x800(settingsDialog[0]);
+        showFixed900x960(settingsDialog[0]);
     }
 
     void showFloatingWindowSettingsDialog(){
@@ -1158,13 +1132,13 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout actionBar=new LinearLayout(this);
         actionBar.setOrientation(LinearLayout.HORIZONTAL);
-        actionBar.setGravity(Gravity.CENTER);
+        actionBar.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
         actionBar.setPadding(dp(4),dp(8),dp(4),0);
 
         Button back=button("返回");
         Button save=button("保存");
-        actionBar.addView(back,new LinearLayout.LayoutParams(0,dp(50),1));
-        actionBar.addView(save,new LinearLayout.LayoutParams(0,dp(50),1));
+        actionBar.addView(back,new LinearLayout.LayoutParams(dp(100),dp(50)));
+        actionBar.addView(save,new LinearLayout.LayoutParams(dp(100),dp(50)));
         root.addView(actionBar,new LinearLayout.LayoutParams(-1,dp(64)));
 
         AlertDialog dialog=new AlertDialog.Builder(this)
@@ -1204,7 +1178,7 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this,"悬浮窗口设置已保存，可继续调整",Toast.LENGTH_SHORT).show();
             // 不 dismiss，保持设置窗口。
         });
-        showFixed1000x800(dialog);
+        showFixed900x960(dialog);
     }
 
     String getAppLabelSafe(String pkg){
@@ -1219,94 +1193,6 @@ public class MainActivity extends AppCompatActivity {
         if("menu".equals(value))return "菜单按钮";
         if(value.startsWith("app:"))return getAppLabelSafe(value.substring(4));
         return value;
-    }
-
-    void showFloatingAppSettingsDialog(){
-        LinearLayout root=new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(18),dp(8),dp(18),dp(10));
-
-        ScrollView scroll=new ScrollView(this);
-        LinearLayout box=new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-
-        Button add=button("添加 APP");
-        add.setGravity(Gravity.LEFT|Gravity.CENTER_VERTICAL);
-        add.setPadding(dp(14),0,dp(14),0);
-        box.addView(add,new LinearLayout.LayoutParams(-1,dp(52)));
-
-        TextView title=text("当前悬浮窗项目",14);
-        title.setTypeface(null,android.graphics.Typeface.BOLD);
-        box.addView(title,new LinearLayout.LayoutParams(-1,dp(42)));
-
-        LinearLayout list=new LinearLayout(this);
-        list.setOrientation(LinearLayout.VERTICAL);
-        box.addView(list,new LinearLayout.LayoutParams(-1,dp(10)));
-
-        LinearLayout sysTitle=new LinearLayout(this);
-        sysTitle.setGravity(Gravity.CENTER_VERTICAL);
-        sysTitle.addView(text("系统按钮",14),new LinearLayout.LayoutParams(0,dp(44),1));
-        box.addView(sysTitle,new LinearLayout.LayoutParams(-1,dp(44)));
-
-        LinearLayout backRow=new LinearLayout(this); backRow.setGravity(Gravity.CENTER_VERTICAL);
-        backRow.addView(text("返回按钮",14),new LinearLayout.LayoutParams(0,dp(50),1));
-        Switch back=new Switch(this); back.setChecked(prefs.getBoolean("floating_back",false));
-        backRow.addView(back,new LinearLayout.LayoutParams(dp(58),dp(50))); box.addView(backRow,new LinearLayout.LayoutParams(-1,dp(52)));
-
-        LinearLayout homeRow=new LinearLayout(this); homeRow.setGravity(Gravity.CENTER_VERTICAL);
-        homeRow.addView(text("首页按钮",14),new LinearLayout.LayoutParams(0,dp(50),1));
-        Switch home=new Switch(this); home.setChecked(prefs.getBoolean("floating_home",false));
-        homeRow.addView(home,new LinearLayout.LayoutParams(dp(58),dp(50))); box.addView(homeRow,new LinearLayout.LayoutParams(-1,dp(52)));
-
-        LinearLayout menuRow=new LinearLayout(this); menuRow.setGravity(Gravity.CENTER_VERTICAL);
-        menuRow.addView(text("菜单按钮",14),new LinearLayout.LayoutParams(0,dp(50),1));
-        Switch menu=new Switch(this); menu.setChecked(prefs.getBoolean("floating_menu",false));
-        menuRow.addView(menu,new LinearLayout.LayoutParams(dp(58),dp(50))); box.addView(menuRow,new LinearLayout.LayoutParams(-1,dp(52)));
-
-        final Runnable[] rebuildHolder=new Runnable[1];
-        rebuildHolder[0]=()->{
-            list.removeAllViews();
-            try{
-                JSONArray a=new JSONArray(prefs.getString("floating_apps","[]"));
-                for(int i=0;i<a.length();i++){
-                    JSONObject o=a.optJSONObject(i); if(o==null)continue;
-                    final String pkg=o.optString("pkg","");
-                    if(pkg.isEmpty())continue;
-                    String name=o.optString("name",pkg);
-                    LinearLayout row=new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(dp(10),0,dp(6),0);
-                    ImageView iv=new ImageView(this);
-                    try{iv.setImageDrawable(getPackageManager().getApplicationIcon(pkg));}catch(Exception ignored){}
-                    row.addView(iv,new LinearLayout.LayoutParams(dp(60),dp(60)));
-                    TextView tv=text(name,14); row.addView(tv,new LinearLayout.LayoutParams(0,dp(70),1));
-                    Button del=button("删除");
-                    del.setOnClickListener(v->{
-                        try{
-                            JSONArray cur=new JSONArray(prefs.getString("floating_apps","[]")); JSONArray out=new JSONArray();
-                            for(int j=0;j<cur.length();j++){JSONObject x=cur.optJSONObject(j); if(x!=null&&!pkg.equals(x.optString("pkg","")))out.put(x);}
-                            prefs.edit().putString("floating_apps",out.toString()).remove("floating_preset_"+pkg).apply();
-                            rebuildHolder[0].run();
-                        }catch(Exception ignored){}
-                    });
-                    row.addView(del,new LinearLayout.LayoutParams(dp(72),dp(60)));
-                    list.addView(row,new LinearLayout.LayoutParams(-1,dp(80)));
-                }
-            }catch(Exception ignored){}
-            if(list.getChildCount()==0){TextView empty=text("暂无 APP 快捷键",12); empty.setTextColor(Color.GRAY); list.addView(empty,new LinearLayout.LayoutParams(-1,dp(42)));}
-        };
-        rebuildHolder[0].run();
-
-        scroll.addView(box,new ScrollView.LayoutParams(-1,-2));
-        root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        LinearLayout actions=new LinearLayout(this); actions.setGravity(Gravity.CENTER); actions.setPadding(dp(4),dp(8),dp(4),0);
-        Button cancel=button("返回"), save=button("保存");
-        actions.addView(cancel,new LinearLayout.LayoutParams(0,dp(50),1)); actions.addView(save,new LinearLayout.LayoutParams(0,dp(50),1));
-        root.addView(actions,new LinearLayout.LayoutParams(-1,dp(64)));
-
-        AlertDialog dlg=new AlertDialog.Builder(this).setTitle("悬浮窗APP设置").setView(root).create();
-        add.setOnClickListener(v->{dlg.dismiss(); showFloatingAppChooser();});
-        cancel.setOnClickListener(v->dlg.dismiss());
-        save.setOnClickListener(v->{prefs.edit().putBoolean("floating_back",back.isChecked()).putBoolean("floating_home",home.isChecked()).putBoolean("floating_menu",menu.isChecked()).apply(); stopFloatingService(); if(prefs.getBoolean("floating_enabled",false))startFloatingService(); Toast.makeText(this,"悬浮窗APP设置已保存",Toast.LENGTH_SHORT).show();});
-        showFixed1000x800(dlg);
     }
 
     void addCurrentButtonChip(LinearLayout row,String label,Runnable deleteAction){
@@ -1406,11 +1292,11 @@ public class MainActivity extends AppCompatActivity {
         refreshFloatingChooserApps(allApps,appRows,category,selectedPkg);
 
         LinearLayout actions=new LinearLayout(this);
-        actions.setGravity(Gravity.CENTER);
+        actions.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
         actions.setPadding(dp(4),dp(8),dp(4),0);
         Button cancel=button("取消"), save=button("保存");
-        actions.addView(cancel,new LinearLayout.LayoutParams(0,dp(50),1));
-        actions.addView(save,new LinearLayout.LayoutParams(0,dp(50),1));
+        actions.addView(cancel,new LinearLayout.LayoutParams(dp(100),dp(50)));
+        actions.addView(save,new LinearLayout.LayoutParams(dp(100),dp(50)));
         root.addView(actions,new LinearLayout.LayoutParams(-1,dp(64)));
 
         AlertDialog dlg=new AlertDialog.Builder(this)
@@ -1460,7 +1346,7 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this,"保存失败："+e.getMessage(),Toast.LENGTH_LONG).show();
             }
         });
-        showFixed1000x800(dlg,dp(80));
+        showFixed900x960(dlg);
     }
 
     void refreshFloatingChooserButtons(LinearLayout rows, String[] selectedPkg){
@@ -1680,37 +1566,24 @@ public class MainActivity extends AppCompatActivity {
         bottomBlankRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
         box.addView(bottomBlankRow,new LinearLayout.LayoutParams(-1,dp(56)));
 
-        LinearLayout touchTopRow=new LinearLayout(this); touchTopRow.setGravity(Gravity.CENTER_VERTICAL);
-        touchTopRow.addView(text("触控纠正位置上",14),new LinearLayout.LayoutParams(0,dp(52),1));
-        EditText touchTopInput=numberField("0",String.valueOf(touchOffsetTop()));
-        touchTopRow.addView(touchTopInput,new LinearLayout.LayoutParams(dp(90),dp(52)));
-        touchTopRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
-        box.addView(touchTopRow,new LinearLayout.LayoutParams(-1,dp(56)));
-
-        LinearLayout touchLeftRow=new LinearLayout(this); touchLeftRow.setGravity(Gravity.CENTER_VERTICAL);
-        touchLeftRow.addView(text("触控纠正位置左",14),new LinearLayout.LayoutParams(0,dp(52),1));
-        EditText touchLeftInput=numberField("0",String.valueOf(touchOffsetLeft()));
-        touchLeftRow.addView(touchLeftInput,new LinearLayout.LayoutParams(dp(90),dp(52)));
-        touchLeftRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
-        box.addView(touchLeftRow,new LinearLayout.LayoutParams(-1,dp(56)));
-
-        TextView hint=text("触控纠正只作用于弹窗，主界面不受影响。正值向下/向右，负值向上/向左。",11);
-        hint.setTextColor(Color.GRAY);
-        hint.setPadding(0,dp(4),0,dp(6));
-        box.addView(hint,new LinearLayout.LayoutParams(-1,dp(38)));
+        Button touchCorrection=button("触控纠正  ›");
+        touchCorrection.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+        touchCorrection.setPadding(dp(14),0,dp(14),0);
+        touchCorrection.setOnClickListener(v->showTouchCalibrationDialog());
+        box.addView(touchCorrection,new LinearLayout.LayoutParams(-1,dp(52)));
 
         scroll.addView(box,new ScrollView.LayoutParams(-1,-2));
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
 
         LinearLayout actionBar=new LinearLayout(this);
         actionBar.setOrientation(LinearLayout.HORIZONTAL);
-        actionBar.setGravity(Gravity.CENTER_VERTICAL);
+        actionBar.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
         Button back=button("返回");
         Button save=button("保存");
         LinearLayout.LayoutParams actionLp=new LinearLayout.LayoutParams(0,dp(50),1);
         actionLp.setMargins(dp(4),dp(4),dp(4),0);
-        actionBar.addView(back,new LinearLayout.LayoutParams(0,dp(50),1));
-        actionBar.addView(save,new LinearLayout.LayoutParams(0,dp(50),1));
+        actionBar.addView(back,new LinearLayout.LayoutParams(dp(100),dp(50)));
+        actionBar.addView(save,new LinearLayout.LayoutParams(dp(100),dp(50)));
         root.addView(actionBar,new LinearLayout.LayoutParams(-1,dp(58)));
 
         save.setOnClickListener(v->{
@@ -1722,11 +1595,8 @@ public class MainActivity extends AppCompatActivity {
                 int columns=Integer.parseInt(columnsInput.getText().toString().trim());
                 int topBlank=Integer.parseInt(topBlankInput.getText().toString().trim());
                 int bottomBlank=Integer.parseInt(bottomBlankInput.getText().toString().trim());
-                int touchTop=Integer.parseInt(touchTopInput.getText().toString().trim());
-                int touchLeft=Integer.parseInt(touchLeftInput.getText().toString().trim());
                 if(delay<0||delay>3600||fs<20||fs>300||mfs<20||mfs>300||us<50||us>300||
-                   columns<1||columns>20||topBlank<0||topBlank>2000||bottomBlank<0||bottomBlank>2000||
-                   touchTop<-2000||touchTop>2000||touchLeft<-2000||touchLeft>2000) throw new Exception();
+                   columns<1||columns>20||topBlank<0||topBlank>2000||bottomBlank<0||bottomBlank>2000) throw new Exception();
 
                 prefs.edit().putInt("boot_delay_seconds",delay)
                         .putFloat("main_font_scale",fs/100f)
@@ -1735,8 +1605,8 @@ public class MainActivity extends AppCompatActivity {
                         .putInt("main_app_columns",columns)
                         .putInt("main_top_blank",topBlank)
                         .putInt("main_bottom_blank",bottomBlank)
-                        .putInt("touch_offset_top_px",touchTop)
-                        .putInt("touch_offset_left_px",touchLeft)
+                        .remove("touch_offset_top_px")
+                        .remove("touch_offset_left_px")
                         // 清理旧版本已经删除的弹窗左右距离配置。
                         .remove("dialog_left_margin_px")
                         .remove("dialog_right_margin_px")
@@ -1752,7 +1622,7 @@ public class MainActivity extends AppCompatActivity {
 
         dialogRef[0]=new AlertDialog.Builder(this).setTitle("界面选项").setView(root).create();
         back.setOnClickListener(v->dialogRef[0].dismiss());
-        showFixed1000x800(dialogRef[0]);
+        showFixed900x960(dialogRef[0]);
     }
 
     /** 添加 APP：全部/用户/系统分类，正方形图标+名称；APP 很多时可上下滚动。 */
@@ -1839,230 +1709,11 @@ public class MainActivity extends AppCompatActivity {
         refreshHolder[0]=refreshAppPicker;
         search.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int b,int c){} public void onTextChanged(CharSequence s,int a,int b,int c){refreshHolder[0].run();} public void afterTextChanged(android.text.Editable e){}});
         tabBtns[0].setBackgroundResource(R.drawable.card_selected);
-        showFixed1000x800(dialog);
+        showFixed900x960(dialog);
         try{ Window w=dialog.getWindow(); if(w!=null){android.graphics.Point screen=getRealScreenSize(); int h=Math.max(dp(420),screen.y-dp(TOP_BLANK+BOTTOM_BLANK)); w.setLayout(w.getAttributes().width,h);} }catch(Exception ignored){}
         refreshHolder[0].run();
     }
 
-    /**
-     * 窗口/ADB 测试面板。
-     * 这里专门用于车机调试，不再保留原来的“记事本”入口。
-     * APP 实际仍由系统 WindowManager 管理；“APP窗口区域”用当前选中 APP 的
-     * LaunchBounds 实时测试，左右宽度按钮每次点击都会重新提交窗口边界。
-     */
-    void showWindowTestDialog(){
-        final int screenW=getRealScreenSize().x;
-        final int screenH=getRealScreenSize().y;
-        final String pkg=selectedPackage;
-        final String name=selectedName==null?(pkg==null?"未选择 APP":getAppLabelSafe(pkg)):selectedName;
-        final int[] winW={Math.max(dp(420),Math.min(screenW-dp(160),pkg==null?screenW/2:Math.max(dp(420),screenW/2)))};
-        final int[] winX={Math.max(0,(screenW-winW[0])/2)};
-
-        LinearLayout root=new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(12),dp(8),dp(12),dp(10));
-
-        TextView target=text("当前 APP："+name,15);
-        target.setTextColor(Color.WHITE);
-        root.addView(target,new LinearLayout.LayoutParams(-1,dp(42)));
-
-        TextView adbState=text("ADB：未测试  127.0.0.1:5555",13);
-        adbState.setTextColor(Color.LTGRAY);
-        root.addView(adbState,new LinearLayout.LayoutParams(-1,dp(36)));
-
-        LinearLayout adbRow=new LinearLayout(this);
-        adbRow.setGravity(Gravity.CENTER_VERTICAL);
-        Button adbTest=button("测试 ADB");
-        Button adbClose=button("测试 ADB 关闭程序");
-        adbRow.addView(adbTest,new LinearLayout.LayoutParams(0,dp(48),1));
-        adbRow.addView(adbClose,new LinearLayout.LayoutParams(0,dp(48),1));
-        root.addView(adbRow,new LinearLayout.LayoutParams(-1,dp(54)));
-
-        TextView area=text("APP 窗口测试区域\n宽度："+winW[0]+"    左："+winX[0]+"    高度："+Math.max(1,screenH-TOP_BLANK-BOTTOM_BLANK),14);
-        area.setGravity(Gravity.CENTER);
-        area.setTextColor(Color.WHITE);
-        GradientDrawable areaBg=new GradientDrawable();
-        areaBg.setColor(Color.rgb(30,30,30));
-        areaBg.setStroke(dp(2),Color.GRAY);
-        area.setBackground(areaBg);
-        root.addView(area,new LinearLayout.LayoutParams(-1,dp(86)));
-
-        LinearLayout widthRow=new LinearLayout(this);
-        widthRow.setGravity(Gravity.CENTER_VERTICAL);
-        Button left=button("← 缩小");
-        Button right=button("扩大 →");
-        Button center=button("居中");
-        widthRow.addView(left,new LinearLayout.LayoutParams(0,dp(50),1));
-        widthRow.addView(center,new LinearLayout.LayoutParams(0,dp(50),1));
-        widthRow.addView(right,new LinearLayout.LayoutParams(0,dp(50),1));
-        root.addView(widthRow,new LinearLayout.LayoutParams(-1,dp(58)));
-
-        LinearLayout testRow1=new LinearLayout(this);
-        testRow1.setGravity(Gravity.CENTER_VERTICAL);
-        Button appShow=button("让 APP 显示在窗口");
-        Button split=button("分屏测试");
-        Button multi=button("多窗口测试");
-        testRow1.addView(appShow,new LinearLayout.LayoutParams(0,dp(50),1));
-        testRow1.addView(split,new LinearLayout.LayoutParams(0,dp(50),1));
-        testRow1.addView(multi,new LinearLayout.LayoutParams(0,dp(50),1));
-        root.addView(testRow1,new LinearLayout.LayoutParams(-1,dp(58)));
-
-        LinearLayout testRow2=new LinearLayout(this);
-        testRow2.setGravity(Gravity.CENTER_VERTICAL);
-        Button floating=button("悬浮窗口测试");
-        Button leftHalf=button("左半屏");
-        Button rightHalf=button("右半屏");
-        testRow2.addView(floating,new LinearLayout.LayoutParams(0,dp(50),1));
-        testRow2.addView(leftHalf,new LinearLayout.LayoutParams(0,dp(50),1));
-        testRow2.addView(rightHalf,new LinearLayout.LayoutParams(0,dp(50),1));
-        root.addView(testRow2,new LinearLayout.LayoutParams(-1,dp(58)));
-
-        TextView hint=text("说明：窗口宽度按钮会立即重新提交当前 APP 的窗口边界。\n车机是否真正支持自由调整大小，由车机 WindowManager/多窗口策略决定。",11);
-        hint.setTextColor(Color.LTGRAY);
-        root.addView(hint,new LinearLayout.LayoutParams(-1,dp(58)));
-
-        final Runnable updateArea=()->{
-            area.setText("APP 窗口测试区域\n宽度："+winW[0]+"    左："+winX[0]+"    高度："+Math.max(1,screenH-TOP_BLANK-BOTTOM_BLANK));
-        };
-        final Runnable resize=()->{
-            if(pkg==null||pkg.isEmpty()){
-                Toast.makeText(this,"请先在主界面选择 APP",Toast.LENGTH_SHORT).show();
-                return;
-            }
-            Intent intent=getPackageManager().getLaunchIntentForPackage(pkg);
-            if(intent==null){Toast.makeText(this,"无法启动所选 APP",Toast.LENGTH_SHORT).show();return;}
-            int h=Math.max(1,screenH-TOP_BLANK-BOTTOM_BLANK);
-            launchIntentWithBounds(intent,pkg,winX[0],TOP_BLANK,winW[0],h,-1,false,name);
-            updateArea.run();
-        };
-
-        left.setOnClickListener(v->{
-            int old=winW[0];
-            winW[0]=Math.max(dp(260),winW[0]-dp(120));
-            if(winW[0]!=old)winX[0]=Math.max(0,Math.min(winX[0]+dp(60),screenW-winW[0]));
-            resize.run();
-        });
-        right.setOnClickListener(v->{
-            int old=winW[0];
-            winW[0]=Math.min(screenW,winW[0]+dp(120));
-            if(winW[0]!=old)winX[0]=Math.max(0,Math.min(winX[0]-dp(60),screenW-winW[0]));
-            resize.run();
-        });
-        center.setOnClickListener(v->{winX[0]=Math.max(0,(screenW-winW[0])/2);resize.run();});
-        appShow.setOnClickListener(v->resize.run());
-        split.setOnClickListener(v->{
-            if(pkg==null||pkg.isEmpty()){Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show();return;}
-            winW[0]=screenW/2; winX[0]=0; resize.run();
-        });
-        multi.setOnClickListener(v->{
-            if(pkg==null||pkg.isEmpty()){Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show();return;}
-            winW[0]=Math.max(dp(420),screenW*2/3); winX[0]=Math.max(0,(screenW-winW[0])/2); resize.run();
-        });
-        floating.setOnClickListener(v->{
-            if(!hasOverlayPermission()){
-                Toast.makeText(this,"请先开启悬浮窗权限",Toast.LENGTH_SHORT).show();
-                try{startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+getPackageName())));}catch(Exception ignored){}
-                return;
-            }
-            restartFloatingServiceSafe();
-            Toast.makeText(this,"已执行悬浮窗口测试",Toast.LENGTH_SHORT).show();
-        });
-        leftHalf.setOnClickListener(v->{
-            if(pkg==null||pkg.isEmpty()){Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show();return;}
-            winW[0]=screenW/2;winX[0]=0;resize.run();
-        });
-        rightHalf.setOnClickListener(v->{
-            if(pkg==null||pkg.isEmpty()){Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show();return;}
-            winW[0]=screenW/2;winX[0]=screenW/2;resize.run();
-        });
-
-        adbTest.setOnClickListener(v->testLocalAdb(adbState));
-        adbClose.setOnClickListener(v->{
-            if(pkg==null||pkg.isEmpty()){Toast.makeText(this,"请先在主界面选择 APP",Toast.LENGTH_SHORT).show();return;}
-            new Thread(()->{
-                final String result=adbShell("am force-stop "+pkg);
-                runOnUiThread(()->{adbState.setText("ADB："+result);Toast.makeText(this,result,Toast.LENGTH_LONG).show();});
-            }).start();
-        });
-
-        AlertDialog dlg=new AlertDialog.Builder(this).setTitle("窗口 / ADB 测试").setView(root).setNegativeButton("关闭",null).create();
-        showFixed1000x800(dlg,dp(80));
-    }
-
-    void testLocalAdb(TextView state){
-        new Thread(()->{
-            String result;
-            Socket socket=null;
-            try{
-                socket=new Socket();
-                socket.connect(new InetSocketAddress("127.0.0.1",5555),1000);
-                result="已连接 127.0.0.1:5555";
-            }catch(Exception e){result="连接失败："+e.getMessage();}
-            finally{try{if(socket!=null)socket.close();}catch(Exception ignored){}}
-            final String r=result;
-            runOnUiThread(()->{state.setText("ADB："+r);Toast.makeText(this,r,Toast.LENGTH_SHORT).show();});
-        }).start();
-    }
-
-    /** 通过本机 ADB TCP 5555 执行一个 shell 命令。车机已开启 ADB 时用于测试。 */
-    String adbShell(String command){
-        Socket s=null;
-        try{
-            s=new Socket();
-            s.connect(new InetSocketAddress("127.0.0.1",5555),1500);
-            s.setSoTimeout(2500);
-            OutputStream out=s.getOutputStream();
-            InputStream in=s.getInputStream();
-            sendAdbPacket(out,"CNXN",0x01000000,4096,"host::\0");
-            int[] header=readAdbHeader(in);
-            if(header==null) return "ADB 连接成功，但 CNXN 握手失败";
-            String dest="shell:"+command+"\0";
-            sendAdbPacket(out,"OPEN",1,0,dest);
-            long end=System.currentTimeMillis()+2200;
-            byte[] buf=new byte[4096];
-            while(System.currentTimeMillis()<end){
-                int[] h=readAdbHeader(in);
-                if(h==null)break;
-                if(h[0]==0x45545257 || h[0]==0x45534c43){
-                    if(h[3]>0) readFully(in,Math.min(h[3],buf.length));
-                    if(h[0]==0x45534c43)break;
-                }else if(h[3]>0){readFully(in,Math.min(h[3],buf.length));}
-            }
-            return "ADB 已执行："+command;
-        }catch(Exception e){return "ADB 执行失败："+e.getMessage();}
-        finally{try{if(s!=null)s.close();}catch(Exception ignored){}}
-    }
-
-    void sendAdbPacket(OutputStream out,String cmd,int arg0,int arg1,String payload)throws IOException{
-        byte[] p=payload.getBytes(Charset.forName("UTF-8"));
-        byte[] c=cmd.getBytes(Charset.forName("US-ASCII"));
-        int command=(c[0]&255)|((c[1]&255)<<8)|((c[2]&255)<<16)|((c[3]&255)<<24);
-        int checksum=0;for(byte b:p)checksum+=(b&255);
-        byte[] h=new byte[24];writeIntLE(h,0,command);writeIntLE(h,4,arg0);writeIntLE(h,8,arg1);writeIntLE(h,12,p.length);writeIntLE(h,16,checksum);writeIntLE(h,20,command^0xffffffff);
-        out.write(h);out.write(p);out.flush();
-    }
-    int[] readAdbHeader(InputStream in)throws IOException{
-        byte[] h=new byte[24];if(!readFully(in,h))return null;
-        return new int[]{readIntLE(h,0),readIntLE(h,4),readIntLE(h,8),readIntLE(h,12),readIntLE(h,16),readIntLE(h,20)};
-    }
-    boolean readFully(InputStream in,byte[] b)throws IOException{int off=0;while(off<b.length){int n=in.read(b,off,b.length-off);if(n<0)return false;off+=n;}return true;}
-    void readFully(InputStream in,int n)throws IOException{byte[] b=new byte[Math.max(0,n)];readFully(in,b);}
-    int readIntLE(byte[] b,int o){return (b[o]&255)|((b[o+1]&255)<<8)|((b[o+2]&255)<<16)|((b[o+3]&255)<<24);}
-    void writeIntLE(byte[] b,int o,int v){b[o]=(byte)v;b[o+1]=(byte)(v>>8);b[o+2]=(byte)(v>>16);b[o+3]=(byte)(v>>24);}
-
-    void presetMenu(int index){
-        Preset p=presets.get(index);
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle(p.name).setItems(new String[]{"编辑预设","删除预设"},(d,w)->{
-            if(w==0)editPreset(index);else{presets.remove(index);savePresets();refresh();}
-        }).create();
-        showDialogBelowTop(dialog);
-    }
-
-    /**
-     * 悬浮窗口选位器：在屏幕上显示一个红色边框窗口。
-     * 用户可以拖动红框改变位置，在中央输入宽高并保存尺寸，点击“确定”后
-     * 自动把 x/y/w/h 回填到新建窗口预设编辑框。
-     */
     void showFloatingPresetPicker(){
         if(Build.VERSION.SDK_INT>=23 && !Settings.canDrawOverlays(this)){
             Toast.makeText(this,"请先开启“显示在其他应用上层”权限",Toast.LENGTH_SHORT).show();
@@ -2337,13 +1988,13 @@ public class MainActivity extends AppCompatActivity {
         content.setOrientation(LinearLayout.VERTICAL);
         content.addView(box,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout actionRow=new LinearLayout(this);
-        actionRow.setGravity(Gravity.CENTER_VERTICAL);
+        actionRow.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
         actionRow.setPadding(dp(8),dp(6),dp(8),dp(6));
         Button copy=button("复制"); Button paste=button("粘贴"); Button cancel=button("取消"); Button save=button("保存");
-        actionRow.addView(copy,new LinearLayout.LayoutParams(0,dp(48),1));
-        actionRow.addView(paste,new LinearLayout.LayoutParams(0,dp(48),1));
-        actionRow.addView(cancel,new LinearLayout.LayoutParams(0,dp(48),1));
-        actionRow.addView(save,new LinearLayout.LayoutParams(0,dp(48),1));
+        actionRow.addView(copy,new LinearLayout.LayoutParams(dp(100),dp(50)));
+        actionRow.addView(paste,new LinearLayout.LayoutParams(dp(100),dp(50)));
+        actionRow.addView(cancel,new LinearLayout.LayoutParams(dp(100),dp(50)));
+        actionRow.addView(save,new LinearLayout.LayoutParams(dp(100),dp(50)));
         content.addView(actionRow,new LinearLayout.LayoutParams(-1,dp(62)));
 
         final Button[] modeButtonsHolder=modeButtons;
@@ -2366,7 +2017,7 @@ public class MainActivity extends AppCompatActivity {
             if(index<0) presets.add(p); else presets.set(index,p);
             savePresets(); refresh(); dialog.dismiss();
         });
-        showFixed1000x800(dialog,dp(80));
+        showFixed900x960(dialog);
     }
 
     // 三区域车机按一个超宽 Display 处理，不再创建 Presentation。
@@ -2417,7 +2068,7 @@ public class MainActivity extends AppCompatActivity {
          .append(hasUsageAccess()?"✓ 使用情况访问\n":"✗ 使用情况访问\n")
          .append(hasAllFilesPermission()?"✓ 所有文件访问\n":"✗ 所有文件访问\n")
          .append(Build.VERSION.SDK_INT<23 || Settings.System.canWrite(this)?"✓ 修改系统设置\n":"✗ 修改系统设置\n")
-         .append("\n触控纠正：上=").append(touchOffsetTop()).append("px，左=").append(touchOffsetLeft()).append("px");
+         .append("\n触控纠正：X=").append(touchCorrectionX()).append("px，Y=").append(touchCorrectionY()).append("px");
 
         TextView msg=text(s.toString(),11);
         msg.setPadding(dp(4),dp(4),dp(4),dp(4));
@@ -2454,7 +2105,7 @@ public class MainActivity extends AppCompatActivity {
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("权限与诊断")
                 .setView(diagBox).create();
         back.setOnClickListener(v->dialog.dismiss());
-        showFixed1000x800(dialog);
+        showFixed900x960(dialog);
     }
 
     JSONObject buildConfigJson(){
@@ -2677,11 +2328,11 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout actionBar=new LinearLayout(this);
         actionBar.setOrientation(LinearLayout.HORIZONTAL);
-        actionBar.setGravity(Gravity.CENTER_VERTICAL);
+        actionBar.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
         Button back=button("返回");
         Button save=button("保存");
-        actionBar.addView(back,new LinearLayout.LayoutParams(0,dp(50),1));
-        actionBar.addView(save,new LinearLayout.LayoutParams(0,dp(50),1));
+        actionBar.addView(back,new LinearLayout.LayoutParams(dp(100),dp(50)));
+        actionBar.addView(save,new LinearLayout.LayoutParams(dp(100),dp(50)));
         LinearLayout.LayoutParams actionBarLp=new LinearLayout.LayoutParams(-1,dp(58));
         actionBarLp.topMargin=dp(18);
         box.addView(actionBar,actionBarLp);
@@ -2695,7 +2346,7 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this,"自动启动项目已保存",Toast.LENGTH_SHORT).show();
             dialog.dismiss();
         });
-        showFixed1000x800(dialog);
+        showFixed900x960(dialog);
     }
 
     JSONArray loadAutoTasks(){
@@ -2716,7 +2367,7 @@ public class MainActivity extends AppCompatActivity {
             String[] items=new String[presets.size()+1]; items[0]="直接启动（无窗口预设）";
             for(int i=0;i<presets.size();i++) items[i+1]=presets.get(i).name;
             AlertDialog dialog=new AlertDialog.Builder(this).setTitle("选择窗口预设").setItems(items,(d,w)->{preset[0]=w-1;presetPick.setText(w==0?items[0]:items[w]);}).create();
-            showFixed1000x800(dialog);
+            showFixed900x960(dialog);
         });
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("添加自动启动任务").setView(box)
                 .setNegativeButton("取消",null).setPositiveButton("添加",(d,w)->{
@@ -2726,7 +2377,19 @@ public class MainActivity extends AppCompatActivity {
                         tasks[0].put(o); refresh.run();
                     }catch(Exception ignored){}
                 }).create();
-        showFixed1000x800(dialog);
+        showFixed900x960(dialog);
+    }
+
+    /** 5 点触控校准：四角+中心，取平均误差。 */
+    void showTouchCalibrationDialog(){
+        final int W=900,H=960; final int[][] pts={{110,130},{790,130},{450,480},{110,820},{790,820}};
+        final int[] sx={0},sy={0},n={0},cur={0};
+        class CV extends View{ Paint p=new Paint(1); CV(Context c){super(c);setBackgroundColor(Color.rgb(18,18,18));setClickable(true);} int px(int x){return x*getWidth()/W;} int py(int y){return y*getHeight()/H;}
+            protected void onDraw(Canvas c){p.setTextAlign(Paint.Align.CENTER);p.setColor(Color.WHITE);p.setTextSize(dp(20));c.drawText("请依次点击 5 个白色点位",getWidth()/2f,dp(42),p);p.setTextSize(dp(14));p.setColor(Color.LTGRAY);c.drawText("完成后点击右下角“确定”保存",getWidth()/2f,dp(66),p);for(int i=0;i<pts.length;i++){p.setColor(i<cur[0]?Color.GREEN:(i==cur[0]?Color.WHITE:Color.GRAY));c.drawCircle(px(pts[i][0]),py(pts[i][1]),dp(18),p);p.setColor(Color.DKGRAY);c.drawCircle(px(pts[i][0]),py(pts[i][1]),dp(6),p);}}
+            public boolean onTouchEvent(MotionEvent e){if(e.getAction()!=MotionEvent.ACTION_UP||cur[0]>=pts.length)return true;int x=px(pts[cur[0]][0]),y=py(pts[cur[0]][1]);sx[0]+=Math.round(e.getX()-x);sy[0]+=Math.round(e.getY()-y);n[0]++;cur[0]++;invalidate();return true;}}
+        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);CV cv=new CV(this);root.addView(cv,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout actions=new LinearLayout(this);actions.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);Button cancel=button("取消"),retry=button("重试"),ok=button("确定");actions.addView(cancel,new LinearLayout.LayoutParams(100,50));actions.addView(retry,new LinearLayout.LayoutParams(100,50));actions.addView(ok,new LinearLayout.LayoutParams(100,50));root.addView(actions,new LinearLayout.LayoutParams(-1,58));
+        AlertDialog d=new AlertDialog.Builder(this).setTitle("触控纠正").setView(root).create();cancel.setOnClickListener(v->d.dismiss());retry.setOnClickListener(v->{sx[0]=sy[0]=n[0]=cur[0]=0;cv.invalidate();});ok.setOnClickListener(v->{if(n[0]<5){Toast.makeText(this,"请先完成全部 5 个点位",Toast.LENGTH_SHORT).show();return;}prefs.edit().putInt("touch_correction_x",Math.round(sx[0]/(float)n[0])).putInt("touch_correction_y",Math.round(sy[0]/(float)n[0])).remove("touch_offset_top_px").remove("touch_offset_left_px").apply();Toast.makeText(this,"触控纠正已保存",Toast.LENGTH_SHORT).show();d.dismiss();});showFixed900x960(d);
     }
 
     interface AppChoice { void onChoose(AppItem item); }
@@ -2773,7 +2436,7 @@ public class MainActivity extends AppCompatActivity {
         box.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("选择 APP").setView(box).setNegativeButton("关闭",null).create();
         dialogRef[0]=dialog;
-        showFixed1000x800(dialog);
+        showFixed900x960(dialog);
         try{Window w=dialog.getWindow();if(w!=null){android.graphics.Point screen=getRealScreenSize();w.setLayout(w.getAttributes().width,Math.max(dp(420),screen.y-dp(TOP_BLANK+BOTTOM_BLANK)));}}catch(Exception ignored){}
     }
 
