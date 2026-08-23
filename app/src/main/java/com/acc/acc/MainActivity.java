@@ -984,7 +984,20 @@ public class MainActivity extends AppCompatActivity {
         importButton.setOnClickListener(v->importConfig());
         box.addView(importButton,new LinearLayout.LayoutParams(-1,dp(48)));
 
-        settingsDialog[0]=new AlertDialog.Builder(this).setTitle("设置").setView(box).setNegativeButton("关闭",null).create();
+        ScrollView settingsScroll=new ScrollView(this);
+        settingsScroll.setFillViewport(true);
+        settingsScroll.addView(box,new ScrollView.LayoutParams(-1,-2));
+        LinearLayout settingsRoot=new LinearLayout(this);
+        settingsRoot.setOrientation(LinearLayout.VERTICAL);
+        settingsRoot.addView(settingsScroll,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout settingsActions=new LinearLayout(this);
+        settingsActions.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        settingsActions.setPadding(dp(8),dp(8),dp(8),dp(20));
+        Button settingsClose=button("关闭");
+        settingsActions.addView(settingsClose,new LinearLayout.LayoutParams(dp(100),dp(50)));
+        settingsRoot.addView(settingsActions,new LinearLayout.LayoutParams(-1,dp(78)));
+        settingsDialog[0]=new AlertDialog.Builder(this).setTitle("设置").setView(settingsRoot).create();
+        settingsClose.setOnClickListener(v->settingsDialog[0].dismiss());
         showFixed900x960(settingsDialog[0]);
     }
 
@@ -1665,7 +1678,17 @@ public class MainActivity extends AppCompatActivity {
         scroll.addView(appRows,new ScrollView.LayoutParams(-1,-2));
         box.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
 
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("添加 APP").setView(box).setNegativeButton("关闭",null).create();
+        LinearLayout addAppRoot=new LinearLayout(this);
+        addAppRoot.setOrientation(LinearLayout.VERTICAL);
+        addAppRoot.addView(box,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout addAppActions=new LinearLayout(this);
+        addAppActions.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        addAppActions.setPadding(dp(8),dp(8),dp(8),dp(20));
+        Button addAppClose=button("关闭");
+        addAppActions.addView(addAppClose,new LinearLayout.LayoutParams(dp(100),dp(50)));
+        addAppRoot.addView(addAppActions,new LinearLayout.LayoutParams(-1,dp(78)));
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("添加 APP").setView(addAppRoot).create();
+        addAppClose.setOnClickListener(v->dialog.dismiss());
         Runnable refreshAppPicker=()->{
             appRows.removeAllViews();
             String q=search.getText().toString().trim().toLowerCase(Locale.ROOT);
@@ -1866,31 +1889,6 @@ public class MainActivity extends AppCompatActivity {
     // 新建/编辑预设统一使用手动输入。
     // 三区域车机部分设备只暴露一个超宽 Display（例如 6480×960），
     // 因此不再依赖 Presentation/多 Display 全屏框选。
-    void presetMenu(int index){
-        if(index < 0 || index >= presets.size()) return;
-        Preset p=presets.get(index);
-        final String[] items={"编辑窗口预设","删除窗口预设"};
-        new AlertDialog.Builder(this)
-                .setTitle(p.name)
-                .setItems(items,(dialog,which)->{
-                    if(which==0){
-                        editPreset(index);
-                    }else{
-                        new AlertDialog.Builder(this)
-                                .setTitle("删除窗口预设")
-                                .setMessage("确定删除“"+p.name+"”吗？")
-                                .setNegativeButton("取消",null)
-                                .setPositiveButton("删除",(d,w)->{
-                                    if(index>=0 && index<presets.size()){
-                                        presets.remove(index);
-                                        savePresets();
-                                        refresh();
-                                    }
-                                }).show();
-                    }
-                }).show();
-    }
-
     void editPreset(int index){
         if(index<0){
             android.graphics.Point rs=getRealScreenSize();
@@ -1965,7 +1963,7 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout categoryRow=new LinearLayout(this);
         categoryRow.setOrientation(LinearLayout.HORIZONTAL);
         categoryRow.setPadding(dp(115),0,dp(4),dp(4));
-        Button[] categoryButtons=new Button[4];
+        Button[] categoryButtons=new Button[3];
         final int[] categoryHolder={old.category};
         String[] categoryNames={"左","中","右"};
         for(int c=0;c<3;c++){
@@ -1976,7 +1974,7 @@ public class MainActivity extends AppCompatActivity {
             if(categoryHolder[0]==c) cb.setBackgroundResource(R.drawable.card_selected);
             cb.setOnClickListener(v->{
                 categoryHolder[0]=cc;
-                for(Button q:categoryButtons) q.setBackgroundResource(q==v?R.drawable.card_selected:R.drawable.button);
+                for(Button q:categoryButtons) if(q!=null) q.setBackgroundResource(q==v?R.drawable.card_selected:R.drawable.button);
             });
             categoryRow.addView(cb,new LinearLayout.LayoutParams(0,dp(42),1));
         }
@@ -2011,7 +2009,10 @@ public class MainActivity extends AppCompatActivity {
         // 自定义底部按钮：复制、粘贴放在“取消”左边，方便整套面板参数快速导入。
         LinearLayout content=new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.addView(box,new LinearLayout.LayoutParams(-1,0,1));
+        ScrollView presetScroll=new ScrollView(this);
+        presetScroll.setFillViewport(true);
+        presetScroll.addView(box,new ScrollView.LayoutParams(-1,-2));
+        content.addView(presetScroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout actionRow=new LinearLayout(this);
         actionRow.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
         actionRow.setPadding(dp(8),dp(6),dp(8),dp(6));
@@ -2104,28 +2105,24 @@ public class MainActivity extends AppCompatActivity {
         diagBox.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
 
         LinearLayout actionRow=new LinearLayout(this);
-        actionRow.setOrientation(LinearLayout.VERTICAL);
-        actionRow.setPadding(dp(4),dp(6),dp(4),0);
-        Button overlayButton=button(hasOverlayPermission()?"悬浮窗权限已开启（重新授权）":"开启悬浮窗权限");
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        actionRow.setPadding(dp(4),dp(6),dp(4),dp(20));
+        Button overlayButton=button(hasOverlayPermission()?"悬浮窗权限已开启":"开启悬浮窗权限");
         overlayButton.setOnClickListener(v->openOverlaySettings());
-        actionRow.addView(overlayButton,new LinearLayout.LayoutParams(-1,dp(48)));
+
+        Button accessibilityButton=button(isAccessibilityServiceEnabled()?"无障碍已开启":"开启无障碍服务");
+        accessibilityButton.setOnClickListener(v->openAccessibilitySettings());
 
         Button checkButton=button("权限检查");
         checkButton.setOnClickListener(v->{
-            if(Build.VERSION.SDK_INT>=23 && !hasOverlayPermission()){
-                openOverlaySettings();
-            }else{
-                requestRuntimePermissions();
-                Toast.makeText(this,"已重新检查并请求可申请的权限",Toast.LENGTH_SHORT).show();
-            }
+            if(Build.VERSION.SDK_INT>=23 && !hasOverlayPermission()){ openOverlaySettings(); }
+            else { requestRuntimePermissions(); Toast.makeText(this,"已重新检查并请求可申请的权限",Toast.LENGTH_SHORT).show(); }
         });
-        Button accessibilityButton=button(isAccessibilityServiceEnabled()?"无障碍服务已开启（重新设置）":"开启无障碍服务");
-        accessibilityButton.setOnClickListener(v->openAccessibilitySettings());
-        actionRow.addView(accessibilityButton,new LinearLayout.LayoutParams(-1,dp(48)));
-        actionRow.addView(checkButton,new LinearLayout.LayoutParams(-1,dp(48)));
         Button back=button("返回");
-        actionRow.addView(back,new LinearLayout.LayoutParams(-1,dp(48)));
-        diagBox.addView(actionRow,new LinearLayout.LayoutParams(-1,dp(210)));
+        Button[] diagButtons={overlayButton,accessibilityButton,checkButton,back};
+        for(Button b:diagButtons) actionRow.addView(b,new LinearLayout.LayoutParams(0,dp(50),1));
+        diagBox.addView(actionRow,new LinearLayout.LayoutParams(-1,dp(80)));
 
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("权限与诊断")
                 .setView(diagBox).create();
@@ -2462,7 +2459,6 @@ public class MainActivity extends AppCompatActivity {
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("选择 APP").setView(box).setNegativeButton("关闭",null).create();
         dialogRef[0]=dialog;
         showFixed900x960(dialog);
-        try{Window w=dialog.getWindow();if(w!=null){android.graphics.Point screen=getRealScreenSize();w.setLayout(w.getAttributes().width,Math.max(dp(420),screen.y-dp(TOP_BLANK+BOTTOM_BLANK)));}}catch(Exception ignored){}
     }
 
     /**
