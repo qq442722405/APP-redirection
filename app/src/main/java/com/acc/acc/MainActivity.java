@@ -1889,6 +1889,31 @@ public class MainActivity extends AppCompatActivity {
     // 新建/编辑预设统一使用手动输入。
     // 三区域车机部分设备只暴露一个超宽 Display（例如 6480×960），
     // 因此不再依赖 Presentation/多 Display 全屏框选。
+    void presetMenu(int index){
+        if(index < 0 || index >= presets.size()) return;
+        Preset p=presets.get(index);
+        final String[] items={"编辑窗口预设","删除窗口预设"};
+        new AlertDialog.Builder(this)
+                .setTitle(p.name)
+                .setItems(items,(dialog,which)->{
+                    if(which==0){
+                        editPreset(index);
+                    }else{
+                        new AlertDialog.Builder(this)
+                                .setTitle("删除窗口预设")
+                                .setMessage("确定删除“"+p.name+"”吗？")
+                                .setNegativeButton("取消",null)
+                                .setPositiveButton("删除",(d,w)->{
+                                    if(index>=0 && index<presets.size()){
+                                        presets.remove(index);
+                                        savePresets();
+                                        refresh();
+                                    }
+                                }).show();
+                    }
+                }).show();
+    }
+
     void editPreset(int index){
         if(index<0){
             android.graphics.Point rs=getRealScreenSize();
