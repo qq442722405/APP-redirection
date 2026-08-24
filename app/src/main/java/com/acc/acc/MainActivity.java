@@ -2128,7 +2128,7 @@ public class MainActivity extends AppCompatActivity {
          .append(hasOverlayPermission()?"✓ 悬浮窗\n":"✗ 悬浮窗\n")
          .append(hasUsageAccess()?"✓ 使用情况访问\n":"✗ 使用情况访问\n")
          .append(hasAllFilesPermission()?"✓ 所有文件访问\n":"✗ 所有文件访问\n")
-         .append(Build.VERSION.SDK_INT<23 || Settings.System.canWrite(this)?"✓ 修改系统设置\n":"✗ 修改系统设置\n")
+         .append(Build.VERSION.SDK_INT<23 || Settings.System.canWrite(this)?"✓ 修改系统设置\n":"✗ 修改系统设置\n");
 
 
         TextView msg=text(s.toString(),11);
