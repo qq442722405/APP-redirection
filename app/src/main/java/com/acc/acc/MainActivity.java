@@ -33,6 +33,14 @@ public class MainActivity extends AppCompatActivity {
 
     SharedPreferences prefs;
     LinearLayout presetRow, appGrid;
+    FrameLayout mainFrame;
+    LinearLayout dragDeleteZone, dragCancelZone;
+    View draggingView;
+    boolean draggingItem=false, dragCancelled=false;
+    int draggingType=-1, draggingIndex=-1;
+    float dragStartRawX, dragStartRawY;
+    Handler dragHandler=new Handler(Looper.getMainLooper());
+    Runnable dragLongPress;
     int presetCategoryFilter=0; // 0=左, 1=中, 2=右
     Button[] presetCategoryButtons;
     TextView info;
@@ -42,7 +50,6 @@ public class MainActivity extends AppCompatActivity {
 
     // 容器本身固定避让车机原生区域
     static final int TOP_BLANK=80;
-    static final int BOTTOM_BLANK=120;
 
     ArrayList<AppItem> apps=new ArrayList<>();
     ArrayList<Preset> presets=new ArrayList<>();
@@ -98,9 +105,6 @@ public class MainActivity extends AppCompatActivity {
     float fontScale(){
         return mainUiContext ? mainFontScale() : menuFontScale();
     }
-
-    int touchCorrectionX(){ return prefs==null?0:prefs.getInt("touch_correction_x",0); }
-    int touchCorrectionY(){ return prefs==null?0:prefs.getInt("touch_correction_y",0); }
 
     int dp(int v){
         return (int)(v*getResources().getDisplayMetrics().density*uiScale()+.5f);
@@ -271,7 +275,6 @@ public class MainActivity extends AppCompatActivity {
         if(!prefs.contains("ui_scale")) defaults.putFloat("ui_scale",1.30f);
         if(!prefs.contains("main_app_columns")) defaults.putInt("main_app_columns",10);
         if(!prefs.contains("main_top_blank")) defaults.putInt("main_top_blank",80);
-        if(!prefs.contains("main_bottom_blank")) defaults.putInt("main_bottom_blank",120);
         if(!prefs.contains("boot_delay_seconds")) defaults.putInt("boot_delay_seconds",0);
         if(!prefs.contains("hide_main_background_acc")) defaults.putBoolean("hide_main_background_acc",true);
         // 默认窗口预设直接写入 SharedPreferences；不保存任何默认 APP 包名。
@@ -430,6 +433,7 @@ public class MainActivity extends AppCompatActivity {
         getWindow().setNavigationBarColor(Color.BLACK);
 
         FrameLayout frame=new FrameLayout(this);
+        mainFrame=frame;
         frame.setBackgroundColor(Color.BLACK);
 
         boolean hideBackgroundAcc=prefs.getBoolean("hide_main_background_acc",true);
@@ -452,8 +456,8 @@ public class MainActivity extends AppCompatActivity {
         mainUiContext=true;
         // 主界面固定从顶部 80px 以下开始，避开车机状态栏/触控保留区。
         int topBlank=prefs.getInt("main_top_blank",TOP_BLANK);
-        int bottomBlank=prefs.getInt("main_bottom_blank",BOTTOM_BLANK);
-        root.setPadding(dp(12),dp(topBlank),dp(12),dp(bottomBlank));
+        // 主界面不再保留底部 120px 限制；只保留顶部 80px。
+        root.setPadding(dp(12),dp(topBlank),dp(12),0);
         ScrollView mainScroll=new ScrollView(this);
         mainScroll.setFillViewport(true);
         mainScroll.setVerticalScrollBarEnabled(false);
@@ -609,6 +613,112 @@ public class MainActivity extends AppCompatActivity {
      * 保持主界面控件对象不变，只重建两个列表，避免重新 setContentView
      * 导致车机 ROM 出现焦点/触控坐标漂移。
      */
+    void showDragZones(){
+        hideDragZones();
+        if(mainFrame==null) return;
+        int w=dp(180), h=Math.max(dp(180),getRealScreenSize().y/2);
+        dragDeleteZone=new LinearLayout(this); dragDeleteZone.setGravity(Gravity.CENTER); dragDeleteZone.setBackgroundColor(0xFF8B1A1A);
+        TextView dt=mainText("删除",32); dt.setGravity(Gravity.CENTER); dragDeleteZone.addView(dt,new LinearLayout.LayoutParams(-1,-1));
+        dragCancelZone=new LinearLayout(this); dragCancelZone.setGravity(Gravity.CENTER); dragCancelZone.setBackgroundColor(0xFF444444);
+        TextView ct=mainText("取消",32); ct.setGravity(Gravity.CENTER); dragCancelZone.addView(ct,new LinearLayout.LayoutParams(-1,-1));
+        FrameLayout.LayoutParams dl=new FrameLayout.LayoutParams(w,h,Gravity.RIGHT|Gravity.TOP); dl.topMargin=0;
+        FrameLayout.LayoutParams cl=new FrameLayout.LayoutParams(w,h,Gravity.RIGHT|Gravity.BOTTOM); cl.bottomMargin=0;
+        mainFrame.addView(dragDeleteZone,dl); mainFrame.addView(dragCancelZone,cl);
+    }
+    void hideDragZones(){
+        if(mainFrame!=null){
+            if(dragDeleteZone!=null){mainFrame.removeView(dragDeleteZone);dragDeleteZone=null;}
+            if(dragCancelZone!=null){mainFrame.removeView(dragCancelZone);dragCancelZone=null;}
+        }
+        draggingView=null; draggingItem=false; dragCancelled=false; draggingType=-1; draggingIndex=-1;
+    }
+    void beginMainDrag(View v,int type,int index){
+        if(draggingItem) return;
+        draggingItem=true; draggingView=v; draggingType=type; draggingIndex=index; dragCancelled=false;
+        v.setAlpha(.70f); v.setScaleX(1.04f); v.setScaleY(1.04f);
+        showDragZones();
+    }
+    void finishMainDrag(boolean delete){
+        if(!draggingItem) return;
+        View v=draggingView;
+        if(v!=null){v.setAlpha(1f);v.setScaleX(1f);v.setScaleY(1f);v.setTranslationX(0);v.setTranslationY(0);}
+        int type=draggingType, index=draggingIndex;
+        if(delete){
+            if(type==0 && index>=0 && index<presets.size()){presets.remove(index);savePresets();}
+            if(type==1 && index>=0 && index<apps.size()){
+                AppItem a=apps.remove(index); if(a.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;prefs.edit().remove("selected_control_package").apply();} saveApps();
+            }
+        }else if(!dragCancelled){
+            reorderMainItem(type,index,draggingView);
+        }
+        hideDragZones();
+        refresh();
+    }
+    void reorderMainItem(int type,int oldIndex,View v){
+        if(v==null) return;
+        float centerX=v.getX()+v.getWidth()/2f;
+        if(type==0){
+            int target=oldIndex;
+            for(int i=0;i<presetRow.getChildCount();i++){
+                View c=presetRow.getChildAt(i); if(c==v) continue;
+                if(centerX > c.getX()+c.getWidth()/2f) target=i;
+            }
+            int visibleIndex=0; for(int i=0;i<presets.size();i++){if(presets.get(i).category==presetCategoryFilter){if(visibleIndex>=target){target=i;break;}visibleIndex++;}}
+            target=Math.max(0,Math.min(presets.size()-1,target));
+            if(oldIndex!=target){Preset p=presets.remove(oldIndex);if(target>oldIndex)target--;presets.add(target,p);savePresets();}
+        }else if(type==1){
+            int target=oldIndex;
+            int columns=Math.max(1,prefs.getInt("main_app_columns",4));
+            int col=Math.max(0,Math.round((v.getX()+v.getWidth()/2f)/Math.max(1,v.getWidth()+dp(8))));
+            int row=Math.max(0,Math.round((v.getY()+v.getHeight()/2f)/Math.max(1,v.getHeight()+dp(8))));
+            target=Math.min(apps.size()-1,row*columns+col);
+            if(oldIndex!=target){AppItem a=apps.remove(oldIndex);if(target>oldIndex)target--;apps.add(Math.max(0,Math.min(target,apps.size())),a);saveApps();}
+        }
+    }
+    View.OnTouchListener mainDragTouch(int type,int index){
+        return (v,e)->{
+            switch(e.getActionMasked()){
+                case MotionEvent.ACTION_DOWN:
+                    dragStartRawX=e.getRawX(); dragStartRawY=e.getRawY();
+                    if(dragLongPress!=null) dragHandler.removeCallbacks(dragLongPress);
+                    final View fv=v; final int ft=type, fi=index;
+                    dragLongPress=()->beginMainDrag(fv,ft,fi);
+                    dragHandler.postDelayed(dragLongPress,420);
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    float dx=e.getRawX()-dragStartRawX, dy=e.getRawY()-dragStartRawY;
+                    if(!draggingItem && (Math.abs(dx)>dp(14)||Math.abs(dy)>dp(14))){dragHandler.removeCallbacks(dragLongPress);return true;}
+                    if(draggingItem){
+                        v.setTranslationX(dx); v.setTranslationY(dy);
+                        int sw=getRealScreenSize().x, sh=getRealScreenSize().y;
+                        if(e.getRawX()>sw-dp(190)){
+                            dragCancelled=e.getRawY()>sh/2f;
+                            if(dragDeleteZone!=null)dragDeleteZone.setAlpha(dragCancelled?.45f:1f);
+                            if(dragCancelZone!=null)dragCancelZone.setAlpha(dragCancelled?1f:.45f);
+                        }else{
+                            dragCancelled=false;
+                            if(dragDeleteZone!=null)dragDeleteZone.setAlpha(.75f);
+                            if(dragCancelZone!=null)dragCancelZone.setAlpha(.75f);
+                        }
+                    }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    dragHandler.removeCallbacks(dragLongPress);
+                    if(!draggingItem && e.getActionMasked()==MotionEvent.ACTION_UP){ v.performClick(); return true; }
+                    if(draggingItem){
+                        boolean overRight=e.getRawX()>getRealScreenSize().x-dp(190);
+                        boolean delete=overRight && e.getRawY()<getRealScreenSize().y/2f;
+                        boolean cancel=overRight && !delete;
+                        if(cancel) dragCancelled=true;
+                        finishMainDrag(delete);
+                    }
+                    return true;
+            }
+            return true;
+        };
+    }
+
     void refresh(){
         mainUiContext=true;
         if(presetRow!=null){
@@ -641,13 +751,12 @@ public class MainActivity extends AppCompatActivity {
                 card.addView(pos,new LinearLayout.LayoutParams(-1,dp(40)));
 
                 card.setOnClickListener(v->{
-                    if(selectedPackage!=null){
-                        launchApp(p);
-                    }else{
-                        presetMenu(index);
+                    if(!draggingItem){
+                        if(selectedPackage!=null) launchApp(p);
+                        else editPreset(index);
                     }
                 });
-                card.setOnLongClickListener(v->{presetMenu(index);return true;});
+                card.setOnTouchListener(mainDragTouch(0,index));
 
                 // 窗口预设选框固定为 200×30dp，超出屏幕后横向滑动选择。
                 LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(200),dp(180));
@@ -701,26 +810,14 @@ public class MainActivity extends AppCompatActivity {
                     name.setEllipsize(android.text.TextUtils.TruncateAt.END);
                     tile.addView(name,new LinearLayout.LayoutParams(-1,dp(66)));
 
-                    final GestureDetector appGesture=new GestureDetector(this,new GestureDetector.SimpleOnGestureListener(){
-                        @Override public boolean onDown(MotionEvent e){return true;}
-                        @Override public boolean onSingleTapConfirmed(MotionEvent e){
-                            selectedPackage=item.pkg; selectedName=item.name; prefs.edit().putString("selected_control_package",item.pkg).apply(); info.setText("当前 APP："+item.name); refresh();
-                            return true;
-                        }
-                        @Override public boolean onDoubleTap(MotionEvent e){
-                            selectedPackage=item.pkg; selectedName=item.name; prefs.edit().putString("selected_control_package",item.pkg).apply(); info.setText("当前 APP："+item.name);
-                            launchAppDirect(item.pkg,item.name);
-                            return true;
-                        }
-                        @Override public void onLongPress(MotionEvent e){
-                            new AlertDialog.Builder(MainActivity.this).setTitle(item.name)
-                                .setItems(new String[]{"删除 APP"},(d,w)->{if(w==0){
-                                    if(item.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;prefs.edit().remove("selected_control_package").apply();}
-                                    apps.remove(itemIndex);saveApps();refresh();
-                                }}).show();
+                    tile.setOnClickListener(v->{
+                        if(!draggingItem){
+                            selectedPackage=item.pkg; selectedName=item.name;
+                            prefs.edit().putString("selected_control_package",item.pkg).apply();
+                            info.setText("当前 APP："+item.name); refresh();
                         }
                     });
-                    tile.setOnTouchListener((v,e)->appGesture.onTouchEvent(e));
+                    tile.setOnTouchListener(mainDragTouch(1,itemIndex));
                     LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(200),dp(180));
                     lp.setMargins(dp(4),dp(4),dp(4),dp(4));
                     row.addView(tile,lp);
@@ -802,98 +899,31 @@ public class MainActivity extends AppCompatActivity {
      * 左上角就是它实际接收触摸事件的左上角，视觉位置和点击位置保持一致。
      * 同时限制左右宽度，避免超宽车机上弹窗铺满整个屏幕。
      */
+    /**
+     * 所有弹窗统一采用与主界面相同的 Window 坐标体系：不做任何触摸坐标偏移，
+     * 不使用 FLAG_LAYOUT_IN_SCREEN，也不通过 Window.Callback 改写 MotionEvent。
+     * 这样主界面、设置页、APP选择、预设编辑等窗口使用同一套触控坐标。
+     */
     void placeDialogBelowTop(Dialog dialog){
         if(dialog==null || dialog.getWindow()==null) return;
         Window w=dialog.getWindow();
         try{
-            // 关键修复：不再使用 TOP/LEFT + lp.x/lp.y。
-            // 车机超宽屏上 Window 坐标与触摸坐标可能存在状态栏/安全区偏移，
-            // 这是之前所有弹窗点击位置偏移的主要来源。
             w.clearFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
             w.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
             w.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
             w.setBackgroundDrawable(new ColorDrawable(Color.rgb(24,24,24)));
-            if(Build.VERSION.SDK_INT>=19){
-                w.getDecorView().setSystemUiVisibility(0);
-            }
-
-            android.graphics.Point screen=getRealScreenSize();
-            int left=Math.max(0,prefs.getInt("dialog_left_margin_px",40));
-            int right=Math.max(0,prefs.getInt("dialog_right_margin_px",40));
-
-            // 弹窗默认缩小：不再占满超宽屏；同时保留设置中的左右边距。
-            int available=Math.max(dp(320),screen.x-left-right);
-            int maxWidth=(int)(screen.x*0.70f);
-            maxWidth=Math.min(maxWidth,dp(1200));
-            int width=Math.min(available,maxWidth);
-            width=Math.max(dp(320),width);
-            width=Math.min(width,Math.max(dp(320),screen.x-dp(20)));
-
-            // 统一居中，不设置 lp.x/lp.y。这样 Dialog 的绘制坐标和触摸坐标
-            // 都由同一个 Window 管理，避免车机 ROM 造成上下/左右触控偏移。
+            if(Build.VERSION.SDK_INT>=19) w.getDecorView().setSystemUiVisibility(0);
             WindowManager.LayoutParams lp=w.getAttributes();
-            lp.gravity=Gravity.CENTER;
-            // 触控纠正不能再通过 lp.x/lp.y 移动整个弹窗。
-            // 那样只会改变视觉位置，车机 ROM 的触控坐标偏移依然存在。
-            // 这里保持弹窗视觉位置不变，真正修正 Window.Callback 收到的触摸坐标。
-            lp.x=0;
-            lp.y=0;
-            lp.width=width;
-            lp.height=WindowManager.LayoutParams.WRAP_CONTENT;
+            lp.gravity=Gravity.TOP|Gravity.CENTER_HORIZONTAL;
+            lp.x=0; lp.y=0;
+            lp.width=Math.min(dp(900),Math.max(dp(320),getRealScreenSize().x-dp(20)));
+            lp.height=Math.min(dp(960),Math.max(dp(420),getRealScreenSize().y));
             lp.dimAmount=0.55f;
             w.setAttributes(lp);
+            View content=dialog.findViewById(android.R.id.content);
+            if(content!=null) content.setPadding(content.getPaddingLeft(),dp(80),content.getPaddingRight(),content.getPaddingBottom());
             w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            installTouchCorrection(dialog);
         }catch(Exception ignored){}
-    }
-
-    /**
-     * 真正修正车机弹窗触控坐标。
-     * 正值“上”表示把触点坐标向上修正，正值“左”表示把触点坐标向左修正。
-     * 主界面完全不经过这里，因此主界面触控不会受到影响。
-     */
-    void installTouchCorrection(Dialog dialog){
-        if(dialog==null || dialog.getWindow()==null) return;
-        final Window window=dialog.getWindow();
-        final Window.Callback original=window.getCallback();
-        if(original==null || original instanceof TouchCorrectingCallback) return;
-        window.setCallback(new TouchCorrectingCallback(original, touchCorrectionX(), touchCorrectionY()));
-    }
-
-    static class TouchCorrectingCallback implements Window.Callback{
-        final Window.Callback delegate;
-        final int left, top;
-        TouchCorrectingCallback(Window.Callback d,int l,int t){delegate=d;left=l;top=t;}
-        public boolean dispatchKeyEvent(KeyEvent e){return delegate.dispatchKeyEvent(e);}
-        public boolean dispatchKeyShortcutEvent(KeyEvent e){return delegate.dispatchKeyShortcutEvent(e);}
-        public boolean dispatchTouchEvent(MotionEvent e){
-            MotionEvent copy=MotionEvent.obtain(e);
-            try{
-                // 修正的是触摸坐标，不移动弹窗视觉位置。
-                copy.offsetLocation(-left,-top);
-                return delegate.dispatchTouchEvent(copy);
-            }finally{copy.recycle();}
-        }
-        public boolean dispatchTrackballEvent(MotionEvent e){return delegate.dispatchTrackballEvent(e);}
-        public boolean dispatchGenericMotionEvent(MotionEvent e){return delegate.dispatchGenericMotionEvent(e);}
-        public boolean dispatchPopulateAccessibilityEvent(android.view.accessibility.AccessibilityEvent e){return delegate.dispatchPopulateAccessibilityEvent(e);}
-        public android.view.View onCreatePanelView(int featureId){return delegate.onCreatePanelView(featureId);}
-        public boolean onCreatePanelMenu(int featureId, android.view.Menu menu){return delegate.onCreatePanelMenu(featureId,menu);}
-        public boolean onPreparePanel(int featureId, android.view.View view, android.view.Menu menu){return delegate.onPreparePanel(featureId,view,menu);}
-        public boolean onMenuOpened(int featureId, android.view.Menu menu){return delegate.onMenuOpened(featureId,menu);}
-        public boolean onMenuItemSelected(int featureId, android.view.MenuItem item){return delegate.onMenuItemSelected(featureId,item);}
-        public void onWindowAttributesChanged(WindowManager.LayoutParams attrs){delegate.onWindowAttributesChanged(attrs);}
-        public void onContentChanged(){delegate.onContentChanged();}
-        public void onWindowFocusChanged(boolean hasFocus){delegate.onWindowFocusChanged(hasFocus);}
-        public void onAttachedToWindow(){delegate.onAttachedToWindow();}
-        public void onDetachedFromWindow(){delegate.onDetachedFromWindow();}
-        public void onPanelClosed(int featureId, android.view.Menu menu){delegate.onPanelClosed(featureId,menu);}
-        public boolean onSearchRequested(){return delegate.onSearchRequested();}
-        public boolean onSearchRequested(SearchEvent event){return Build.VERSION.SDK_INT>=23 ? delegate.onSearchRequested(event) : false;}
-        public ActionMode onWindowStartingActionMode(ActionMode.Callback callback){return delegate.onWindowStartingActionMode(callback);}
-        public ActionMode onWindowStartingActionMode(ActionMode.Callback callback,int type){return Build.VERSION.SDK_INT>=23 ? delegate.onWindowStartingActionMode(callback,type) : null;}
-        public void onActionModeStarted(ActionMode mode){delegate.onActionModeStarted(mode);}
-        public void onActionModeFinished(ActionMode mode){delegate.onActionModeFinished(mode);}
     }
 
     void styleDialogActionButtons(AlertDialog dialog){
@@ -928,8 +958,25 @@ public class MainActivity extends AppCompatActivity {
 
     // 统一设置/编辑窗口设计区域：900×960；实际可用内容从顶部 80px 开始。
     void showFixed900x960(AlertDialog dialog){
-        if(dialog==null)return; dialog.show(); styleDialogActionButtons(dialog); adaptDialogBoxes(dialog);
-        Window w=dialog.getWindow(); if(w!=null){ w.setLayout(900,880); w.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL); WindowManager.LayoutParams lp=w.getAttributes(); lp.x=0; lp.y=80; w.setAttributes(lp); }
+        if(dialog==null)return;
+        dialog.show();
+        styleDialogActionButtons(dialog);
+        adaptDialogBoxes(dialog);
+        // 统一 900×960 设计区；顶部 80px 是内容预留区，不移动整个 Window。
+        Window w=dialog.getWindow();
+        if(w!=null){
+            WindowManager.LayoutParams lp=w.getAttributes();
+            lp.gravity=Gravity.TOP|Gravity.CENTER_HORIZONTAL;
+            lp.x=0; lp.y=0;
+            lp.width=Math.min(dp(900),Math.max(dp(320),getRealScreenSize().x-dp(20)));
+            lp.height=Math.min(dp(960),Math.max(dp(420),getRealScreenSize().y));
+            w.setAttributes(lp);
+            // 所有弹窗内容统一从顶部 80px 开始，避免车机顶部保留区造成视觉/触控错位。
+            View content=dialog.findViewById(android.R.id.content);
+            if(content!=null){
+                content.setPadding(content.getPaddingLeft(),dp(80),content.getPaddingRight(),content.getPaddingBottom());
+            }
+        }
     }
 
     void showSettingsMenu(){
@@ -1572,19 +1619,6 @@ public class MainActivity extends AppCompatActivity {
         topBlankRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
         box.addView(topBlankRow,new LinearLayout.LayoutParams(-1,dp(56)));
 
-        LinearLayout bottomBlankRow=new LinearLayout(this); bottomBlankRow.setGravity(Gravity.CENTER_VERTICAL);
-        bottomBlankRow.addView(text("主界面下空白",14),new LinearLayout.LayoutParams(0,dp(52),1));
-        EditText bottomBlankInput=numberField("120",String.valueOf(prefs.getInt("main_bottom_blank",120)));
-        bottomBlankRow.addView(bottomBlankInput,new LinearLayout.LayoutParams(dp(82),dp(52)));
-        bottomBlankRow.addView(text("px",13),new LinearLayout.LayoutParams(dp(30),dp(52)));
-        box.addView(bottomBlankRow,new LinearLayout.LayoutParams(-1,dp(56)));
-
-        Button touchCorrection=button("触控纠正  ›");
-        touchCorrection.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
-        touchCorrection.setPadding(dp(14),0,dp(14),0);
-        touchCorrection.setOnClickListener(v->showTouchCalibrationDialog());
-        box.addView(touchCorrection,new LinearLayout.LayoutParams(-1,dp(52)));
-
         scroll.addView(box,new ScrollView.LayoutParams(-1,-2));
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
 
@@ -1607,9 +1641,8 @@ public class MainActivity extends AppCompatActivity {
                 float us=Float.parseFloat(uiInput.getText().toString().trim());
                 int columns=Integer.parseInt(columnsInput.getText().toString().trim());
                 int topBlank=Integer.parseInt(topBlankInput.getText().toString().trim());
-                int bottomBlank=Integer.parseInt(bottomBlankInput.getText().toString().trim());
                 if(delay<0||delay>3600||fs<20||fs>300||mfs<20||mfs>300||us<50||us>300||
-                   columns<1||columns>20||topBlank<0||topBlank>2000||bottomBlank<0||bottomBlank>2000) throw new Exception();
+                   columns<1||columns>20||topBlank<0||topBlank>2000) throw new Exception();
 
                 prefs.edit().putInt("boot_delay_seconds",delay)
                         .putFloat("main_font_scale",fs/100f)
@@ -1617,9 +1650,11 @@ public class MainActivity extends AppCompatActivity {
                         .putFloat("ui_scale",us/100f)
                         .putInt("main_app_columns",columns)
                         .putInt("main_top_blank",topBlank)
-                        .putInt("main_bottom_blank",bottomBlank)
+                        .remove("main_bottom_blank")
                         .remove("touch_offset_top_px")
                         .remove("touch_offset_left_px")
+                        .remove("touch_correction_x")
+                        .remove("touch_correction_y")
                         // 清理旧版本已经删除的弹窗左右距离配置。
                         .remove("dialog_left_margin_px")
                         .remove("dialog_right_margin_px")
@@ -1733,7 +1768,7 @@ public class MainActivity extends AppCompatActivity {
         search.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int b,int c){} public void onTextChanged(CharSequence s,int a,int b,int c){refreshHolder[0].run();} public void afterTextChanged(android.text.Editable e){}});
         tabBtns[0].setBackgroundResource(R.drawable.card_selected);
         showFixed900x960(dialog);
-        try{ Window w=dialog.getWindow(); if(w!=null){android.graphics.Point screen=getRealScreenSize(); int h=Math.max(dp(420),screen.y-dp(TOP_BLANK+BOTTOM_BLANK)); w.setLayout(w.getAttributes().width,h);} }catch(Exception ignored){}
+        try{ Window w=dialog.getWindow(); if(w!=null){android.graphics.Point screen=getRealScreenSize(); int h=Math.max(dp(420),screen.y-dp(TOP_BLANK)); w.setLayout(w.getAttributes().width,h);} }catch(Exception ignored){}
         refreshHolder[0].run();
     }
 
@@ -1889,31 +1924,6 @@ public class MainActivity extends AppCompatActivity {
     // 新建/编辑预设统一使用手动输入。
     // 三区域车机部分设备只暴露一个超宽 Display（例如 6480×960），
     // 因此不再依赖 Presentation/多 Display 全屏框选。
-    void presetMenu(int index){
-        if(index < 0 || index >= presets.size()) return;
-        Preset p=presets.get(index);
-        final String[] items={"编辑窗口预设","删除窗口预设"};
-        new AlertDialog.Builder(this)
-                .setTitle(p.name)
-                .setItems(items,(dialog,which)->{
-                    if(which==0){
-                        editPreset(index);
-                    }else{
-                        new AlertDialog.Builder(this)
-                                .setTitle("删除窗口预设")
-                                .setMessage("确定删除“"+p.name+"”吗？")
-                                .setNegativeButton("取消",null)
-                                .setPositiveButton("删除",(d,w)->{
-                                    if(index>=0 && index<presets.size()){
-                                        presets.remove(index);
-                                        savePresets();
-                                        refresh();
-                                    }
-                                }).show();
-                    }
-                }).show();
-    }
-
     void editPreset(int index){
         if(index<0){
             android.graphics.Point rs=getRealScreenSize();
@@ -2119,7 +2129,7 @@ public class MainActivity extends AppCompatActivity {
          .append(hasUsageAccess()?"✓ 使用情况访问\n":"✗ 使用情况访问\n")
          .append(hasAllFilesPermission()?"✓ 所有文件访问\n":"✗ 所有文件访问\n")
          .append(Build.VERSION.SDK_INT<23 || Settings.System.canWrite(this)?"✓ 修改系统设置\n":"✗ 修改系统设置\n")
-         .append("\n触控纠正：X=").append(touchCorrectionX()).append("px，Y=").append(touchCorrectionY()).append("px");
+
 
         TextView msg=text(s.toString(),11);
         msg.setPadding(dp(4),dp(4),dp(4),dp(4));
@@ -2425,18 +2435,6 @@ public class MainActivity extends AppCompatActivity {
                     }catch(Exception ignored){}
                 }).create();
         showFixed900x960(dialog);
-    }
-
-    /** 5 点触控校准：四角+中心，取平均误差。 */
-    void showTouchCalibrationDialog(){
-        final int W=900,H=960; final int[][] pts={{110,130},{790,130},{450,480},{110,820},{790,820}};
-        final int[] sx={0},sy={0},n={0},cur={0};
-        class CV extends View{ Paint p=new Paint(1); CV(Context c){super(c);setBackgroundColor(Color.rgb(18,18,18));setClickable(true);} int px(int x){return x*getWidth()/W;} int py(int y){return y*getHeight()/H;}
-            protected void onDraw(Canvas c){p.setTextAlign(Paint.Align.CENTER);p.setColor(Color.WHITE);p.setTextSize(dp(20));c.drawText("请依次点击 5 个白色点位",getWidth()/2f,dp(42),p);p.setTextSize(dp(14));p.setColor(Color.LTGRAY);c.drawText("完成后点击右下角“确定”保存",getWidth()/2f,dp(66),p);for(int i=0;i<pts.length;i++){p.setColor(i<cur[0]?Color.GREEN:(i==cur[0]?Color.WHITE:Color.GRAY));c.drawCircle(px(pts[i][0]),py(pts[i][1]),dp(18),p);p.setColor(Color.DKGRAY);c.drawCircle(px(pts[i][0]),py(pts[i][1]),dp(6),p);}}
-            public boolean onTouchEvent(MotionEvent e){if(e.getAction()!=MotionEvent.ACTION_UP||cur[0]>=pts.length)return true;int x=px(pts[cur[0]][0]),y=py(pts[cur[0]][1]);sx[0]+=Math.round(e.getX()-x);sy[0]+=Math.round(e.getY()-y);n[0]++;cur[0]++;invalidate();return true;}}
-        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);CV cv=new CV(this);root.addView(cv,new LinearLayout.LayoutParams(-1,0,1));
-        LinearLayout actions=new LinearLayout(this);actions.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);Button cancel=button("取消"),retry=button("重试"),ok=button("确定");actions.addView(cancel,new LinearLayout.LayoutParams(100,50));actions.addView(retry,new LinearLayout.LayoutParams(100,50));actions.addView(ok,new LinearLayout.LayoutParams(100,50));root.addView(actions,new LinearLayout.LayoutParams(-1,58));
-        AlertDialog d=new AlertDialog.Builder(this).setTitle("触控纠正").setView(root).create();cancel.setOnClickListener(v->d.dismiss());retry.setOnClickListener(v->{sx[0]=sy[0]=n[0]=cur[0]=0;cv.invalidate();});ok.setOnClickListener(v->{if(n[0]<5){Toast.makeText(this,"请先完成全部 5 个点位",Toast.LENGTH_SHORT).show();return;}prefs.edit().putInt("touch_correction_x",Math.round(sx[0]/(float)n[0])).putInt("touch_correction_y",Math.round(sy[0]/(float)n[0])).remove("touch_offset_top_px").remove("touch_offset_left_px").apply();Toast.makeText(this,"触控纠正已保存",Toast.LENGTH_SHORT).show();d.dismiss();});showFixed900x960(d);
     }
 
     interface AppChoice { void onChoose(AppItem item); }
