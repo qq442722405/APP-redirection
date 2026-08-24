@@ -699,6 +699,9 @@ public class MainActivity extends AppCompatActivity {
         return (v,e)->{
             switch(e.getActionMasked()){
                 case MotionEvent.ACTION_DOWN:
+                    // 主界面项目位于 ScrollView / HorizontalScrollView 内，必须从按下开始禁止父容器抢占触摸，
+                    // 否则长按进入拖动后只移动一点就会收到 ACTION_CANCEL，看起来像手指松开。
+                    v.getParent().requestDisallowInterceptTouchEvent(true);
                     dragStartRawX=e.getRawX(); dragStartRawY=e.getRawY();
                     if(dragLongPress!=null) dragHandler.removeCallbacks(dragLongPress);
                     final View fv=v; final int ft=type, fi=index;
@@ -706,6 +709,8 @@ public class MainActivity extends AppCompatActivity {
                     dragHandler.postDelayed(dragLongPress,420);
                     return true;
                 case MotionEvent.ACTION_MOVE:
+                    // 持续禁止所有父级 ScrollView 拦截，保证拖动过程中 MOVE 不会变成 CANCEL。
+                    v.getParent().requestDisallowInterceptTouchEvent(true);
                     float dx=e.getRawX()-dragStartRawX, dy=e.getRawY()-dragStartRawY;
                     if(!draggingItem && (Math.abs(dx)>dp(14)||Math.abs(dy)>dp(14))){dragHandler.removeCallbacks(dragLongPress);return true;}
                     if(draggingItem){
@@ -723,9 +728,9 @@ public class MainActivity extends AppCompatActivity {
                     }
                     return true;
                 case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
+                    v.getParent().requestDisallowInterceptTouchEvent(false);
                     dragHandler.removeCallbacks(dragLongPress);
-                    if(!draggingItem && e.getActionMasked()==MotionEvent.ACTION_UP){ v.performClick(); return true; }
+                    if(!draggingItem){ v.performClick(); return true; }
                     if(draggingItem){
                         boolean overRight=e.getRawX()>getRealScreenSize().x-dp(190);
                         boolean delete=overRight && e.getRawY()<getRealScreenSize().y/2f;
@@ -733,6 +738,16 @@ public class MainActivity extends AppCompatActivity {
                         if(cancel) dragCancelled=true;
                         finishMainDrag(delete);
                     }
+                    return true;
+                case MotionEvent.ACTION_CANCEL:
+                    // 某些车机 ROM 会在父容器刷新/重排时发送一次 CANCEL。
+                    // 拖动状态下不要把它当成“手指松开”，否则刚拖一点就结束。
+                    if(draggingItem){
+                        v.getParent().requestDisallowInterceptTouchEvent(true);
+                        return true;
+                    }
+                    v.getParent().requestDisallowInterceptTouchEvent(false);
+                    dragHandler.removeCallbacks(dragLongPress);
                     return true;
             }
             return true;
