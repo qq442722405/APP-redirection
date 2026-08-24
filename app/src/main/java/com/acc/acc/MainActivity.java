@@ -618,9 +618,26 @@ public class MainActivity extends AppCompatActivity {
         if(mainFrame==null) return;
         int w=dp(180), h=Math.max(dp(180),getRealScreenSize().y/2);
         dragDeleteZone=new LinearLayout(this); dragDeleteZone.setGravity(Gravity.CENTER); dragDeleteZone.setBackgroundColor(0xFF8B1A1A);
-        TextView dt=mainText("删除",32); dt.setGravity(Gravity.CENTER); dragDeleteZone.addView(dt,new LinearLayout.LayoutParams(-1,-1));
+        // 删除/取消区域只是拖动时的视觉提示，不能抢走正在进行的 Touch 事件。
+        dragDeleteZone.setClickable(false);
+        dragDeleteZone.setFocusable(false);
+        dragDeleteZone.setFocusableInTouchMode(false);
+        dragDeleteZone.setOnTouchListener((view,event)->false);
+        TextView dt=mainText("删除",32); dt.setGravity(Gravity.CENTER);
+        dt.setClickable(false);
+        dt.setFocusable(false);
+        dragDeleteZone.addView(dt,new LinearLayout.LayoutParams(-1,-1));
+
         dragCancelZone=new LinearLayout(this); dragCancelZone.setGravity(Gravity.CENTER); dragCancelZone.setBackgroundColor(0xFF444444);
-        TextView ct=mainText("取消",32); ct.setGravity(Gravity.CENTER); dragCancelZone.addView(ct,new LinearLayout.LayoutParams(-1,-1));
+        // 同上：手指始终由原来的拖动 View 接收 MOVE/UP。
+        dragCancelZone.setClickable(false);
+        dragCancelZone.setFocusable(false);
+        dragCancelZone.setFocusableInTouchMode(false);
+        dragCancelZone.setOnTouchListener((view,event)->false);
+        TextView ct=mainText("取消",32); ct.setGravity(Gravity.CENTER);
+        ct.setClickable(false);
+        ct.setFocusable(false);
+        dragCancelZone.addView(ct,new LinearLayout.LayoutParams(-1,-1));
         FrameLayout.LayoutParams dl=new FrameLayout.LayoutParams(w,h,Gravity.RIGHT|Gravity.TOP); dl.topMargin=0;
         FrameLayout.LayoutParams cl=new FrameLayout.LayoutParams(w,h,Gravity.RIGHT|Gravity.BOTTOM); cl.bottomMargin=0;
         mainFrame.addView(dragDeleteZone,dl); mainFrame.addView(dragCancelZone,cl);
@@ -2128,7 +2145,7 @@ public class MainActivity extends AppCompatActivity {
          .append(hasOverlayPermission()?"✓ 悬浮窗\n":"✗ 悬浮窗\n")
          .append(hasUsageAccess()?"✓ 使用情况访问\n":"✗ 使用情况访问\n")
          .append(hasAllFilesPermission()?"✓ 所有文件访问\n":"✗ 所有文件访问\n")
-         .append(Build.VERSION.SDK_INT<23 || Settings.System.canWrite(this)?"✓ 修改系统设置\n":"✗ 修改系统设置\n");
+         .append(Build.VERSION.SDK_INT<23 || Settings.System.canWrite(this)?"✓ 修改系统设置\n":"✗ 修改系统设置\n")
 
 
         TextView msg=text(s.toString(),11);
