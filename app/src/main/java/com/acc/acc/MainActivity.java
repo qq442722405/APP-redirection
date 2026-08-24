@@ -26,6 +26,8 @@ import java.net.*;
 import android.content.res.AssetFileDescriptor;
 
 
+public class MainActivity extends AppCompatActivity {
+
     /** Keep draggable APP/preset cards above other main-page layers. */
     private void bringMovableItemToFront(android.view.View view) {
         if (view == null) return;
@@ -37,7 +39,6 @@ import android.content.res.AssetFileDescriptor;
         view.invalidate();
     }
 
-public class MainActivity extends AppCompatActivity {
 
     static final String PREF="container_prefs";
     static final String APPS="apps";
@@ -803,13 +804,13 @@ public class MainActivity extends AppCompatActivity {
                         else editPreset(index);
                     }
                 });
-                bringMovableItemToFront(card);
                 card.setOnTouchListener(mainDragTouch(0,index));
 
                 // 窗口预设选框固定为 200×30dp，超出屏幕后横向滑动选择。
                 LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(200),dp(180));
                 lp.setMargins(dp(4),dp(4),dp(4),dp(4));
                 presetRow.addView(card,lp);
+                bringMovableItemToFront(card);
             }
 
             boolean hasVisiblePreset=false;
@@ -869,6 +870,7 @@ public class MainActivity extends AppCompatActivity {
                     LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(200),dp(180));
                     lp.setMargins(dp(4),dp(4),dp(4),dp(4));
                     row.addView(tile,lp);
+                    bringMovableItemToFront(tile);
                     inRow++;
                     int columns=Math.max(1,prefs.getInt("main_app_columns",4));
                     if(inRow>=columns) inRow=0;
