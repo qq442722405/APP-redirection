@@ -50,6 +50,8 @@ public class MainActivity extends AppCompatActivity {
     LinearLayout dragDeleteZone, dragCancelZone;
     View draggingView;
     boolean draggingItem=false, dragCancelled=false;
+    long lastMainAppTapTime=0L;
+    int lastMainAppTapIndex=-1;
     int draggingType=-1, draggingIndex=-1;
     float dragStartRawX, dragStartRawY;
     Handler dragHandler=new Handler(Looper.getMainLooper());
@@ -743,7 +745,26 @@ public class MainActivity extends AppCompatActivity {
                 case MotionEvent.ACTION_UP:
                     v.getParent().requestDisallowInterceptTouchEvent(false);
                     dragHandler.removeCallbacks(dragLongPress);
-                    if(!draggingItem){ v.performClick(); return true; }
+                    if(!draggingItem){
+                        // 主界面 APP：单击选择，短时间内再次点击同一个 APP 视为双击并直接启动。
+                        if(type==1){
+                            long now=System.currentTimeMillis();
+                            boolean doubleTap=(lastMainAppTapIndex==index && now-lastMainAppTapTime<=420L);
+                            lastMainAppTapTime=now;
+                            lastMainAppTapIndex=index;
+                            if(doubleTap && index>=0 && index<apps.size()){
+                                AppItem app=apps.get(index);
+                                selectedPackage=app.pkg;
+                                selectedName=app.name;
+                                prefs.edit().putString("selected_control_package",app.pkg).apply();
+                                info.setText("启动："+app.name);
+                                launchAppDirect(app.pkg,app.name);
+                                return true;
+                            }
+                        }
+                        v.performClick();
+                        return true;
+                    }
                     if(draggingItem){
                         boolean overRight=e.getRawX()>getRealScreenSize().x-dp(190);
                         boolean delete=overRight && e.getRawY()<getRealScreenSize().y/2f;
