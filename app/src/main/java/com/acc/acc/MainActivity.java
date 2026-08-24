@@ -434,7 +434,7 @@ public class MainActivity extends AppCompatActivity {
 
         FrameLayout frame=new FrameLayout(this);
         mainFrame=frame;
-        frame.setBackgroundColor(Color.BLACK);
+        frame.setBackgroundColor(Color.TRANSPARENT);
 
         boolean hideBackgroundAcc=prefs.getBoolean("hide_main_background_acc",true);
         if(!hideBackgroundAcc){
