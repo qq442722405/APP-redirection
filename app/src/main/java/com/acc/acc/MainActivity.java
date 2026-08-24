@@ -614,8 +614,11 @@ public class MainActivity extends AppCompatActivity {
      * 导致车机 ROM 出现焦点/触控坐标漂移。
      */
     void showDragZones(){
-        hideDragZones();
+        // 注意：这里不能调用 hideDragZones()，否则会把刚刚进入拖动状态的 draggingItem 重置为 false。
         if(mainFrame==null) return;
+        // 仅移除旧的视觉区域，不重置当前拖动状态。
+        if(dragDeleteZone!=null){mainFrame.removeView(dragDeleteZone);dragDeleteZone=null;}
+        if(dragCancelZone!=null){mainFrame.removeView(dragCancelZone);dragCancelZone=null;}
         int w=dp(180), h=Math.max(dp(180),getRealScreenSize().y/2);
         dragDeleteZone=new LinearLayout(this); dragDeleteZone.setGravity(Gravity.CENTER); dragDeleteZone.setBackgroundColor(0xFF8B1A1A);
         // 删除/取消区域只是拖动时的视觉提示，不能抢走正在进行的 Touch 事件。
