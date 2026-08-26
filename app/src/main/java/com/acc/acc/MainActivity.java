@@ -451,19 +451,6 @@ public class MainActivity extends AppCompatActivity {
         mainFrame=frame;
         frame.setBackgroundColor(Color.TRANSPARENT);
 
-        boolean hideBackgroundAcc=prefs.getBoolean("hide_main_background_acc",true);
-        if(!hideBackgroundAcc){
-            TextView accBg=new TextView(this);
-            accBg.setText("Acc");
-            accBg.setTextColor(0x22FFFFFF);
-            accBg.setTextSize(720);
-            accBg.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
-            accBg.setGravity(Gravity.CENTER);
-            accBg.setSingleLine(true);
-            accBg.setClickable(false);
-            frame.addView(accBg,new FrameLayout.LayoutParams(-1,-1));
-        }
-
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.TRANSPARENT);
@@ -691,25 +678,67 @@ public class MainActivity extends AppCompatActivity {
     }
     void reorderMainItem(int type,int oldIndex,View v){
         if(v==null) return;
-        float centerX=v.getX()+v.getWidth()/2f;
+        int[] loc=new int[2]; v.getLocationOnScreen(loc);
+        float cx=loc[0]+v.getWidth()/2f, cy=loc[1]+v.getHeight()/2f;
+
         if(type==0){
-            int target=oldIndex;
+            // 预设只在当前“左/中/右”分类内排序，按屏幕真实 X 坐标决定插入位置。
+            ArrayList<View> others=new ArrayList<>();
             for(int i=0;i<presetRow.getChildCount();i++){
-                View c=presetRow.getChildAt(i); if(c==v) continue;
-                if(centerX > c.getX()+c.getWidth()/2f) target=i;
+                View c=presetRow.getChildAt(i);
+                if(c!=v && c.getVisibility()==View.VISIBLE && c.getWidth()>0) others.add(c);
             }
-            int visibleIndex=0; for(int i=0;i<presets.size();i++){if(presets.get(i).category==presetCategoryFilter){if(visibleIndex>=target){target=i;break;}visibleIndex++;}}
-            target=Math.max(0,Math.min(presets.size()-1,target));
-            if(oldIndex!=target){Preset p=presets.remove(oldIndex);if(target>oldIndex)target--;presets.add(target,p);savePresets();}
+            int desired=0;
+            for(View c:others){
+                int[] cl=new int[2]; c.getLocationOnScreen(cl);
+                float ccx=cl[0]+c.getWidth()/2f;
+                if(ccx<cx) desired++;
+            }
+            ArrayList<Integer> visibleIndices=new ArrayList<>();
+            for(int i=0;i<presets.size();i++) if(presets.get(i).category==presetCategoryFilter) visibleIndices.add(i);
+            if(!visibleIndices.contains(oldIndex)) return;
+            Preset item=presets.remove(oldIndex);
+            int count=0, insert=presets.size();
+            for(int i=0;i<presets.size();i++){
+                if(presets.get(i).category==presetCategoryFilter){
+                    if(count>=desired){insert=i;break;}
+                    count++;
+                }
+            }
+            insert=Math.max(0,Math.min(presets.size(),insert));
+            presets.add(insert,item);
+            savePresets();
         }else if(type==1){
-            int target=oldIndex;
-            int columns=Math.max(1,prefs.getInt("main_app_columns",4));
-            int col=Math.max(0,Math.round((v.getX()+v.getWidth()/2f)/Math.max(1,v.getWidth()+dp(8))));
-            int row=Math.max(0,Math.round((v.getY()+v.getHeight()/2f)/Math.max(1,v.getHeight()+dp(8))));
-            target=Math.min(apps.size()-1,row*columns+col);
-            if(oldIndex!=target){AppItem a=apps.remove(oldIndex);if(target>oldIndex)target--;apps.add(Math.max(0,Math.min(target,apps.size())),a);saveApps();}
+            // APP 位于“行 -> tile”的嵌套布局中，不能使用 tile.getY()。
+            // 使用真实屏幕坐标计算所有其它 tile 中有多少个排在拖动位置之前。
+            ArrayList<View> tiles=new ArrayList<>();
+            collectMainAppTiles(appGrid,tiles);
+            int desired=0;
+            for(View tile:tiles){
+                if(tile==v) continue;
+                int[] tl=new int[2]; tile.getLocationOnScreen(tl);
+                float tcx=tl[0]+tile.getWidth()/2f, tcy=tl[1]+tile.getHeight()/2f;
+                boolean before=tcy < cy-v.getHeight()*0.35f ||
+                        (Math.abs(tcy-cy)<=v.getHeight()*0.35f && tcx<cx);
+                if(before) desired++;
+            }
+            if(oldIndex<0 || oldIndex>=apps.size()) return;
+            AppItem item=apps.remove(oldIndex);
+            desired=Math.max(0,Math.min(apps.size(),desired));
+            apps.add(desired,item);
+            saveApps();
         }
     }
+
+    void collectMainAppTiles(ViewGroup parent, ArrayList<View> out){
+        if(parent==null) return;
+        for(int i=0;i<parent.getChildCount();i++){
+            View child=parent.getChildAt(i);
+            if("main_app_tile".equals(child.getTag())) out.add(child);
+            else if(child instanceof ViewGroup) collectMainAppTiles((ViewGroup)child,out);
+        }
+    }
+
     View.OnTouchListener mainDragTouch(int type,int index){
         return (v,e)->{
             switch(e.getActionMasked()){
@@ -801,7 +830,9 @@ public class MainActivity extends AppCompatActivity {
                 card.setOrientation(LinearLayout.VERTICAL);
                 card.setGravity(Gravity.CENTER);
                 card.setPadding(dp(6),dp(3),dp(6),dp(3));
-                card.setBackgroundResource(R.drawable.card);
+                card.setBackgroundColor(Color.TRANSPARENT);
+                card.setElevation(dp(8));
+                card.setTranslationZ(dp(8));
 
                 TextView title=mainText(p.name,34);
                 title.setGravity(Gravity.CENTER);
@@ -867,7 +898,10 @@ public class MainActivity extends AppCompatActivity {
                     tile.setOrientation(LinearLayout.VERTICAL);
                     tile.setGravity(Gravity.CENTER);
                     tile.setPadding(dp(8),dp(8),dp(8),dp(8));
-                    tile.setBackgroundResource(item.pkg.equals(selectedPackage)?R.drawable.card_selected:R.drawable.card);
+                    tile.setBackgroundColor(Color.TRANSPARENT);
+                    tile.setElevation(dp(8));
+                    tile.setTranslationZ(dp(8));
+                    tile.setTag(itemIndex);
 
                     ImageView icon=new ImageView(this);
                     icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
@@ -2483,29 +2517,59 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void showAddAutoTaskDialog(JSONArray[] tasks,Runnable refresh){
-        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(8),dp(4),dp(8),dp(4));
-        Button appPick=button("点击选择 APP（图标 + 名称）");
-        Button presetPick=button("直接启动（无窗口预设）");
-        box.addView(appPick,new LinearLayout.LayoutParams(-1,dp(52)));
-        box.addView(presetPick,new LinearLayout.LayoutParams(-1,dp(52)));
-        final String[] pkg={null},name={null}; final int[] preset={-1};
-        appPick.setOnClickListener(v->showAppChoiceDialog((a)->{pkg[0]=a.pkg;name[0]=a.name;appPick.setText(a.name);}));
-        presetPick.setOnClickListener(v->{
-            String[] items=new String[presets.size()+1]; items[0]="直接启动（无窗口预设）";
-            for(int i=0;i<presets.size();i++) items[i+1]=presets.get(i).name;
-            AlertDialog dialog=new AlertDialog.Builder(this).setTitle("选择窗口预设").setItems(items,(d,w)->{preset[0]=w-1;presetPick.setText(w==0?items[0]:items[w]);}).create();
-            showFixed900x960(dialog);
+        // 与“添加到悬浮窗口”统一：窗口预设 + 分类 + APP图标/名称。
+        PackageManager pm=getPackageManager();
+        ArrayList<ApplicationInfo> allApps=new ArrayList<>();
+        try{
+            for(ApplicationInfo ai:pm.getInstalledApplications(PackageManager.GET_META_DATA)){
+                if(ai.packageName.equals(getPackageName())) continue;
+                if(pm.getLaunchIntentForPackage(ai.packageName)!=null) allApps.add(ai);
+            }
+        }catch(Exception ignored){}
+        Collections.sort(allApps,(a,b)->getAppLabelSafe(a.packageName).compareToIgnoreCase(getAppLabelSafe(b.packageName)));
+
+        LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(8),dp(4),dp(8),dp(8));
+        TextView presetTitle=text("窗口预设",13); presetTitle.setTypeface(null,1);
+        root.addView(presetTitle,new LinearLayout.LayoutParams(-1,dp(32)));
+        HorizontalScrollView ps=new HorizontalScrollView(this); ps.setHorizontalScrollBarEnabled(false);
+        LinearLayout prow=new LinearLayout(this); prow.setGravity(Gravity.CENTER_VERTICAL); ps.addView(prow,new HorizontalScrollView.LayoutParams(-2,dp(48)));
+        root.addView(ps,new LinearLayout.LayoutParams(-1,dp(52)));
+        final int[] selectedPreset={-1};
+        ArrayList<Button> pbs=new ArrayList<>();
+        Button direct=button("直接启动"); pbs.add(direct); prow.addView(direct,new LinearLayout.LayoutParams(dp(100),dp(44))); direct.setBackgroundResource(R.drawable.card_selected);
+        direct.setOnClickListener(v->{selectedPreset[0]=-1;for(Button b:pbs)b.setBackgroundResource(b==v?R.drawable.card_selected:R.drawable.button);});
+        for(int i=0;i<presets.size();i++){ final int pi=i; Button b=button(presets.get(i).name); b.setTextSize(11); pbs.add(b); prow.addView(b,new LinearLayout.LayoutParams(dp(150),dp(44))); b.setOnClickListener(v->{selectedPreset[0]=pi;for(Button q:pbs)q.setBackgroundResource(q==v?R.drawable.card_selected:R.drawable.button);}); }
+
+        LinearLayout cats=new LinearLayout(this); cats.setGravity(Gravity.CENTER_VERTICAL);
+        String[] catNames={"用户","系统","全部"}; final int[] cat={0}; final String[] selected={""}; Button[] cb=new Button[3]; final LinearLayout[] appRowsRef={null};
+        for(int i=0;i<3;i++){ final int ci=i; cb[i]=button(catNames[i]); if(i==0)cb[i].setBackgroundResource(R.drawable.card_selected); cats.addView(cb[i],new LinearLayout.LayoutParams(0,dp(44),1)); cb[i].setOnClickListener(v->{cat[0]=ci;for(Button q:cb)q.setBackgroundResource(q==v?R.drawable.card_selected:R.drawable.button);refreshAutoAppRows(allApps,appRowsRef[0],cat,selected);}); }
+        root.addView(cats,new LinearLayout.LayoutParams(-1,dp(50)));
+        ScrollView sv=new ScrollView(this); LinearLayout appRows=new LinearLayout(this); appRows.setOrientation(LinearLayout.VERTICAL); sv.addView(appRows,new ScrollView.LayoutParams(-1,-2)); root.addView(sv,new LinearLayout.LayoutParams(-1,0,1));
+        appRowsRef[0]=appRows;
+        refreshAutoAppRows(allApps,appRows,cat,selected);
+
+        LinearLayout bottom=new LinearLayout(this); bottom.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL); Button cancel=button("取消"), add=button("添加"); bottom.addView(cancel,new LinearLayout.LayoutParams(dp(100),dp(50))); bottom.addView(add,new LinearLayout.LayoutParams(dp(100),dp(50))); root.addView(bottom,new LinearLayout.LayoutParams(-1,dp(58)));
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("添加自动启动任务").setView(root).create();
+        cancel.setOnClickListener(v->dialog.dismiss());
+        add.setOnClickListener(v->{
+            if(selected[0].isEmpty()){Toast.makeText(this,"请选择 APP",Toast.LENGTH_SHORT).show();return;}
+            try{JSONObject o=new JSONObject();o.put("pkg",selected[0]);o.put("name",getAppLabelSafe(selected[0]));o.put("preset",selectedPreset[0]);tasks[0].put(o);refresh.run();dialog.dismiss();}catch(Exception e){Toast.makeText(this,"保存失败："+e.getMessage(),Toast.LENGTH_LONG).show();}
         });
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("添加自动启动任务").setView(box)
-                .setNegativeButton("取消",null).setPositiveButton("添加",(d,w)->{
-                    if(pkg[0]==null){Toast.makeText(this,"请选择 APP",Toast.LENGTH_SHORT).show();return;}
-                    try{
-                        JSONObject o=new JSONObject(); o.put("pkg",pkg[0]); o.put("name",name[0]); o.put("preset",preset[0]);
-                        tasks[0].put(o); refresh.run();
-                    }catch(Exception ignored){}
-                }).create();
         showFixed900x960(dialog);
+    }
+
+    void refreshAutoAppRows(ArrayList<ApplicationInfo> allApps,LinearLayout rows,int[] category,String[] selected){
+        if(rows==null)return; rows.removeAllViews(); int count=0; LinearLayout row=null;
+        for(ApplicationInfo ai:allApps){
+            boolean system=(ai.flags&ApplicationInfo.FLAG_SYSTEM)!=0; if(category[0]==0&&system)continue; if(category[0]==1&&!system)continue;
+            if(count%4==0){row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);rows.addView(row,new LinearLayout.LayoutParams(-1,dp(92)));}
+            final String pkg=ai.packageName; LinearLayout tile=new LinearLayout(this);tile.setOrientation(LinearLayout.VERTICAL);tile.setGravity(Gravity.CENTER);tile.setPadding(dp(4),dp(3),dp(4),dp(3)); tile.setBackgroundColor(Color.TRANSPARENT);
+            ImageView iv=new ImageView(this);try{iv.setImageDrawable(getPackageManager().getApplicationIcon(pkg));}catch(Exception ignored){} tile.addView(iv,new LinearLayout.LayoutParams(dp(54),dp(54)));
+            TextView tv=text(getAppLabelSafe(pkg),11);tv.setGravity(Gravity.CENTER);tv.setMaxLines(1);tv.setEllipsize(android.text.TextUtils.TruncateAt.END);tile.addView(tv,new LinearLayout.LayoutParams(-1,dp(30)));
+            if(pkg.equals(selected[0]))tile.setAlpha(0.65f); else tile.setAlpha(1f);
+            tile.setOnClickListener(v->{selected[0]=pkg;refreshAutoAppRows(allApps,rows,category,selected);});
+            row.addView(tile,new LinearLayout.LayoutParams(0,dp(90),1)); count++;
+        }
     }
 
     interface AppChoice { void onChoose(AppItem item); }
