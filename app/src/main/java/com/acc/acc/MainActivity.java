@@ -47,15 +47,8 @@ public class MainActivity extends AppCompatActivity {
     SharedPreferences prefs;
     LinearLayout presetRow, appGrid;
     FrameLayout mainFrame;
-    LinearLayout dragDeleteZone, dragCancelZone;
-    View draggingView;
-    boolean draggingItem=false, dragCancelled=false;
     long lastMainAppTapTime=0L;
     int lastMainAppTapIndex=-1;
-    int draggingType=-1, draggingIndex=-1;
-    float dragStartRawX, dragStartRawY;
-    Handler dragHandler=new Handler(Looper.getMainLooper());
-    Runnable dragLongPress;
     int presetCategoryFilter=0; // 0=左, 1=中, 2=右
     Button[] presetCategoryButtons;
     TextView info;
@@ -451,6 +444,19 @@ public class MainActivity extends AppCompatActivity {
         mainFrame=frame;
         frame.setBackgroundColor(Color.TRANSPARENT);
 
+        boolean hideBackgroundAcc=prefs.getBoolean("hide_main_background_acc",true);
+        if(!hideBackgroundAcc){
+            TextView accBg=new TextView(this);
+            accBg.setText("Acc");
+            accBg.setTextColor(0x22FFFFFF);
+            accBg.setTextSize(720);
+            accBg.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+            accBg.setGravity(Gravity.CENTER);
+            accBg.setSingleLine(true);
+            accBg.setClickable(false);
+            frame.addView(accBg,new FrameLayout.LayoutParams(-1,-1));
+        }
+
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.TRANSPARENT);
@@ -615,206 +621,75 @@ public class MainActivity extends AppCompatActivity {
      * 保持主界面控件对象不变，只重建两个列表，避免重新 setContentView
      * 导致车机 ROM 出现焦点/触控坐标漂移。
      */
-    void showDragZones(){
-        // 注意：这里不能调用 hideDragZones()，否则会把刚刚进入拖动状态的 draggingItem 重置为 false。
-        if(mainFrame==null) return;
-        // 仅移除旧的视觉区域，不重置当前拖动状态。
-        if(dragDeleteZone!=null){mainFrame.removeView(dragDeleteZone);dragDeleteZone=null;}
-        if(dragCancelZone!=null){mainFrame.removeView(dragCancelZone);dragCancelZone=null;}
-        int w=dp(180), h=Math.max(dp(180),getRealScreenSize().y/2);
-        dragDeleteZone=new LinearLayout(this); dragDeleteZone.setGravity(Gravity.CENTER); dragDeleteZone.setBackgroundColor(0xFF8B1A1A);
-        // 删除/取消区域只是拖动时的视觉提示，不能抢走正在进行的 Touch 事件。
-        dragDeleteZone.setClickable(false);
-        dragDeleteZone.setFocusable(false);
-        dragDeleteZone.setFocusableInTouchMode(false);
-        dragDeleteZone.setOnTouchListener((view,event)->false);
-        TextView dt=mainText("删除",32); dt.setGravity(Gravity.CENTER);
-        dt.setClickable(false);
-        dt.setFocusable(false);
-        dragDeleteZone.addView(dt,new LinearLayout.LayoutParams(-1,-1));
+    /** 主界面长按菜单：左移、右移、删除、取消。主界面不再进入拖动状态。 */
+    void showMainItemMenu(final int type, final int index){
+        if(type==0 && (index<0 || index>=presets.size())) return;
+        if(type==1 && (index<0 || index>=apps.size())) return;
+        String name = type==0 ? presets.get(index).name : apps.get(index).name;
+        String[] items={"左移","右移","删除","取消"};
+        AlertDialog dlg=new AlertDialog.Builder(this)
+                .setTitle("操作："+name)
+                .setItems(items,(d,which)->{
+                    if(which==0) moveMainItem(type,index,-1);
+                    else if(which==1) moveMainItem(type,index,1);
+                    else if(which==2) deleteMainItem(type,index);
+                }).create();
+        showFixed900x960(dlg);
+    }
 
-        dragCancelZone=new LinearLayout(this); dragCancelZone.setGravity(Gravity.CENTER); dragCancelZone.setBackgroundColor(0xFF444444);
-        // 同上：手指始终由原来的拖动 View 接收 MOVE/UP。
-        dragCancelZone.setClickable(false);
-        dragCancelZone.setFocusable(false);
-        dragCancelZone.setFocusableInTouchMode(false);
-        dragCancelZone.setOnTouchListener((view,event)->false);
-        TextView ct=mainText("取消",32); ct.setGravity(Gravity.CENTER);
-        ct.setClickable(false);
-        ct.setFocusable(false);
-        dragCancelZone.addView(ct,new LinearLayout.LayoutParams(-1,-1));
-        FrameLayout.LayoutParams dl=new FrameLayout.LayoutParams(w,h,Gravity.RIGHT|Gravity.TOP); dl.topMargin=0;
-        FrameLayout.LayoutParams cl=new FrameLayout.LayoutParams(w,h,Gravity.RIGHT|Gravity.BOTTOM); cl.bottomMargin=0;
-        mainFrame.addView(dragDeleteZone,dl); mainFrame.addView(dragCancelZone,cl);
-    }
-    void hideDragZones(){
-        if(mainFrame!=null){
-            if(dragDeleteZone!=null){mainFrame.removeView(dragDeleteZone);dragDeleteZone=null;}
-            if(dragCancelZone!=null){mainFrame.removeView(dragCancelZone);dragCancelZone=null;}
+    void moveMainItem(int type,int index,int direction){
+        if(type==1){
+            int target=index+direction;
+            if(target<0 || target>=apps.size()) return;
+            Collections.swap(apps,index,target);
+            saveApps(); refresh();
+            return;
         }
-        draggingView=null; draggingItem=false; dragCancelled=false; draggingType=-1; draggingIndex=-1;
-    }
-    void beginMainDrag(View v,int type,int index){
-        if(draggingItem) return;
-        draggingItem=true; draggingView=v; draggingType=type; draggingIndex=index; dragCancelled=false;
-        v.setAlpha(.70f); v.setScaleX(1.04f); v.setScaleY(1.04f);
-        showDragZones();
-    }
-    void finishMainDrag(boolean delete){
-        if(!draggingItem) return;
-        View v=draggingView;
-        if(v!=null){v.setAlpha(1f);v.setScaleX(1f);v.setScaleY(1f);v.setTranslationX(0);v.setTranslationY(0);}
-        int type=draggingType, index=draggingIndex;
-        if(delete){
-            if(type==0 && index>=0 && index<presets.size()){presets.remove(index);savePresets();}
-            if(type==1 && index>=0 && index<apps.size()){
-                AppItem a=apps.remove(index); if(a.pkg.equals(selectedPackage)){selectedPackage=null;selectedName=null;prefs.edit().remove("selected_control_package").apply();} saveApps();
-            }
-        }else if(!dragCancelled){
-            reorderMainItem(type,index,draggingView);
+        // 窗口预设只在当前左/中/右分类内左右移动，避免跨分类。
+        int target=-1;
+        int step=direction<0?-1:1;
+        for(int i=index+step;i>=0&&i<presets.size();i+=step){
+            if(presets.get(i).category==presetCategoryFilter){ target=i; break; }
         }
-        hideDragZones();
-        refresh();
+        if(target<0) return;
+        Collections.swap(presets,index,target);
+        savePresets(); refresh();
     }
-    void reorderMainItem(int type,int oldIndex,View v){
-        if(v==null) return;
-        int[] loc=new int[2]; v.getLocationOnScreen(loc);
-        float cx=loc[0]+v.getWidth()/2f, cy=loc[1]+v.getHeight()/2f;
 
+    void deleteMainItem(int type,int index){
         if(type==0){
-            // 预设只在当前“左/中/右”分类内排序，按屏幕真实 X 坐标决定插入位置。
-            ArrayList<View> others=new ArrayList<>();
-            for(int i=0;i<presetRow.getChildCount();i++){
-                View c=presetRow.getChildAt(i);
-                if(c!=v && c.getVisibility()==View.VISIBLE && c.getWidth()>0) others.add(c);
-            }
-            int desired=0;
-            for(View c:others){
-                int[] cl=new int[2]; c.getLocationOnScreen(cl);
-                float ccx=cl[0]+c.getWidth()/2f;
-                if(ccx<cx) desired++;
-            }
-            ArrayList<Integer> visibleIndices=new ArrayList<>();
-            for(int i=0;i<presets.size();i++) if(presets.get(i).category==presetCategoryFilter) visibleIndices.add(i);
-            if(!visibleIndices.contains(oldIndex)) return;
-            Preset item=presets.remove(oldIndex);
-            int count=0, insert=presets.size();
-            for(int i=0;i<presets.size();i++){
-                if(presets.get(i).category==presetCategoryFilter){
-                    if(count>=desired){insert=i;break;}
-                    count++;
-                }
-            }
-            insert=Math.max(0,Math.min(presets.size(),insert));
-            presets.add(insert,item);
-            savePresets();
-        }else if(type==1){
-            // APP 位于“行 -> tile”的嵌套布局中，不能使用 tile.getY()。
-            // 使用真实屏幕坐标计算所有其它 tile 中有多少个排在拖动位置之前。
-            ArrayList<View> tiles=new ArrayList<>();
-            collectMainAppTiles(appGrid,tiles);
-            int desired=0;
-            for(View tile:tiles){
-                if(tile==v) continue;
-                int[] tl=new int[2]; tile.getLocationOnScreen(tl);
-                float tcx=tl[0]+tile.getWidth()/2f, tcy=tl[1]+tile.getHeight()/2f;
-                boolean before=tcy < cy-v.getHeight()*0.35f ||
-                        (Math.abs(tcy-cy)<=v.getHeight()*0.35f && tcx<cx);
-                if(before) desired++;
-            }
-            if(oldIndex<0 || oldIndex>=apps.size()) return;
-            AppItem item=apps.remove(oldIndex);
-            desired=Math.max(0,Math.min(apps.size(),desired));
-            apps.add(desired,item);
-            saveApps();
-        }
-    }
-
-    void collectMainAppTiles(ViewGroup parent, ArrayList<View> out){
-        if(parent==null) return;
-        for(int i=0;i<parent.getChildCount();i++){
-            View child=parent.getChildAt(i);
-            if("main_app_tile".equals(child.getTag())) out.add(child);
-            else if(child instanceof ViewGroup) collectMainAppTiles((ViewGroup)child,out);
-        }
-    }
-
-    View.OnTouchListener mainDragTouch(int type,int index){
-        return (v,e)->{
-            switch(e.getActionMasked()){
-                case MotionEvent.ACTION_DOWN:
-                    // 主界面项目位于 ScrollView / HorizontalScrollView 内，必须从按下开始禁止父容器抢占触摸，
-                    // 否则长按进入拖动后只移动一点就会收到 ACTION_CANCEL，看起来像手指松开。
-                    v.getParent().requestDisallowInterceptTouchEvent(true);
-                    dragStartRawX=e.getRawX(); dragStartRawY=e.getRawY();
-                    if(dragLongPress!=null) dragHandler.removeCallbacks(dragLongPress);
-                    final View fv=v; final int ft=type, fi=index;
-                    dragLongPress=()->beginMainDrag(fv,ft,fi);
-                    dragHandler.postDelayed(dragLongPress,420);
-                    return true;
-                case MotionEvent.ACTION_MOVE:
-                    // 持续禁止所有父级 ScrollView 拦截，保证拖动过程中 MOVE 不会变成 CANCEL。
-                    v.getParent().requestDisallowInterceptTouchEvent(true);
-                    float dx=e.getRawX()-dragStartRawX, dy=e.getRawY()-dragStartRawY;
-                    if(!draggingItem && (Math.abs(dx)>dp(14)||Math.abs(dy)>dp(14))){dragHandler.removeCallbacks(dragLongPress);return true;}
-                    if(draggingItem){
-                        v.setTranslationX(dx); v.setTranslationY(dy);
-                        int sw=getRealScreenSize().x, sh=getRealScreenSize().y;
-                        if(e.getRawX()>sw-dp(190)){
-                            dragCancelled=e.getRawY()>sh/2f;
-                            if(dragDeleteZone!=null)dragDeleteZone.setAlpha(dragCancelled?.45f:1f);
-                            if(dragCancelZone!=null)dragCancelZone.setAlpha(dragCancelled?1f:.45f);
-                        }else{
-                            dragCancelled=false;
-                            if(dragDeleteZone!=null)dragDeleteZone.setAlpha(.75f);
-                            if(dragCancelZone!=null)dragCancelZone.setAlpha(.75f);
-                        }
-                    }
-                    return true;
-                case MotionEvent.ACTION_UP:
-                    v.getParent().requestDisallowInterceptTouchEvent(false);
-                    dragHandler.removeCallbacks(dragLongPress);
-                    if(!draggingItem){
-                        // 主界面 APP：单击选择，短时间内再次点击同一个 APP 视为双击并直接启动。
-                        if(type==1){
-                            long now=System.currentTimeMillis();
-                            boolean doubleTap=(lastMainAppTapIndex==index && now-lastMainAppTapTime<=420L);
-                            lastMainAppTapTime=now;
-                            lastMainAppTapIndex=index;
-                            if(doubleTap && index>=0 && index<apps.size()){
-                                AppItem app=apps.get(index);
-                                selectedPackage=app.pkg;
-                                selectedName=app.name;
-                                prefs.edit().putString("selected_control_package",app.pkg).apply();
-                                info.setText("启动："+app.name);
-                                launchAppDirect(app.pkg,app.name);
-                                return true;
+            if(index<0||index>=presets.size()) return;
+            String name=presets.get(index).name;
+            new AlertDialog.Builder(this).setTitle("删除窗口预设")
+                    .setMessage("确定删除“"+name+"”吗？")
+                    .setNegativeButton("取消",null)
+                    .setPositiveButton("删除",(d,w)->{
+                        if(index>=0&&index<presets.size()){presets.remove(index);savePresets();refresh();}
+                    }).show();
+        }else{
+            if(index<0||index>=apps.size()) return;
+            AppItem a=apps.get(index);
+            new AlertDialog.Builder(this).setTitle("删除 APP")
+                    .setMessage("确定删除“"+a.name+"”吗？")
+                    .setNegativeButton("取消",null)
+                    .setPositiveButton("删除",(d,w)->{
+                        if(index>=0&&index<apps.size()){
+                            AppItem removed=apps.remove(index);
+                            if(removed.pkg.equals(selectedPackage)){
+                                selectedPackage=null; selectedName=null;
+                                prefs.edit().remove("selected_control_package").apply();
                             }
+                            saveApps(); refresh();
                         }
-                        v.performClick();
-                        return true;
-                    }
-                    if(draggingItem){
-                        boolean overRight=e.getRawX()>getRealScreenSize().x-dp(190);
-                        boolean delete=overRight && e.getRawY()<getRealScreenSize().y/2f;
-                        boolean cancel=overRight && !delete;
-                        if(cancel) dragCancelled=true;
-                        finishMainDrag(delete);
-                    }
-                    return true;
-                case MotionEvent.ACTION_CANCEL:
-                    // 某些车机 ROM 会在父容器刷新/重排时发送一次 CANCEL。
-                    // 拖动状态下不要把它当成“手指松开”，否则刚拖一点就结束。
-                    if(draggingItem){
-                        v.getParent().requestDisallowInterceptTouchEvent(true);
-                        return true;
-                    }
-                    v.getParent().requestDisallowInterceptTouchEvent(false);
-                    dragHandler.removeCallbacks(dragLongPress);
-                    return true;
-            }
+                    }).show();
+        }
+    }
+
+    void setMainItemLongClick(View view,int type,int index){
+        view.setOnLongClickListener(v->{
+            showMainItemMenu(type,index);
             return true;
-        };
+        });
     }
 
     void refresh(){
@@ -830,9 +705,7 @@ public class MainActivity extends AppCompatActivity {
                 card.setOrientation(LinearLayout.VERTICAL);
                 card.setGravity(Gravity.CENTER);
                 card.setPadding(dp(6),dp(3),dp(6),dp(3));
-                card.setBackgroundColor(Color.TRANSPARENT);
-                card.setElevation(dp(8));
-                card.setTranslationZ(dp(8));
+                card.setBackgroundResource(R.drawable.card);
 
                 TextView title=mainText(p.name,34);
                 title.setGravity(Gravity.CENTER);
@@ -851,12 +724,10 @@ public class MainActivity extends AppCompatActivity {
                 card.addView(pos,new LinearLayout.LayoutParams(-1,dp(40)));
 
                 card.setOnClickListener(v->{
-                    if(!draggingItem){
-                        if(selectedPackage!=null) launchApp(p);
-                        else editPreset(index);
-                    }
+                    if(selectedPackage!=null) launchApp(p);
+                    else editPreset(index);
                 });
-                card.setOnTouchListener(mainDragTouch(0,index));
+                setMainItemLongClick(card,0,index);
 
                 // 窗口预设选框固定为 200×30dp，超出屏幕后横向滑动选择。
                 LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(200),dp(180));
@@ -898,10 +769,7 @@ public class MainActivity extends AppCompatActivity {
                     tile.setOrientation(LinearLayout.VERTICAL);
                     tile.setGravity(Gravity.CENTER);
                     tile.setPadding(dp(8),dp(8),dp(8),dp(8));
-                    tile.setBackgroundColor(Color.TRANSPARENT);
-                    tile.setElevation(dp(8));
-                    tile.setTranslationZ(dp(8));
-                    tile.setTag(itemIndex);
+                    tile.setBackgroundResource(item.pkg.equals(selectedPackage)?R.drawable.card_selected:R.drawable.card);
 
                     ImageView icon=new ImageView(this);
                     icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
@@ -915,13 +783,17 @@ public class MainActivity extends AppCompatActivity {
                     tile.addView(name,new LinearLayout.LayoutParams(-1,dp(66)));
 
                     tile.setOnClickListener(v->{
-                        if(!draggingItem){
-                            selectedPackage=item.pkg; selectedName=item.name;
-                            prefs.edit().putString("selected_control_package",item.pkg).apply();
-                            info.setText("当前 APP："+item.name); refresh();
-                        }
+                        long now=System.currentTimeMillis();
+                        boolean doubleTap=(lastMainAppTapIndex==itemIndex && now-lastMainAppTapTime<=420L);
+                        lastMainAppTapTime=now;
+                        lastMainAppTapIndex=itemIndex;
+                        selectedPackage=item.pkg; selectedName=item.name;
+                        prefs.edit().putString("selected_control_package",item.pkg).apply();
+                        info.setText(doubleTap?"启动："+item.name:"当前 APP："+item.name);
+                        if(doubleTap) launchAppDirect(item.pkg,item.name);
+                        else refresh();
                     });
-                    tile.setOnTouchListener(mainDragTouch(1,itemIndex));
+                    setMainItemLongClick(tile,1,itemIndex);
                     LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(200),dp(180));
                     lp.setMargins(dp(4),dp(4),dp(4),dp(4));
                     row.addView(tile,lp);
@@ -2516,8 +2388,8 @@ public class MainActivity extends AppCompatActivity {
         catch(Exception e){return new JSONArray();}
     }
 
+    /** 自动启动添加：界面与悬浮窗添加 APP 保持一致：窗口预设 + 分类 + APP 图标/名称。 */
     void showAddAutoTaskDialog(JSONArray[] tasks,Runnable refresh){
-        // 与“添加到悬浮窗口”统一：窗口预设 + 分类 + APP图标/名称。
         PackageManager pm=getPackageManager();
         ArrayList<ApplicationInfo> allApps=new ArrayList<>();
         try{
@@ -2528,48 +2400,106 @@ public class MainActivity extends AppCompatActivity {
         }catch(Exception ignored){}
         Collections.sort(allApps,(a,b)->getAppLabelSafe(a.packageName).compareToIgnoreCase(getAppLabelSafe(b.packageName)));
 
-        LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(8),dp(4),dp(8),dp(8));
-        TextView presetTitle=text("窗口预设",13); presetTitle.setTypeface(null,1);
-        root.addView(presetTitle,new LinearLayout.LayoutParams(-1,dp(32)));
-        HorizontalScrollView ps=new HorizontalScrollView(this); ps.setHorizontalScrollBarEnabled(false);
-        LinearLayout prow=new LinearLayout(this); prow.setGravity(Gravity.CENTER_VERTICAL); ps.addView(prow,new HorizontalScrollView.LayoutParams(-2,dp(48)));
-        root.addView(ps,new LinearLayout.LayoutParams(-1,dp(52)));
+        LinearLayout root=new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(12),dp(4),dp(12),dp(8));
+
+        TextView presetTitle=text("窗口预设",13);
+        presetTitle.setTypeface(null,android.graphics.Typeface.BOLD);
+        root.addView(presetTitle,new LinearLayout.LayoutParams(-1,dp(34)));
+        HorizontalScrollView presetScroll=new HorizontalScrollView(this);
+        LinearLayout presetChooserRow=new LinearLayout(this);
+        presetChooserRow.setGravity(Gravity.CENTER_VERTICAL);
+        presetScroll.addView(presetChooserRow,new HorizontalScrollView.LayoutParams(-2,dp(48)));
+        root.addView(presetScroll,new LinearLayout.LayoutParams(-1,dp(54)));
+
         final int[] selectedPreset={-1};
-        ArrayList<Button> pbs=new ArrayList<>();
-        Button direct=button("直接启动"); pbs.add(direct); prow.addView(direct,new LinearLayout.LayoutParams(dp(100),dp(44))); direct.setBackgroundResource(R.drawable.card_selected);
-        direct.setOnClickListener(v->{selectedPreset[0]=-1;for(Button b:pbs)b.setBackgroundResource(b==v?R.drawable.card_selected:R.drawable.button);});
-        for(int i=0;i<presets.size();i++){ final int pi=i; Button b=button(presets.get(i).name); b.setTextSize(11); pbs.add(b); prow.addView(b,new LinearLayout.LayoutParams(dp(150),dp(44))); b.setOnClickListener(v->{selectedPreset[0]=pi;for(Button q:pbs)q.setBackgroundResource(q==v?R.drawable.card_selected:R.drawable.button);}); }
-
-        LinearLayout cats=new LinearLayout(this); cats.setGravity(Gravity.CENTER_VERTICAL);
-        String[] catNames={"用户","系统","全部"}; final int[] cat={0}; final String[] selected={""}; Button[] cb=new Button[3]; final LinearLayout[] appRowsRef={null};
-        for(int i=0;i<3;i++){ final int ci=i; cb[i]=button(catNames[i]); if(i==0)cb[i].setBackgroundResource(R.drawable.card_selected); cats.addView(cb[i],new LinearLayout.LayoutParams(0,dp(44),1)); cb[i].setOnClickListener(v->{cat[0]=ci;for(Button q:cb)q.setBackgroundResource(q==v?R.drawable.card_selected:R.drawable.button);refreshAutoAppRows(allApps,appRowsRef[0],cat,selected);}); }
-        root.addView(cats,new LinearLayout.LayoutParams(-1,dp(50)));
-        ScrollView sv=new ScrollView(this); LinearLayout appRows=new LinearLayout(this); appRows.setOrientation(LinearLayout.VERTICAL); sv.addView(appRows,new ScrollView.LayoutParams(-1,-2)); root.addView(sv,new LinearLayout.LayoutParams(-1,0,1));
-        appRowsRef[0]=appRows;
-        refreshAutoAppRows(allApps,appRows,cat,selected);
-
-        LinearLayout bottom=new LinearLayout(this); bottom.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL); Button cancel=button("取消"), add=button("添加"); bottom.addView(cancel,new LinearLayout.LayoutParams(dp(100),dp(50))); bottom.addView(add,new LinearLayout.LayoutParams(dp(100),dp(50))); root.addView(bottom,new LinearLayout.LayoutParams(-1,dp(58)));
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("添加自动启动任务").setView(root).create();
-        cancel.setOnClickListener(v->dialog.dismiss());
-        add.setOnClickListener(v->{
-            if(selected[0].isEmpty()){Toast.makeText(this,"请选择 APP",Toast.LENGTH_SHORT).show();return;}
-            try{JSONObject o=new JSONObject();o.put("pkg",selected[0]);o.put("name",getAppLabelSafe(selected[0]));o.put("preset",selectedPreset[0]);tasks[0].put(o);refresh.run();dialog.dismiss();}catch(Exception e){Toast.makeText(this,"保存失败："+e.getMessage(),Toast.LENGTH_LONG).show();}
+        ArrayList<Button> presetButtons=new ArrayList<>();
+        Button defaultPreset=button("默认");
+        presetButtons.add(defaultPreset);
+        presetChooserRow.addView(defaultPreset,new LinearLayout.LayoutParams(dp(86),dp(44)));
+        defaultPreset.setBackgroundResource(R.drawable.card_selected);
+        defaultPreset.setOnClickListener(v->{
+            selectedPreset[0]=-1;
+            for(Button b:presetButtons)b.setBackgroundResource(b==v?R.drawable.card_selected:R.drawable.button);
         });
-        showFixed900x960(dialog);
-    }
-
-    void refreshAutoAppRows(ArrayList<ApplicationInfo> allApps,LinearLayout rows,int[] category,String[] selected){
-        if(rows==null)return; rows.removeAllViews(); int count=0; LinearLayout row=null;
-        for(ApplicationInfo ai:allApps){
-            boolean system=(ai.flags&ApplicationInfo.FLAG_SYSTEM)!=0; if(category[0]==0&&system)continue; if(category[0]==1&&!system)continue;
-            if(count%4==0){row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);rows.addView(row,new LinearLayout.LayoutParams(-1,dp(92)));}
-            final String pkg=ai.packageName; LinearLayout tile=new LinearLayout(this);tile.setOrientation(LinearLayout.VERTICAL);tile.setGravity(Gravity.CENTER);tile.setPadding(dp(4),dp(3),dp(4),dp(3)); tile.setBackgroundColor(Color.TRANSPARENT);
-            ImageView iv=new ImageView(this);try{iv.setImageDrawable(getPackageManager().getApplicationIcon(pkg));}catch(Exception ignored){} tile.addView(iv,new LinearLayout.LayoutParams(dp(54),dp(54)));
-            TextView tv=text(getAppLabelSafe(pkg),11);tv.setGravity(Gravity.CENTER);tv.setMaxLines(1);tv.setEllipsize(android.text.TextUtils.TruncateAt.END);tile.addView(tv,new LinearLayout.LayoutParams(-1,dp(30)));
-            if(pkg.equals(selected[0]))tile.setAlpha(0.65f); else tile.setAlpha(1f);
-            tile.setOnClickListener(v->{selected[0]=pkg;refreshAutoAppRows(allApps,rows,category,selected);});
-            row.addView(tile,new LinearLayout.LayoutParams(0,dp(90),1)); count++;
+        for(int i=0;i<presets.size();i++){
+            final int pi=i;
+            Button pb=button(presets.get(i).name);
+            pb.setTextSize(11);
+            presetButtons.add(pb);
+            presetChooserRow.addView(pb,new LinearLayout.LayoutParams(dp(150),dp(44)));
+            pb.setOnClickListener(v->{
+                selectedPreset[0]=pi;
+                for(Button b:presetButtons)b.setBackgroundResource(b==v?R.drawable.card_selected:R.drawable.button);
+            });
         }
+
+        LinearLayout categoryRow=new LinearLayout(this);
+        categoryRow.setGravity(Gravity.CENTER_VERTICAL);
+        String[] categories={"用户","系统","全部"};
+        final int[] category={0};
+        final String[] selectedPkg={""};
+        Button[] categoryButtons=new Button[categories.length];
+        final LinearLayout[] appRowsHolder={null};
+        for(int ci=0;ci<categories.length;ci++){
+            final int cc=ci;
+            Button cb=button(categories[ci]);
+            cb.setTextSize(12);
+            categoryButtons[ci]=cb;
+            if(ci==0)cb.setBackgroundResource(R.drawable.card_selected);
+            categoryRow.addView(cb,new LinearLayout.LayoutParams(0,dp(44),1));
+            cb.setOnClickListener(v->{
+                category[0]=cc;
+                for(Button b:categoryButtons)b.setBackgroundResource(b==v?R.drawable.card_selected:R.drawable.button);
+                refreshFloatingChooserApps(allApps,appRowsHolder[0],category,selectedPkg);
+            });
+        }
+        root.addView(categoryRow,new LinearLayout.LayoutParams(-1,dp(50)));
+
+        ScrollView sv=new ScrollView(this);
+        LinearLayout appRows=new LinearLayout(this);
+        appRows.setOrientation(LinearLayout.VERTICAL);
+        sv.addView(appRows,new ScrollView.LayoutParams(-1,-2));
+        root.addView(sv,new LinearLayout.LayoutParams(-1,0,1));
+        appRowsHolder[0]=appRows;
+
+        // 选中的 APP 明确显示“图标 + 名称”，和悬浮窗添加逻辑一致。
+        TextView selectedInfo=text("未选择 APP",13);
+        selectedInfo.setTextColor(Color.LTGRAY);
+        selectedInfo.setGravity(Gravity.CENTER_VERTICAL);
+        root.addView(selectedInfo,new LinearLayout.LayoutParams(-1,dp(36)));
+
+        refreshFloatingChooserApps(allApps,appRows,category,selectedPkg);
+
+        LinearLayout actions=new LinearLayout(this);
+        actions.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        Button cancel=button("取消"), save=button("保存");
+        actions.addView(cancel,new LinearLayout.LayoutParams(dp(100),dp(50)));
+        actions.addView(save,new LinearLayout.LayoutParams(dp(100),dp(50)));
+        root.addView(actions,new LinearLayout.LayoutParams(-1,dp(64)));
+
+        AlertDialog dlg=new AlertDialog.Builder(this).setTitle("添加自动启动任务").setView(root).create();
+        cancel.setOnClickListener(v->dlg.dismiss());
+        save.setOnClickListener(v->{
+            String pkg=selectedPkg[0];
+            if(pkg==null||pkg.isEmpty()){
+                Toast.makeText(this,"请先选择 APP",Toast.LENGTH_SHORT).show();
+                return;
+            }
+            try{
+                JSONObject o=new JSONObject();
+                o.put("pkg",pkg);
+                o.put("name",getAppLabelSafe(pkg));
+                o.put("preset",selectedPreset[0]);
+                tasks[0].put(o);
+                refresh.run();
+                dlg.dismiss();
+            }catch(Exception e){
+                Toast.makeText(this,"保存失败："+e.getMessage(),Toast.LENGTH_LONG).show();
+            }
+        });
+        showFixed900x960(dlg);
     }
 
     interface AppChoice { void onChoose(AppItem item); }
