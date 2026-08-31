@@ -2492,7 +2492,18 @@ public class MainActivity extends AppCompatActivity {
                 o.put("pkg",pkg);
                 o.put("name",getAppLabelSafe(pkg));
                 o.put("preset",selectedPreset[0]);
-                tasks[0].put(o);
+                // 自动启动任务保存“预设快照”，而不是只保存数组下标。
+                // 这样即使之后窗口预设左移/右移/删除，自动启动仍使用当时选中的窗口位置。
+                if(selectedPreset[0]>=0 && selectedPreset[0]<presets.size()){
+                    Preset ap=presets.get(selectedPreset[0]);
+                    o.put("preset_name",ap.name);
+                    o.put("preset_x",ap.x);
+                    o.put("preset_y",ap.y);
+                    o.put("preset_w",ap.w);
+                    o.put("preset_h",ap.h);
+                    o.put("preset_displayId",ap.displayId);
+                    o.put("preset_mode",ap.mode);
+                }
                 refresh.run();
                 dlg.dismiss();
             }catch(Exception e){

@@ -4,6 +4,7 @@ import android.app.ActivityOptions;
 import android.content.*;
 import android.graphics.Rect;
 import android.os.*;
+import android.util.DisplayMetrics;
 import org.json.*;
 
 public class BootReceiver extends BroadcastReceiver {
@@ -20,7 +21,6 @@ public class BootReceiver extends BroadcastReceiver {
             PendingResult result=goAsync();
             Handler h=new Handler(Looper.getMainLooper());
 
-            // 用户开启“本 APP 开机启动”时，先启动启动器自身。
             if(appBoot){
                 h.postDelayed(()->{
                     try{
@@ -42,29 +42,76 @@ public class BootReceiver extends BroadcastReceiver {
             h.postDelayed(result::finish,finishDelay);
         }catch(Exception ignored){}
     }
+
     void launchOne(Context context,SharedPreferences p,JSONObject item){
         try{
-            String pkg=item.optString("pkg",""); if(pkg.isEmpty())return;
-            Intent launch=context.getPackageManager().getLaunchIntentForPackage(pkg); if(launch==null)return;
-            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-            int presetIndex=item.optInt("preset",-1);
-            if(presetIndex>=0){
-                JSONArray presets=new JSONArray(p.getString(MainActivity.PRESETS,"[]"));
-                if(presetIndex<presets.length()){
-                    JSONObject pr=presets.getJSONObject(presetIndex); int mode=pr.optInt("mode",1);
-                    int x=Math.max(0,pr.optInt("x",0)),y=Math.max(0,pr.optInt("y",0));
-                    int w=Math.max(1,pr.optInt("w",1)),h=Math.max(1,pr.optInt("h",1));
-                    launch.putExtra("com.acc.acc.target_x",x);launch.putExtra("com.acc.acc.target_y",y);launch.putExtra("com.acc.acc.target_w",w);launch.putExtra("com.acc.acc.target_h",h);launch.putExtra("com.acc.acc.fullscreen",mode==6);
-                    if(Build.VERSION.SDK_INT>=24){
-                        ActivityOptions options=ActivityOptions.makeBasic();
-                        if(mode==6){
-                            android.util.DisplayMetrics dm=context.getResources().getDisplayMetrics(); options.setLaunchBounds(new Rect(0,0,dm.widthPixels,dm.heightPixels));
-                        }else options.setLaunchBounds(new Rect(x,y,x+w,y+h));
-                        try{context.startActivity(launch,options.toBundle());return;}catch(Exception ignored){}
+            String pkg=item.optString("pkg","");
+            if(pkg.isEmpty()) return;
+            Intent launch=context.getPackageManager().getLaunchIntentForPackage(pkg);
+            if(launch==null) return;
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS|Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+
+            int x=-1,y=-1,w=-1,h=-1,displayId=-1,mode=1;
+            boolean hasPreset=false;
+
+            // 优先使用创建自动任务时保存的预设快照，避免预设后来移动/删除导致下标变化。
+            if(item.has("preset_x") && item.has("preset_y") && item.has("preset_w") && item.has("preset_h")){
+                x=item.optInt("preset_x",0);
+                y=item.optInt("preset_y",0);
+                w=item.optInt("preset_w",1);
+                h=item.optInt("preset_h",1);
+                displayId=item.optInt("preset_displayId",-1);
+                mode=item.optInt("preset_mode",1);
+                hasPreset=true;
+            }else{
+                // 兼容旧版本已经保存的自动任务。
+                int presetIndex=item.optInt("preset",-1);
+                if(presetIndex>=0){
+                    JSONArray presets=new JSONArray(p.getString(MainActivity.PRESETS,"[]"));
+                    if(presetIndex<presets.length()){
+                        JSONObject pr=presets.getJSONObject(presetIndex);
+                        x=pr.optInt("x",0); y=pr.optInt("y",0);
+                        w=pr.optInt("w",1); h=pr.optInt("h",1);
+                        displayId=pr.optInt("displayId",-1);
+                        mode=pr.optInt("mode",1);
+                        hasPreset=true;
                     }
                 }
             }
-            context.startActivity(launch);
+
+            if(!hasPreset){
+                context.startActivity(launch);
+                return;
+            }
+
+            DisplayMetrics dm=context.getResources().getDisplayMetrics();
+            int screenW=Math.max(1,dm.widthPixels);
+            int screenH=Math.max(1,dm.heightPixels);
+            boolean fullscreen=(mode==6);
+            int left=Math.max(0,Math.min(x,screenW-1));
+            int top=Math.max(0,Math.min(y,screenH-1));
+            int right=Math.max(left+1,Math.min(x+Math.max(1,w),screenW));
+            int bottom=Math.max(top+1,Math.min(y+Math.max(1,h),screenH));
+            if(fullscreen){left=0;top=0;right=screenW;bottom=screenH;}
+
+            launch.putExtra("com.acc.acc.target_x",left);
+            launch.putExtra("com.acc.acc.target_y",top);
+            launch.putExtra("com.acc.acc.target_w",right-left);
+            launch.putExtra("com.acc.acc.target_h",bottom-top);
+            launch.putExtra("com.acc.acc.target_display_id",displayId);
+            launch.putExtra("com.acc.acc.fullscreen",fullscreen);
+
+            ActivityOptions options=ActivityOptions.makeBasic();
+            options.setLaunchBounds(new Rect(left,top,right,bottom));
+            if(Build.VERSION.SDK_INT>=26 && displayId>=0){
+                try{options.setLaunchDisplayId(displayId);}catch(Exception ignored){}
+            }
+            try{
+                context.startActivity(launch,options.toBundle());
+            }catch(Exception e){
+                // 某些车机对后台 ActivityOptions 限制较严，至少再次带着窗口参数启动。
+                try{context.startActivity(launch);}catch(Exception ignored){}
+            }
         }catch(Exception ignored){}
     }
 }
