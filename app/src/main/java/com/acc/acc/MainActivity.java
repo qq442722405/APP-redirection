@@ -2322,7 +2322,7 @@ public class MainActivity extends AppCompatActivity {
                 if(o==null) continue;
                 String name=o.optString("name",o.optString("pkg","APP"));
                 int pi=o.optInt("preset",-1);
-                String presetName="直接启动";
+                String presetName=o.optString("preset_name", "直接启动");
                 if(pi>=0 && pi<presets.size()) presetName=presets.get(pi).name;
                 LinearLayout row=new LinearLayout(this);
                 row.setGravity(Gravity.CENTER_VERTICAL);
@@ -2504,6 +2504,9 @@ public class MainActivity extends AppCompatActivity {
                     o.put("preset_displayId",ap.displayId);
                     o.put("preset_mode",ap.mode);
                 }
+                // 关键修复：此前这里只创建了任务 JSONObject，却没有加入 tasks 数组，
+                // 所以点击“保存”后自动启动任务实际上始终是空的。
+                tasks[0].put(o);
                 refresh.run();
                 dlg.dismiss();
             }catch(Exception e){
