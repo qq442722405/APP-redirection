@@ -1,0 +1,172 @@
+{
+  "globalDpi": 160,
+  "elements": [
+    {
+      "type": "window",
+      "top": 0,
+      "left": 0,
+      "width": 1000,
+      "height": 700,
+      "isLocked": true,
+      "isBottom": true,
+      "zIndex": 1,
+      "name": "窗口 #47"
+    },
+    {
+      "type": "text",
+      "top": 30,
+      "left": 30,
+      "width": 80,
+      "height": 44,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 900,
+      "content": "设置",
+      "fontSize": 40
+    },
+    {
+      "type": "text",
+      "top": 95,
+      "left": 53,
+      "width": 160,
+      "height": 44,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 923,
+      "content": "开机启动",
+      "fontSize": 40
+    },
+    {
+      "type": "button",
+      "top": 606,
+      "left": 53,
+      "width": 120,
+      "height": 50,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 956,
+      "text": "取消",
+      "fontSize": 16
+    },
+    {
+      "type": "button",
+      "top": 606,
+      "left": 193,
+      "width": 120,
+      "height": 50,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 957,
+      "text": "保存",
+      "fontSize": 16
+    },
+    {
+      "type": "button",
+      "top": 95,
+      "left": 233,
+      "width": 120,
+      "height": 41,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 924,
+      "text": "开关",
+      "fontSize": 16
+    },
+    {
+      "type": "text",
+      "top": 159,
+      "left": 53,
+      "width": 160,
+      "height": 44,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 928,
+      "content": "开机任务",
+      "fontSize": 40
+    },
+    {
+      "type": "button",
+      "top": 159,
+      "left": 233,
+      "width": 120,
+      "height": 41,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 925,
+      "text": "开关",
+      "fontSize": 16
+    },
+    {
+      "type": "button",
+      "top": 223,
+      "left": 53,
+      "width": 200,
+      "height": 41,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 1178,
+      "text": "界面选项",
+      "fontSize": 16
+    },
+    {
+      "type": "button",
+      "top": 284,
+      "left": 53,
+      "width": 200,
+      "height": 41,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 1179,
+      "text": "自动任务",
+      "fontSize": 16
+    },
+    {
+      "type": "button",
+      "top": 345,
+      "left": 53,
+      "width": 200,
+      "height": 41,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 1180,
+      "text": "权限与诊断",
+      "fontSize": 16
+    },
+    {
+      "type": "button",
+      "top": 406,
+      "left": 53,
+      "width": 200,
+      "height": 41,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 1181,
+      "text": "导出配置",
+      "fontSize": 16
+    },
+    {
+      "type": "button",
+      "top": 467,
+      "left": 53,
+      "width": 200,
+      "height": 41,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 1182,
+      "text": "导入配置",
+      "fontSize": 16
+    },
+    {
+      "type": "button",
+      "top": 528,
+      "left": 53,
+      "width": 200,
+      "height": 41,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 1183,
+      "text": "悬浮窗口设置",
+      "fontSize": 16
+    }
+  ]
+}

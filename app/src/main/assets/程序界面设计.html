@@ -1,0 +1,1676 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>可视化窗口/按钮/文本画布控制系统</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* 1. 左侧控制面板 */
+        .sidebar {
+            width: 360px;
+            min-width: 280px;
+            max-width: 800px;
+            background-color: #1e293b;
+            border-right: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            z-index: 10000;
+            box-shadow: 4px 0 15px rgba(0, 0, 0, 0.4);
+        }
+
+        .sidebar-resizer {
+            width: 6px;
+            position: absolute;
+            right: -3px;
+            top: 0;
+            bottom: 0;
+            cursor: col-resize;
+            z-index: 10001;
+            transition: background-color 0.2s;
+        }
+
+        .sidebar-resizer:hover, .sidebar-resizer.resizing {
+            background-color: #3b82f6;
+        }
+
+        .sidebar-header {
+            padding: 14px;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .sidebar-title-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .sidebar-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #38bdf8;
+        }
+
+        /* 操作按钮组 */
+        .action-btns-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 6px;
+        }
+
+        .storage-btns-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        .btn-action {
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            padding: 7px 6px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .btn-action:hover { background-color: #2563eb; }
+        .btn-action-green { background-color: #10b981; }
+        .btn-action-green:hover { background-color: #059669; }
+        .btn-action-purple { background-color: #8b5cf6; }
+        .btn-action-purple:hover { background-color: #7c3aed; }
+        .btn-action-amber { background-color: #f59e0b; }
+        .btn-action-amber:hover { background-color: #d97706; }
+        .btn-action-cyan { background-color: #06b6d4; }
+        .btn-action-cyan:hover { background-color: #0891b2; }
+        .btn-action-slate { background-color: #475569; }
+        .btn-action-slate:hover { background-color: #334155; }
+
+        .btn-danger {
+            background-color: #ef4444;
+            width: 100%;
+        }
+        .btn-danger:hover { background-color: #dc2626; }
+
+        /* 面板内部可滚动区域 */
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .panel-block {
+            background-color: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .block-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #94a3b8;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .form-group {
+            margin-bottom: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .form-group label {
+            font-size: 11px;
+            color: #94a3b8;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .unit-hint {
+            color: #38bdf8;
+            font-weight: normal;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="number"] {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 4px;
+            color: #f8fafc;
+            padding: 5px 6px;
+            font-size: 12px;
+            outline: none;
+            width: 100%;
+        }
+
+        .form-group input:focus {
+            border-color: #3b82f6;
+        }
+
+        .dpi-preset-chips {
+            display: flex;
+            gap: 4px;
+            margin-top: 4px;
+        }
+
+        .chip {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            color: #cbd5e1;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .chip:hover {
+            border-color: #3b82f6;
+            color: #38bdf8;
+        }
+
+        /* 警告信息提示框 */
+        .warning-box {
+            background-color: rgba(245, 158, 11, 0.15);
+            border: 1px solid #f59e0b;
+            color: #fbbf24;
+            padding: 6px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            line-height: 1.4;
+            margin-top: 8px;
+            display: none;
+        }
+
+        /* 勾选框样式 */
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 0;
+            cursor: pointer;
+            font-size: 12px;
+            color: #cbd5e1;
+        }
+
+        .checkbox-group input {
+            width: 15px;
+            height: 15px;
+            cursor: pointer;
+            accent-color: #3b82f6;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        /* 全局组件表格概览 */
+        .overview-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+
+        .overview-table th, .overview-table td {
+            padding: 5px 4px;
+            text-align: left;
+            border-bottom: 1px solid #1e293b;
+            white-space: nowrap;
+        }
+
+        .overview-table th { color: #64748b; }
+
+        .overview-table tr.active-row {
+            background-color: rgba(59, 130, 246, 0.2);
+            color: #38bdf8;
+        }
+
+        .tag-type {
+            font-size: 10px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .tag-win { background-color: #1e3a8a; color: #93c5fd; }
+        .tag-btn { background-color: #064e3b; color: #6ee7b7; }
+        .tag-txt { background-color: #581c87; color: #e9d5ff; }
+
+        /* 2. 右侧画布工作区 */
+        .workspace-wrapper {
+            flex: 1;
+            position: relative;
+            overflow: auto;
+            background-color: #0b0f19;
+        }
+
+        .canvas {
+            width: 3000px;
+            height: 2000px;
+            position: relative;
+            background-image: radial-gradient(#1e293b 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+
+        .canvas-elem {
+            position: absolute;
+            box-sizing: border-box;
+            cursor: move;
+        }
+
+        .canvas-elem.active {
+            outline: 2px dashed #3b82f6;
+            outline-offset: 2px;
+        }
+
+        .canvas-elem.is-locked {
+            resize: none !important;
+        }
+
+        .canvas-win {
+            background-color: rgba(30, 41, 59, 0.9);
+            border: 1px solid #475569;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            resize: both;
+            overflow: hidden;
+        }
+
+        .win-name-text {
+            color: #f1f5f9;
+            font-size: 14px;
+            font-weight: 600;
+            text-align: center;
+            word-break: break-all;
+            pointer-events: none;
+        }
+
+        .canvas-btn {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            padding: 0;
+            resize: both;
+            overflow: hidden;
+        }
+
+        .btn-label-text {
+            pointer-events: none;
+            text-align: center;
+            word-break: break-all;
+            line-height: 1.2;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
+
+        .canvas-text {
+            background: transparent !important;
+            border: none !important;
+            color: #f8fafc;
+            display: inline-block !important;
+            width: max-content !important;
+            height: max-content !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            resize: none !important;
+            overflow: visible !important;
+            line-height: 1.1;
+        }
+
+        .text-content-span {
+            pointer-events: none;
+            display: inline-block;
+            white-space: nowrap;
+            font-weight: 500;
+        }
+
+        .no-selection-tip {
+            font-size: 12px;
+            color: #64748b;
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        /* 智能磁吸对齐线 */
+        .guide-line {
+            position: absolute;
+            background-color: #ef4444;
+            z-index: 999999;
+            pointer-events: none;
+            display: none;
+        }
+        .guide-line-v {
+            width: 1px;
+            top: 0;
+            bottom: 0;
+            box-shadow: 0 0 4px rgba(239, 68, 68, 0.8);
+        }
+        .guide-line-h {
+            height: 1px;
+            left: 0;
+            right: 0;
+            box-shadow: 0 0 4px rgba(239, 68, 68, 0.8);
+        }
+
+        /* 画布框选框样式 */
+        .selection-box {
+            position: absolute;
+            border: 1px dashed #3b82f6;
+            background-color: rgba(59, 130, 246, 0.15);
+            pointer-events: none;
+            z-index: 99999;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 1. 左侧控制面板 -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-resizer" id="resizer"></div>
+
+        <div class="sidebar-header">
+            <div class="sidebar-title-row">
+                <span class="sidebar-title">车机 UI 设计控制台</span>
+            </div>
+
+            <!-- 存档与载入 -->
+            <div class="storage-btns-grid">
+                <button class="btn-action btn-action-amber" id="saveBtn">💾 保存配置</button>
+                <button class="btn-action btn-action-slate" id="loadBtn">📂 载入配置</button>
+                <input type="file" id="fileInput" accept=".json" style="display: none;">
+            </div>
+
+            <!-- 新建组件 -->
+            <div class="action-btns-grid">
+                <button class="btn-action" id="addWinBtn">＋ 窗口</button>
+                <button class="btn-action btn-action-green" id="addBtnBtn">＋ 按钮</button>
+                <button class="btn-action btn-action-purple" id="addTxtBtn">＋ 文本</button>
+            </div>
+        </div>
+
+        <div class="sidebar-content">
+            <!-- 全局 DPI 设置模块 -->
+            <div class="panel-block">
+                <div class="block-title">
+                    <span>全局屏幕参数</span>
+                    <span id="dpiRatioText" style="color: #10b981; font-weight: normal; font-size: 11px;">1px = 0.16mm</span>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <span>车机屏幕 DPI (PPI)</span>
+                        <span id="dpEquivalentText" class="unit-hint">基准 1dp = 1px</span>
+                    </label>
+                    <input type="number" id="inpGlobalDpi" value="160">
+                </div>
+                <div class="dpi-preset-chips">
+                    <span class="chip" onclick="setPresetDpi(160)">160 (Standard)</span>
+                    <span class="chip" onclick="setPresetDpi(210)">210 (Common IVI)</span>
+                    <span class="chip" onclick="setPresetDpi(140)">140 (10.25")</span>
+                </div>
+            </div>
+
+            <!-- 选中组件参数控制区 -->
+            <div class="panel-block">
+                <div class="block-title">
+                    <span>当前选中组件</span>
+                    <span id="activeElemTag" style="color: #38bdf8;">未选择</span>
+                </div>
+                
+                <!-- 单选属性表单 -->
+                <div id="controlForm" style="display: none;">
+                    <!-- 窗口配置 -->
+                    <div class="form-group" id="groupWinName">
+                        <label>窗口名称 (Name)</label>
+                        <input type="text" id="inpWinName">
+                    </div>
+
+                    <!-- 按钮配置 -->
+                    <div id="groupBtnConfig" style="display: none;">
+                        <div class="form-group">
+                            <label>按钮文字 (Text)</label>
+                            <input type="text" id="inpBtnText">
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <span>文字字号 (px)</span>
+                                <span id="btnFontMmHint" class="unit-hint"></span>
+                            </label>
+                            <input type="number" id="inpBtnFontSize">
+                        </div>
+                    </div>
+
+                    <!-- 文本配置 -->
+                    <div id="groupTextConfig" style="display: none;">
+                        <div class="form-group">
+                            <label>文本内容 (Content)</label>
+                            <input type="text" id="inpTextContent">
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <span>文字字号 (px)</span>
+                                <span id="textFontMmHint" class="unit-hint"></span>
+                            </label>
+                            <input type="number" id="inpTextFontSize">
+                        </div>
+                    </div>
+
+                    <!-- 坐标尺寸（换算提示） -->
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label>
+                                <span>离上 (Top px)</span>
+                                <span id="topMmHint" class="unit-hint"></span>
+                            </label>
+                            <input type="number" id="inpTop">
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <span>离左 (Left px)</span>
+                                <span id="leftMmHint" class="unit-hint"></span>
+                            </label>
+                            <input type="number" id="inpLeft">
+                        </div>
+                    </div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label>
+                                <span>宽度 (Width px)</span>
+                                <span id="widthMmHint" class="unit-hint"></span>
+                            </label>
+                            <input type="number" id="inpWidth">
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <span>高度 (Height px)</span>
+                                <span id="heightMmHint" class="unit-hint"></span>
+                            </label>
+                            <input type="number" id="inpHeight">
+                        </div>
+                    </div>
+
+                    <!-- 安全警告 -->
+                    <div class="warning-box" id="warningBox"></div>
+
+                    <!-- 状态勾选 -->
+                    <div class="grid-2" style="margin-top: 8px; border-top: 1px solid #334155; padding-top: 6px;">
+                        <label class="checkbox-group">
+                            <input type="checkbox" id="chkLock">
+                            <span>🔒 锁定位置尺寸</span>
+                        </label>
+                        <label class="checkbox-group">
+                            <input type="checkbox" id="chkBottom">
+                            <span>⬇️ 固定最下层</span>
+                        </label>
+                    </div>
+
+                    <!-- 复制克隆、参数复制与删除按钮 -->
+                    <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px;">
+                        <button class="btn-action btn-action-purple" id="duplicateBtn" style="width: 100%;">👯 复制克隆此组件</button>
+                        <button class="btn-action btn-action-cyan" id="copyConfigBtn" style="width: 100%;">📋 复制转换参数 (dp)</button>
+                        <button class="btn-action btn-danger" id="deleteBtn">🗑️ 删除此组件</button>
+                    </div>
+                </div>
+
+                <!-- 多选控制面板 -->
+                <div id="multiControlForm" style="display: none;">
+                    <div class="form-group">
+                        <label>已选择组件数量</label>
+                        <div id="multiCountText" style="color: #38bdf8; font-weight: bold; font-size: 13px; margin: 4px 0;">已选中 0 个组件</div>
+                    </div>
+
+                    <!-- 多选对齐控制区 -->
+                    <div class="form-group" style="margin-top: 10px; border-top: 1px solid #334155; padding-top: 8px;">
+                        <label>
+                            <span>组件快速对齐</span>
+                            <span class="unit-hint">选定项目间对齐</span>
+                        </label>
+                        <div class="action-btns-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top: 6px;">
+                            <button class="btn-action btn-action-slate" id="btnAlignLeft">⬅️ 左对齐</button>
+                            <button class="btn-action btn-action-slate" id="btnAlignHCenter">↔️ 水平居中</button>
+                            <button class="btn-action btn-action-slate" id="btnAlignRight">➡️ 右对齐</button>
+                            <button class="btn-action btn-action-slate" id="btnAlignTop">🔝 上对齐</button>
+                            <button class="btn-action btn-action-slate" id="btnAlignVCenter">↕️ 垂直居中</button>
+                            <button class="btn-action btn-action-slate" id="btnAlignBottom">🔚 下对齐</button>
+                        </div>
+                    </div>
+
+                    <!-- 多选间距调整区 -->
+                    <div class="form-group" style="margin-top: 10px; border-top: 1px solid #334155; padding-top: 8px;">
+                        <label>
+                            <span>组件固定间距 (px)</span>
+                            <span class="unit-hint">设置选中项间距</span>
+                        </label>
+                        <div style="display: flex; gap: 6px; margin-top: 4px;">
+                            <input type="number" id="inpGapValue" value="16" placeholder="间距" style="width: 70px;">
+                            <button class="btn-action btn-action-cyan" id="btnApplyGapH" style="flex: 1;">↔️ 横向设置间距</button>
+                            <button class="btn-action btn-action-cyan" id="btnApplyGapV" style="flex: 1;">↕️ 纵向设置间距</button>
+                        </div>
+                    </div>
+
+                    <!-- 多选批量操作 -->
+                    <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 6px;">
+                        <button class="btn-action btn-action-purple" id="multiDuplicateBtn" style="width: 100%;">👯 批量复制克隆选中项</button>
+                        <button class="btn-action btn-danger" id="multiDeleteBtn" style="width: 100%;">🗑️ 批量删除选中项</button>
+                    </div>
+                </div>
+
+                <div id="noSelectionTip" class="no-selection-tip">
+                    点击或拖拽框选画布中的组件<br>
+                    <span style="color:#475569; font-size:11px;">(支持 Shift 多选，方向键微调，Shift+方向键快移)</span>
+                </div>
+            </div>
+
+            <!-- 组件概览表格 -->
+            <div class="panel-block">
+                <div class="block-title">所有组件概览</div>
+                <table class="overview-table">
+                    <thead>
+                        <tr>
+                            <th>类型</th>
+                            <th>名称/内容</th>
+                            <th>物理尺寸 (mm)</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody id="overviewTbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 2. 右侧画布工作区 -->
+    <main class="workspace-wrapper" id="workspaceWrapper">
+        <div class="canvas" id="canvas">
+            <!-- 磁吸对齐线 -->
+            <div class="guide-line guide-line-v" id="guideV"></div>
+            <div class="guide-line guide-line-h" id="guideH"></div>
+            <!-- 画布框选框 -->
+            <div class="selection-box" id="selectionBox"></div>
+        </div>
+    </main>
+
+    <script>
+        const sidebar = document.getElementById('sidebar');
+        const resizer = document.getElementById('resizer');
+        const canvas = document.getElementById('canvas');
+        const guideV = document.getElementById('guideV');
+        const guideH = document.getElementById('guideH');
+        const selectionBox = document.getElementById('selectionBox');
+        
+        const addWinBtn = document.getElementById('addWinBtn');
+        const addBtnBtn = document.getElementById('addBtnBtn');
+        const addTxtBtn = document.getElementById('addTxtBtn');
+        const saveBtn = document.getElementById('saveBtn');
+        const loadBtn = document.getElementById('loadBtn');
+        const fileInput = document.getElementById('fileInput');
+        
+        const duplicateBtn = document.getElementById('duplicateBtn');
+        const deleteBtn = document.getElementById('deleteBtn');
+        const copyConfigBtn = document.getElementById('copyConfigBtn');
+
+        const multiControlForm = document.getElementById('multiControlForm');
+        const multiCountText = document.getElementById('multiCountText');
+        const inpGapValue = document.getElementById('inpGapValue');
+        const btnApplyGapH = document.getElementById('btnApplyGapH');
+        const btnApplyGapV = document.getElementById('btnApplyGapV');
+        const multiDuplicateBtn = document.getElementById('multiDuplicateBtn');
+        const multiDeleteBtn = document.getElementById('multiDeleteBtn');
+
+        // 多选对齐按钮 DOM
+        const btnAlignLeft = document.getElementById('btnAlignLeft');
+        const btnAlignHCenter = document.getElementById('btnAlignHCenter');
+        const btnAlignRight = document.getElementById('btnAlignRight');
+        const btnAlignTop = document.getElementById('btnAlignTop');
+        const btnAlignVCenter = document.getElementById('btnAlignVCenter');
+        const btnAlignBottom = document.getElementById('btnAlignBottom');
+
+        const inpGlobalDpi = document.getElementById('inpGlobalDpi');
+        const dpiRatioText = document.getElementById('dpiRatioText');
+        const dpEquivalentText = document.getElementById('dpEquivalentText');
+
+        const controlForm = document.getElementById('controlForm');
+        const noSelectionTip = document.getElementById('noSelectionTip');
+        const activeElemTag = document.getElementById('activeElemTag');
+        const warningBox = document.getElementById('warningBox');
+        const overviewTbody = document.getElementById('overviewTbody');
+
+        const groupWinName = document.getElementById('groupWinName');
+        const groupBtnConfig = document.getElementById('groupBtnConfig');
+        const groupTextConfig = document.getElementById('groupTextConfig');
+
+        const inpWinName = document.getElementById('inpWinName');
+        const inpBtnText = document.getElementById('inpBtnText');
+        const inpBtnFontSize = document.getElementById('inpBtnFontSize');
+        const btnFontMmHint = document.getElementById('btnFontMmHint');
+
+        const inpTextContent = document.getElementById('inpTextContent');
+        const inpTextFontSize = document.getElementById('inpTextFontSize');
+        const textFontMmHint = document.getElementById('textFontMmHint');
+        
+        const inpTop = document.getElementById('inpTop');
+        const topMmHint = document.getElementById('topMmHint');
+        const inpLeft = document.getElementById('inpLeft');
+        const leftMmHint = document.getElementById('leftMmHint');
+        const inpWidth = document.getElementById('inpWidth');
+        const widthMmHint = document.getElementById('widthMmHint');
+        const inpHeight = document.getElementById('inpHeight');
+        const heightMmHint = document.getElementById('heightMmHint');
+
+        const chkLock = document.getElementById('chkLock');
+        const chkBottom = document.getElementById('chkBottom');
+
+        let elementCounter = 0;
+        let zIndexCounter = 100;
+        let selectedElems = []; // 当前选中的所有 DOM 元素列表
+
+        // --- DPI 换算函数 ---
+        function getDpi() {
+            return Math.max(1, parseInt(inpGlobalDpi.value) || 160);
+        }
+
+        function pxToMm(px) {
+            return (px * 25.4 / getDpi()).toFixed(1);
+        }
+
+        function pxToDp(px) {
+            return Math.round(px * 160 / getDpi());
+        }
+
+        function updateDpiDisplayInfo() {
+            const dpi = getDpi();
+            const mmPerPx = (25.4 / dpi).toFixed(2);
+            dpiRatioText.textContent = `1px ≈ ${mmPerPx}mm`;
+            dpEquivalentText.textContent = `1dp = ${(dpi / 160).toFixed(2)}px`;
+            syncDataToSidebar();
+        }
+
+        function setPresetDpi(val) {
+            inpGlobalDpi.value = val;
+            updateDpiDisplayInfo();
+        }
+
+        inpGlobalDpi.addEventListener('input', updateDpiDisplayInfo);
+
+        // --- 隐藏辅助线 ---
+        function hideGuides() {
+            guideV.style.display = 'none';
+            guideH.style.display = 'none';
+        }
+
+        // --- 1. 面板拖拽 ---
+        let isResizingSidebar = false;
+        resizer.addEventListener('mousedown', () => {
+            isResizingSidebar = true;
+            resizer.classList.add('resizing');
+            document.body.style.cursor = 'col-resize';
+
+            const onMouseMove = (ev) => {
+                if (!isResizingSidebar) return;
+                let newWidth = Math.max(250, Math.min(ev.clientX, window.innerWidth - 100));
+                sidebar.style.width = `${newWidth}px`;
+            };
+
+            const onMouseUp = () => {
+                isResizingSidebar = false;
+                resizer.classList.remove('resizing');
+                document.body.style.cursor = '';
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            };
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+
+        // --- 选择与多选逻辑管理 ---
+        function clearSelection() {
+            selectedElems.forEach(el => el.classList.remove('active'));
+            selectedElems = [];
+            updateSidebarForm();
+        }
+
+        function selectElement(elem, isMulti = false) {
+            if (!isMulti) {
+                clearSelection();
+                selectedElems = [elem];
+                elem.classList.add('active');
+            } else {
+                const idx = selectedElems.indexOf(elem);
+                if (idx > -1) {
+                    elem.classList.remove('active');
+                    selectedElems.splice(idx, 1);
+                } else {
+                    selectedElems.push(elem);
+                    elem.classList.add('active');
+                }
+            }
+
+            if (elem.dataset.bottom !== 'true') {
+                elem.style.zIndex = ++zIndexCounter;
+            }
+
+            updateSidebarForm();
+        }
+
+        // --- 画布空白处拖拽框选逻辑 ---
+        let isBoxSelecting = false;
+        let boxStartX = 0, boxStartY = 0;
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.target !== canvas && !e.target.classList.contains('guide-line')) return;
+
+            const rect = canvas.getBoundingClientRect();
+            boxStartX = e.clientX - rect.left;
+            boxStartY = e.clientY - rect.top;
+
+            isBoxSelecting = true;
+            selectionBox.style.left = `${boxStartX}px`;
+            selectionBox.style.top = `${boxStartY}px`;
+            selectionBox.style.width = '0px';
+            selectionBox.style.height = '0px';
+            selectionBox.style.display = 'block';
+
+            if (!e.shiftKey && !e.ctrlKey) {
+                clearSelection();
+            }
+
+            const onMouseMove = (ev) => {
+                if (!isBoxSelecting) return;
+                const currentX = ev.clientX - rect.left;
+                const currentY = ev.clientY - rect.top;
+
+                const left = Math.min(boxStartX, currentX);
+                const top = Math.min(boxStartY, currentY);
+                const width = Math.abs(currentX - boxStartX);
+                const height = Math.abs(currentY - boxStartY);
+
+                selectionBox.style.left = `${left}px`;
+                selectionBox.style.top = `${top}px`;
+                selectionBox.style.width = `${width}px`;
+                selectionBox.style.height = `${height}px`;
+
+                const allElems = canvas.querySelectorAll('.canvas-elem');
+                allElems.forEach(elem => {
+                    const eL = elem.offsetLeft;
+                    const eT = elem.offsetTop;
+                    const eW = elem.offsetWidth;
+                    const eH = elem.offsetHeight;
+
+                    const intersect = !(eL > left + width || eL + eW < left || eT > top + height || eT + eH < top);
+                    if (intersect) {
+                        if (!selectedElems.includes(elem)) {
+                            selectedElems.push(elem);
+                            elem.classList.add('active');
+                        }
+                    } else if (!ev.shiftKey && !ev.ctrlKey) {
+                        const idx = selectedElems.indexOf(elem);
+                        if (idx > -1) {
+                            selectedElems.splice(idx, 1);
+                            elem.classList.remove('active');
+                        }
+                    }
+                });
+                updateSidebarForm();
+            };
+
+            const onMouseUp = () => {
+                isBoxSelecting = false;
+                selectionBox.style.display = 'none';
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            };
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+
+        // --- 2. 创建组件 ---
+        function createWindow(config = {}, shouldSelect = true) {
+            elementCounter++;
+            const elem = document.createElement('div');
+            elem.className = 'canvas-elem canvas-win';
+            elem.dataset.type = 'window';
+            
+            const top = config.top ?? (60 + (elementCounter % 8) * 25);
+            const left = config.left ?? (60 + (elementCounter % 8) * 25);
+            const width = config.width ?? 200;
+            const height = config.height ?? 140;
+
+            applyBasicStyles(elem, top, left, width, height, config);
+
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'win-name-text';
+            nameDiv.textContent = config.name || `窗口 #${elementCounter}`;
+            elem.appendChild(nameDiv);
+
+            bindElemEvents(elem);
+            canvas.appendChild(elem);
+            if (shouldSelect) selectElement(elem, false);
+            return elem;
+        }
+
+        function createButton(config = {}, shouldSelect = true) {
+            elementCounter++;
+            const elem = document.createElement('div');
+            elem.className = 'canvas-elem canvas-btn';
+            elem.dataset.type = 'button';
+
+            const top = config.top ?? (80 + (elementCounter % 8) * 25);
+            const left = config.left ?? (100 + (elementCounter % 8) * 25);
+            const width = config.width ?? 140;
+            const height = config.height ?? 50;
+
+            applyBasicStyles(elem, top, left, width, height, config);
+
+            const textDiv = document.createElement('div');
+            textDiv.className = 'btn-label-text';
+            textDiv.textContent = config.text || `按钮 #${elementCounter}`;
+            textDiv.style.fontSize = `${config.fontSize || 16}px`;
+            elem.appendChild(textDiv);
+
+            bindElemEvents(elem);
+            canvas.appendChild(elem);
+            if (shouldSelect) selectElement(elem, false);
+            return elem;
+        }
+
+        function createText(config = {}, shouldSelect = true) {
+            elementCounter++;
+            const elem = document.createElement('div');
+            elem.className = 'canvas-elem canvas-text';
+            elem.dataset.type = 'text';
+
+            const top = config.top ?? (100 + (elementCounter % 8) * 25);
+            const left = config.left ?? (140 + (elementCounter % 8) * 25);
+
+            elem.style.top = `${top}px`;
+            elem.style.left = `${left}px`;
+
+            elem.dataset.locked = config.isLocked ? 'true' : 'false';
+            if (config.isLocked) elem.classList.add('is-locked');
+
+            elem.dataset.bottom = config.isBottom ? 'true' : 'false';
+            if (config.isBottom) elem.style.zIndex = '1';
+            else elem.style.zIndex = config.zIndex || ++zIndexCounter;
+
+            const span = document.createElement('span');
+            span.className = 'text-content-span';
+            span.textContent = config.content || `车机文本 #${elementCounter}`;
+            span.style.fontSize = `${config.fontSize || 16}px`;
+            elem.appendChild(span);
+
+            bindElemEvents(elem);
+            canvas.appendChild(elem);
+            if (shouldSelect) selectElement(elem, false);
+            return elem;
+        }
+
+        function applyBasicStyles(elem, top, left, width, height, config) {
+            elem.style.top = `${top}px`;
+            elem.style.left = `${left}px`;
+            if (width !== undefined) elem.style.width = `${width}px`;
+            if (height !== undefined) elem.style.height = `${height}px`;
+
+            elem.dataset.locked = config.isLocked ? 'true' : 'false';
+            if (config.isLocked) elem.classList.add('is-locked');
+
+            elem.dataset.bottom = config.isBottom ? 'true' : 'false';
+            if (config.isBottom) elem.style.zIndex = '1';
+            else elem.style.zIndex = config.zIndex || ++zIndexCounter;
+        }
+
+        // --- 3. 拖拽（支持多选同步拖拽）与智能吸附对齐逻辑 ---
+        function bindElemEvents(elem) {
+            elem.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+
+                const isMultiKey = e.shiftKey || e.ctrlKey;
+
+                if (isMultiKey) {
+                    selectElement(elem, true);
+                } else {
+                    if (!selectedElems.includes(elem)) {
+                        selectElement(elem, false);
+                    }
+                }
+
+                if (elem.dataset.locked === 'true' && selectedElems.length === 1) return;
+
+                const rect = elem.getBoundingClientRect();
+                const isResizeCorner = (e.clientX > rect.right - 16) && (e.clientY > rect.bottom - 16);
+                if (isResizeCorner && elem.dataset.type !== 'text') return;
+
+                let startX = e.clientX;
+                let startY = e.clientY;
+
+                // 记录所有选中元素的初始位置
+                const initPositions = selectedElems.map(el => ({
+                    elem: el,
+                    left: el.offsetLeft,
+                    top: el.offsetTop,
+                    locked: el.dataset.locked === 'true'
+                }));
+
+                const onMouseMove = (ev) => {
+                    const deltaX = ev.clientX - startX;
+                    const deltaY = ev.clientY - startY;
+
+                    // 单选时启用吸附逻辑
+                    if (selectedElems.length === 1 && !elem.dataset.locked) {
+                        let newLeft = Math.max(0, initPositions[0].left + deltaX);
+                        let newTop = Math.max(0, initPositions[0].top + deltaY);
+
+                        const SNAP_THRESHOLD = 6;
+                        let snappedLeft = null;
+                        let snappedTop = null;
+                        let guideVPos = null;
+                        let guideHPos = null;
+
+                        const elemW = elem.offsetWidth;
+                        const elemH = elem.offsetHeight;
+
+                        const curL = newLeft;
+                        const curR = newLeft + elemW;
+                        const curC = newLeft + elemW / 2;
+
+                        const curT = newTop;
+                        const curB = newTop + elemH;
+                        const curM = newTop + elemH / 2;
+
+                        const otherElems = Array.from(document.querySelectorAll('.canvas-elem')).filter(el => el !== elem);
+
+                        for (const other of otherElems) {
+                            const oL = other.offsetLeft;
+                            const oW = other.offsetWidth;
+                            const oR = oL + oW;
+                            const oC = oL + oW / 2;
+
+                            const oT = other.offsetTop;
+                            const oH = other.offsetHeight;
+                            const oB = oT + oH;
+                            const oM = oT + oH / 2;
+
+                            if (Math.abs(curL - oL) < SNAP_THRESHOLD) { snappedLeft = oL; guideVPos = oL; }
+                            else if (Math.abs(curL - oR) < SNAP_THRESHOLD) { snappedLeft = oR; guideVPos = oR; }
+                            else if (Math.abs(curR - oL) < SNAP_THRESHOLD) { snappedLeft = oL - elemW; guideVPos = oL; }
+                            else if (Math.abs(curR - oR) < SNAP_THRESHOLD) { snappedLeft = oR - elemW; guideVPos = oR; }
+                            else if (Math.abs(curC - oC) < SNAP_THRESHOLD) { snappedLeft = oC - elemW / 2; guideVPos = oC; }
+
+                            if (Math.abs(curT - oT) < SNAP_THRESHOLD) { snappedTop = oT; guideHPos = oT; }
+                            else if (Math.abs(curT - oB) < SNAP_THRESHOLD) { snappedTop = oB; guideHPos = oB; }
+                            else if (Math.abs(curB - oT) < SNAP_THRESHOLD) { snappedTop = oT - elemH; guideHPos = oT; }
+                            else if (Math.abs(curB - oB) < SNAP_THRESHOLD) { snappedTop = oB - elemH; guideHPos = oB; }
+                            else if (Math.abs(curM - oM) < SNAP_THRESHOLD) { snappedTop = oM - elemH / 2; guideHPos = oM; }
+                        }
+
+                        if (snappedLeft !== null) newLeft = snappedLeft;
+                        if (snappedTop !== null) newTop = snappedTop;
+
+                        if (guideVPos !== null) {
+                            guideV.style.left = `${guideVPos}px`;
+                            guideV.style.display = 'block';
+                        } else {
+                            guideV.style.display = 'none';
+                        }
+
+                        if (guideHPos !== null) {
+                            guideH.style.top = `${guideHPos}px`;
+                            guideH.style.display = 'block';
+                        } else {
+                            guideH.style.display = 'none';
+                        }
+
+                        elem.style.left = `${newLeft}px`;
+                        elem.style.top = `${newTop}px`;
+                    } else {
+                        // 多选批量拖拽
+                        initPositions.forEach(item => {
+                            if (item.locked) return;
+                            item.elem.style.left = `${Math.max(0, item.left + deltaX)}px`;
+                            item.elem.style.top = `${Math.max(0, item.top + deltaY)}px`;
+                        });
+                    }
+
+                    syncDataToSidebar();
+                };
+
+                const onMouseUp = () => {
+                    hideGuides();
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                };
+
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+
+            const resizeObserver = new ResizeObserver(() => {
+                if (selectedElems.includes(elem)) syncDataToSidebar();
+                else renderOverviewTable();
+            });
+            resizeObserver.observe(elem);
+        }
+
+        // --- 4. 键盘方向键微调监听 ---
+        document.addEventListener('keydown', (e) => {
+            if (selectedElems.length === 0) return;
+
+            const activeTag = document.activeElement.tagName;
+            if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+
+            const step = e.shiftKey ? 10 : 1;
+            let moved = false;
+
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                selectedElems.forEach(elem => {
+                    if (elem.dataset.locked === 'true') return;
+                    let curTop = elem.offsetTop;
+                    let curLeft = elem.offsetLeft;
+
+                    if (e.key === 'ArrowUp') elem.style.top = `${Math.max(0, curTop - step)}px`;
+                    else if (e.key === 'ArrowDown') elem.style.top = `${curTop + step}px`;
+                    else if (e.key === 'ArrowLeft') elem.style.left = `${Math.max(0, curLeft - step)}px`;
+                    else if (e.key === 'ArrowRight') elem.style.left = `${curLeft + step}px`;
+                    moved = true;
+                });
+            }
+
+            if (moved) {
+                e.preventDefault();
+                syncDataToSidebar();
+            }
+        });
+
+        // --- 5. 数据同步（焦点保护机制） ---
+        function syncDataToSidebar() {
+            if (selectedElems.length !== 1) {
+                renderOverviewTable();
+                return;
+            }
+
+            const activeElem = selectedElems[0];
+            const type = activeElem.dataset.type;
+            const topPx = activeElem.offsetTop;
+            const leftPx = activeElem.offsetLeft;
+            const widthPx = activeElem.offsetWidth;
+            const heightPx = activeElem.offsetHeight;
+
+            topMmHint.textContent = `${pxToDp(topPx)}dp / ${pxToMm(topPx)}mm`;
+            leftMmHint.textContent = `${pxToDp(leftPx)}dp / ${pxToMm(leftPx)}mm`;
+            widthMmHint.textContent = `${pxToDp(widthPx)}dp / ${pxToMm(widthPx)}mm`;
+            heightMmHint.textContent = `${pxToDp(heightPx)}dp / ${pxToMm(heightPx)}mm`;
+
+            let fontPx = 0;
+            if (type === 'window') {
+                if (document.activeElement !== inpWinName) {
+                    inpWinName.value = activeElem.querySelector('.win-name-text').textContent;
+                }
+            } else if (type === 'button') {
+                const label = activeElem.querySelector('.btn-label-text');
+                if (document.activeElement !== inpBtnText) {
+                    inpBtnText.value = label.textContent;
+                }
+                fontPx = parseFloat(label.style.fontSize) || 16;
+                if (document.activeElement !== inpBtnFontSize) {
+                    inpBtnFontSize.value = fontPx;
+                }
+                btnFontMmHint.textContent = `${pxToDp(fontPx)}sp / ${pxToMm(fontPx)}mm`;
+            } else if (type === 'text') {
+                const span = activeElem.querySelector('.text-content-span');
+                if (document.activeElement !== inpTextContent) {
+                    inpTextContent.value = span.textContent;
+                }
+                fontPx = parseFloat(span.style.fontSize) || 16;
+                if (document.activeElement !== inpTextFontSize) {
+                    inpTextFontSize.value = fontPx;
+                }
+                textFontMmHint.textContent = `${pxToDp(fontPx)}sp / ${pxToMm(fontPx)}mm`;
+            }
+
+            if (document.activeElement !== inpTop) inpTop.value = topPx;
+            if (document.activeElement !== inpLeft) inpLeft.value = leftPx;
+            if (document.activeElement !== inpWidth) inpWidth.value = widthPx;
+            if (document.activeElement !== inpHeight) inpHeight.value = heightPx;
+
+            chkLock.checked = activeElem.dataset.locked === 'true';
+            chkBottom.checked = activeElem.dataset.bottom === 'true';
+
+            let warnings = [];
+            const wMm = parseFloat(pxToMm(widthPx));
+            const hMm = parseFloat(pxToMm(heightPx));
+            const fMm = parseFloat(pxToMm(fontPx));
+
+            if (type === 'button' && (wMm < 9 || hMm < 9)) {
+                warnings.push(`⚠️ 按钮按压热区 (${wMm}×${hMm}mm) 小于车机推荐最小热区 (9×9mm)。`);
+            }
+            if ((type === 'button' || type === 'text') && fMm < 3.5) {
+                warnings.push(`⚠️ 文字字号 (${fMm}mm) 偏小，视距阅读性较差。`);
+            }
+
+            if (warnings.length > 0) {
+                warningBox.style.display = 'block';
+                warningBox.innerHTML = warnings.join('<br>');
+            } else {
+                warningBox.style.display = 'none';
+            }
+
+            renderOverviewTable();
+        }
+
+        function updateSidebarForm() {
+            if (selectedElems.length === 1) {
+                const activeElem = selectedElems[0];
+                controlForm.style.display = 'block';
+                multiControlForm.style.display = 'none';
+                noSelectionTip.style.display = 'none';
+
+                const type = activeElem.dataset.type;
+                groupWinName.style.display = type === 'window' ? 'block' : 'none';
+                groupBtnConfig.style.display = type === 'button' ? 'block' : 'none';
+                groupTextConfig.style.display = type === 'text' ? 'block' : 'none';
+
+                inpWidth.disabled = type === 'text';
+                inpHeight.disabled = type === 'text';
+
+                const typeMap = { 'window': '窗口', 'button': '按钮', 'text': '文本' };
+                activeElemTag.textContent = typeMap[type];
+
+                syncDataToSidebar();
+            } else if (selectedElems.length > 1) {
+                controlForm.style.display = 'none';
+                multiControlForm.style.display = 'block';
+                noSelectionTip.style.display = 'none';
+                activeElemTag.textContent = `已选 ${selectedElems.length} 项`;
+                multiCountText.textContent = `已选中 ${selectedElems.length} 个组件`;
+                renderOverviewTable();
+            } else {
+                controlForm.style.display = 'none';
+                multiControlForm.style.display = 'none';
+                noSelectionTip.style.display = 'block';
+                activeElemTag.textContent = '未选择';
+                renderOverviewTable();
+            }
+        }
+
+        function renderOverviewTable() {
+            const allElems = document.querySelectorAll('.canvas-elem');
+            overviewTbody.innerHTML = '';
+
+            allElems.forEach(elem => {
+                const tr = document.createElement('tr');
+                if (selectedElems.includes(elem)) tr.className = 'active-row';
+
+                const type = elem.dataset.type;
+                let typeTag = '', nameText = '';
+
+                if (type === 'window') {
+                    typeTag = '<span class="tag-type tag-win">窗口</span>';
+                    nameText = elem.querySelector('.win-name-text').textContent;
+                } else if (type === 'button') {
+                    typeTag = '<span class="tag-type tag-btn">按钮</span>';
+                    nameText = elem.querySelector('.btn-label-text').textContent;
+                } else if (type === 'text') {
+                    typeTag = '<span class="tag-type tag-txt">文本</span>';
+                    nameText = elem.querySelector('.text-content-span').textContent;
+                }
+
+                const mmSize = `${pxToMm(elem.offsetWidth)}×${pxToMm(elem.offsetHeight)}`;
+                let statusStr = '';
+                if (elem.dataset.locked === 'true') statusStr += '🔒';
+                if (elem.dataset.bottom === 'true') statusStr += '⬇️';
+                if (!statusStr) statusStr = '正常';
+
+                tr.innerHTML = `
+                    <td>${typeTag}</td>
+                    <td>${nameText}</td>
+                    <td>${mmSize}</td>
+                    <td>${statusStr}</td>
+                `;
+
+                tr.style.cursor = 'pointer';
+                tr.addEventListener('click', (e) => {
+                    const isMultiKey = e.shiftKey || e.ctrlKey;
+                    selectElement(elem, isMultiKey);
+                });
+                overviewTbody.appendChild(tr);
+            });
+        }
+
+        // --- 多选对齐控制逻辑 ---
+        function checkCanAlign() {
+            return selectedElems.length >= 2;
+        }
+
+        // 左对齐
+        btnAlignLeft.addEventListener('click', () => {
+            if (!checkCanAlign()) return;
+            const minLeft = Math.min(...selectedElems.map(el => el.offsetLeft));
+            selectedElems.forEach(el => {
+                if (el.dataset.locked !== 'true') {
+                    el.style.left = `${minLeft}px`;
+                }
+            });
+            syncDataToSidebar();
+        });
+
+        // 水平居中对齐
+        btnAlignHCenter.addEventListener('click', () => {
+            if (!checkCanAlign()) return;
+            const minLeft = Math.min(...selectedElems.map(el => el.offsetLeft));
+            const maxRight = Math.max(...selectedElems.map(el => el.offsetLeft + el.offsetWidth));
+            const centerX = (minLeft + maxRight) / 2;
+
+            selectedElems.forEach(el => {
+                if (el.dataset.locked !== 'true') {
+                    const newLeft = Math.round(centerX - el.offsetWidth / 2);
+                    el.style.left = `${newLeft}px`;
+                }
+            });
+            syncDataToSidebar();
+        });
+
+        // 右对齐
+        btnAlignRight.addEventListener('click', () => {
+            if (!checkCanAlign()) return;
+            const maxRight = Math.max(...selectedElems.map(el => el.offsetLeft + el.offsetWidth));
+            selectedElems.forEach(el => {
+                if (el.dataset.locked !== 'true') {
+                    el.style.left = `${maxRight - el.offsetWidth}px`;
+                }
+            });
+            syncDataToSidebar();
+        });
+
+        // 上对齐
+        btnAlignTop.addEventListener('click', () => {
+            if (!checkCanAlign()) return;
+            const minTop = Math.min(...selectedElems.map(el => el.offsetTop));
+            selectedElems.forEach(el => {
+                if (el.dataset.locked !== 'true') {
+                    el.style.top = `${minTop}px`;
+                }
+            });
+            syncDataToSidebar();
+        });
+
+        // 垂直居中对齐
+        btnAlignVCenter.addEventListener('click', () => {
+            if (!checkCanAlign()) return;
+            const minTop = Math.min(...selectedElems.map(el => el.offsetTop));
+            const maxBottom = Math.max(...selectedElems.map(el => el.offsetTop + el.offsetHeight));
+            const centerY = (minTop + maxBottom) / 2;
+
+            selectedElems.forEach(el => {
+                if (el.dataset.locked !== 'true') {
+                    const newTop = Math.round(centerY - el.offsetHeight / 2);
+                    el.style.top = `${newTop}px`;
+                }
+            });
+            syncDataToSidebar();
+        });
+
+        // 下对齐
+        btnAlignBottom.addEventListener('click', () => {
+            if (!checkCanAlign()) return;
+            const maxBottom = Math.max(...selectedElems.map(el => el.offsetTop + el.offsetHeight));
+            selectedElems.forEach(el => {
+                if (el.dataset.locked !== 'true') {
+                    el.style.top = `${maxBottom - el.offsetHeight}px`;
+                }
+            });
+            syncDataToSidebar();
+        });
+
+        // --- 多选设置固定间距 ---
+        btnApplyGapH.addEventListener('click', () => {
+            if (selectedElems.length < 2) return;
+            const gap = parseInt(inpGapValue.value) || 0;
+            // 按照水平左坐标排序
+            const sorted = [...selectedElems].sort((a, b) => a.offsetLeft - b.offsetLeft);
+
+            for (let i = 1; i < sorted.length; i++) {
+                const prev = sorted[i - 1];
+                const newLeft = prev.offsetLeft + prev.offsetWidth + gap;
+                sorted[i].style.left = `${newLeft}px`;
+            }
+            syncDataToSidebar();
+        });
+
+        btnApplyGapV.addEventListener('click', () => {
+            if (selectedElems.length < 2) return;
+            const gap = parseInt(inpGapValue.value) || 0;
+            // 按照垂直上坐标排序
+            const sorted = [...selectedElems].sort((a, b) => a.offsetTop - b.offsetTop);
+
+            for (let i = 1; i < sorted.length; i++) {
+                const prev = sorted[i - 1];
+                const newTop = prev.offsetTop + prev.offsetHeight + gap;
+                sorted[i].style.top = `${newTop}px`;
+            }
+            syncDataToSidebar();
+        });
+
+        // --- 6. 绑定表单输入监听 ---
+        inpWinName.addEventListener('input', (e) => {
+            if (selectedElems.length === 1 && selectedElems[0].dataset.type === 'window') {
+                selectedElems[0].querySelector('.win-name-text').textContent = e.target.value;
+                renderOverviewTable();
+            }
+        });
+
+        inpBtnText.addEventListener('input', (e) => {
+            if (selectedElems.length === 1 && selectedElems[0].dataset.type === 'button') {
+                selectedElems[0].querySelector('.btn-label-text').textContent = e.target.value;
+                renderOverviewTable();
+            }
+        });
+
+        inpBtnFontSize.addEventListener('input', (e) => {
+            if (selectedElems.length === 1 && selectedElems[0].dataset.type === 'button') {
+                if (e.target.value !== '') {
+                    selectedElems[0].querySelector('.btn-label-text').style.fontSize = `${e.target.value}px`;
+                }
+                syncDataToSidebar();
+            }
+        });
+
+        inpTextContent.addEventListener('input', (e) => {
+            if (selectedElems.length === 1 && selectedElems[0].dataset.type === 'text') {
+                selectedElems[0].querySelector('.text-content-span').textContent = e.target.value;
+                renderOverviewTable();
+            }
+        });
+
+        inpTextFontSize.addEventListener('input', (e) => {
+            if (selectedElems.length === 1 && selectedElems[0].dataset.type === 'text') {
+                if (e.target.value !== '') {
+                    selectedElems[0].querySelector('.text-content-span').style.fontSize = `${e.target.value}px`;
+                }
+                syncDataToSidebar();
+            }
+        });
+
+        inpTop.addEventListener('input', (e) => {
+            if (selectedElems.length === 1) {
+                if (e.target.value !== '') selectedElems[0].style.top = `${e.target.value}px`;
+                syncDataToSidebar();
+            }
+        });
+
+        inpLeft.addEventListener('input', (e) => {
+            if (selectedElems.length === 1) {
+                if (e.target.value !== '') selectedElems[0].style.left = `${e.target.value}px`;
+                syncDataToSidebar();
+            }
+        });
+
+        inpWidth.addEventListener('input', (e) => {
+            if (selectedElems.length === 1 && selectedElems[0].dataset.type !== 'text') {
+                if (e.target.value !== '') selectedElems[0].style.width = `${e.target.value}px`;
+                syncDataToSidebar();
+            }
+        });
+
+        inpHeight.addEventListener('input', (e) => {
+            if (selectedElems.length === 1 && selectedElems[0].dataset.type !== 'text') {
+                if (e.target.value !== '') selectedElems[0].style.height = `${e.target.value}px`;
+                syncDataToSidebar();
+            }
+        });
+
+        chkLock.addEventListener('change', (e) => {
+            if (selectedElems.length !== 1) return;
+            const isLocked = e.target.checked;
+            selectedElems[0].dataset.locked = isLocked ? 'true' : 'false';
+            selectedElems[0].classList.toggle('is-locked', isLocked);
+            renderOverviewTable();
+        });
+
+        chkBottom.addEventListener('change', (e) => {
+            if (selectedElems.length !== 1) return;
+            const isBottom = e.target.checked;
+            selectedElems[0].dataset.bottom = isBottom ? 'true' : 'false';
+            if (isBottom) selectedElems[0].style.zIndex = '1';
+            else selectedElems[0].style.zIndex = ++zIndexCounter;
+            renderOverviewTable();
+        });
+
+        // --- 7. 复制克隆与删除逻辑（支持单选 & 多选） ---
+        function duplicateSelected() {
+            if (selectedElems.length === 0) return;
+
+            const newElems = [];
+            const sourceElems = [...selectedElems];
+
+            sourceElems.forEach(activeElem => {
+                const type = activeElem.dataset.type;
+                const top = activeElem.offsetTop + 20;
+                const left = activeElem.offsetLeft + 20;
+                const width = activeElem.offsetWidth;
+                const height = activeElem.offsetHeight;
+                const isLocked = activeElem.dataset.locked === 'true';
+                const isBottom = activeElem.dataset.bottom === 'true';
+
+                let newElem;
+                if (type === 'window') {
+                    const name = activeElem.querySelector('.win-name-text').textContent;
+                    newElem = createWindow({ name: `${name} (副本)`, top, left, width, height, isLocked, isBottom }, false);
+                } else if (type === 'button') {
+                    const label = activeElem.querySelector('.btn-label-text');
+                    const text = label.textContent;
+                    const fontSize = parseFloat(label.style.fontSize) || 16;
+                    newElem = createButton({ text, top, left, width, height, fontSize, isLocked, isBottom }, false);
+                } else if (type === 'text') {
+                    const span = activeElem.querySelector('.text-content-span');
+                    const content = span.textContent;
+                    const fontSize = parseFloat(span.style.fontSize) || 16;
+                    newElem = createText({ content, top, left, fontSize, isLocked, isBottom }, false);
+                }
+                if (newElem) newElems.push(newElem);
+            });
+
+            clearSelection();
+            newElems.forEach(el => selectElement(el, true));
+        }
+
+        function deleteSelected() {
+            selectedElems.forEach(el => el.remove());
+            selectedElems = [];
+            updateSidebarForm();
+        }
+
+        duplicateBtn.addEventListener('click', duplicateSelected);
+        multiDuplicateBtn.addEventListener('click', duplicateSelected);
+
+        deleteBtn.addEventListener('click', deleteSelected);
+        multiDeleteBtn.addEventListener('click', deleteSelected);
+
+        // --- 8. 复制转换参数 ---
+        copyConfigBtn.addEventListener('click', () => {
+            if (selectedElems.length !== 1) return;
+            const activeElem = selectedElems[0];
+
+            const type = activeElem.dataset.type;
+            const topDp = pxToDp(activeElem.offsetTop);
+            const leftDp = pxToDp(activeElem.offsetLeft);
+            const widthDp = pxToDp(activeElem.offsetWidth);
+            const heightDp = pxToDp(activeElem.offsetHeight);
+
+            let resultText = "";
+
+            if (type === 'window') {
+                const name = activeElem.querySelector('.win-name-text').textContent;
+                resultText = `[窗口: ${name}] 宽:${widthDp}dp, 高:${heightDp}dp, 离上:${topDp}dp, 离左:${leftDp}dp`;
+            } else if (type === 'button') {
+                const label = activeElem.querySelector('.btn-label-text');
+                const fontPx = parseFloat(label.style.fontSize) || 16;
+                const fontSp = pxToDp(fontPx);
+                resultText = `[按钮: ${label.textContent}] 宽:${widthDp}dp, 高:${heightDp}dp, 离上:${topDp}dp, 离左:${leftDp}dp, 字号:${fontSp}sp`;
+            } else if (type === 'text') {
+                const span = activeElem.querySelector('.text-content-span');
+                const fontPx = parseFloat(span.style.fontSize) || 16;
+                const fontSp = pxToDp(fontPx);
+                resultText = `[文本: ${span.textContent}] 离上:${topDp}dp, 离左:${leftDp}dp, 字号:${fontSp}sp`;
+            }
+
+            navigator.clipboard.writeText(resultText).then(() => {
+                const originalText = copyConfigBtn.textContent;
+                copyConfigBtn.textContent = '✅ 已复制到剪贴板！';
+                copyConfigBtn.style.backgroundColor = '#10b981';
+                setTimeout(() => {
+                    copyConfigBtn.textContent = originalText;
+                    copyConfigBtn.style.backgroundColor = '';
+                }, 1200);
+            });
+        });
+
+        // --- 9. 存档与载入 ---
+        saveBtn.addEventListener('click', () => {
+            const allElems = document.querySelectorAll('.canvas-elem');
+            const dataList = [];
+
+            allElems.forEach(elem => {
+                const type = elem.dataset.type;
+                const item = {
+                    type: type,
+                    top: elem.offsetTop,
+                    left: elem.offsetLeft,
+                    width: elem.offsetWidth,
+                    height: elem.offsetHeight,
+                    isLocked: elem.dataset.locked === 'true',
+                    isBottom: elem.dataset.bottom === 'true',
+                    zIndex: parseInt(elem.style.zIndex) || 100
+                };
+
+                if (type === 'window') {
+                    item.name = elem.querySelector('.win-name-text').textContent;
+                } else if (type === 'button') {
+                    const label = elem.querySelector('.btn-label-text');
+                    item.text = label.textContent;
+                    item.fontSize = parseFloat(label.style.fontSize) || 16;
+                } else if (type === 'text') {
+                    const span = elem.querySelector('.text-content-span');
+                    item.content = span.textContent;
+                    item.fontSize = parseFloat(span.style.fontSize) || 16;
+                }
+
+                dataList.push(item);
+            });
+
+            const packageData = {
+                globalDpi: getDpi(),
+                elements: dataList
+            };
+
+            const jsonStr = JSON.stringify(packageData, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ivi_canvas_dpi${getDpi()}_${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        loadBtn.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const rawData = JSON.parse(event.target.result);
+                    let dataList = [];
+
+                    if (Array.isArray(rawData)) {
+                        dataList = rawData;
+                    } else if (rawData.elements) {
+                        dataList = rawData.elements;
+                        if (rawData.globalDpi) inpGlobalDpi.value = rawData.globalDpi;
+                    } else {
+                        throw new Error('格式错误');
+                    }
+
+                    canvas.innerHTML = '';
+                    canvas.appendChild(guideV);
+                    canvas.appendChild(guideH);
+                    canvas.appendChild(selectionBox);
+
+                    selectedElems = [];
+                    elementCounter = 0;
+
+                    dataList.forEach(item => {
+                        if (item.type === 'window') createWindow(item, false);
+                        else if (item.type === 'button') createButton(item, false);
+                        else if (item.type === 'text') createText(item, false);
+                    });
+
+                    updateDpiDisplayInfo();
+                    updateSidebarForm();
+                } catch (err) {
+                    alert('导入失败，配置文件格式不正确！');
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = '';
+        });
+
+        addWinBtn.addEventListener('click', () => createWindow());
+        addBtnBtn.addEventListener('click', () => createButton());
+        addTxtBtn.addEventListener('click', () => createText());
+
+        // 初始化
+        updateDpiDisplayInfo();
+        createWindow({ name: '主控制卡片' });
+        createButton({ text: '盲操按键', width: 140, height: 50 });
+        createText({ content: '显示字号标题', fontSize: 18 });
+    </script>
+</body>
+</html>

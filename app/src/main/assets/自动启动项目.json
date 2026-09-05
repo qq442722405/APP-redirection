@@ -1,0 +1,136 @@
+{
+  "globalDpi": 160,
+  "elements": [
+    {
+      "type": "window",
+      "top": 0,
+      "left": 0,
+      "width": 1000,
+      "height": 700,
+      "isLocked": true,
+      "isBottom": true,
+      "zIndex": 1,
+      "name": "窗口 #47"
+    },
+    {
+      "type": "text",
+      "top": 30,
+      "left": 30,
+      "width": 240,
+      "height": 44,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 1155,
+      "content": "自动启动项目",
+      "fontSize": 40
+    },
+    {
+      "type": "button",
+      "top": 606,
+      "left": 53,
+      "width": 120,
+      "height": 50,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 956,
+      "text": "取消",
+      "fontSize": 16
+    },
+    {
+      "type": "button",
+      "top": 606,
+      "left": 193,
+      "width": 120,
+      "height": 50,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 957,
+      "text": "保存",
+      "fontSize": 16
+    },
+    {
+      "type": "text",
+      "top": 529,
+      "left": 50,
+      "width": 160,
+      "height": 44,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 1119,
+      "content": "任务间隔",
+      "fontSize": 40
+    },
+    {
+      "type": "button",
+      "top": 529,
+      "left": 410,
+      "width": 120,
+      "height": 41,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 1112,
+      "text": "数值",
+      "fontSize": 16
+    },
+    {
+      "type": "text",
+      "top": 529,
+      "left": 550,
+      "width": 40,
+      "height": 44,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 1111,
+      "content": "秒",
+      "fontSize": 40
+    },
+    {
+      "type": "button",
+      "top": 146,
+      "left": 50,
+      "width": 60,
+      "height": 60,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 1154,
+      "text": "数值",
+      "fontSize": 16
+    },
+    {
+      "type": "text",
+      "top": 147,
+      "left": 130,
+      "width": 211,
+      "height": 61,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 1153,
+      "content": "APP名称",
+      "fontSize": 55
+    },
+    {
+      "type": "text",
+      "top": 147,
+      "left": 361,
+      "width": 220,
+      "height": 61,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 1152,
+      "content": "窗口预设",
+      "fontSize": 55
+    },
+    {
+      "type": "button",
+      "top": 147,
+      "left": 794,
+      "width": 100,
+      "height": 50,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 1151,
+      "text": "删除",
+      "fontSize": 16
+    }
+  ]
+}
