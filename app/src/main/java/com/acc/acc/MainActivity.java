@@ -1603,6 +1603,28 @@ public class MainActivity extends AppCompatActivity {
         showDesignedDialog(dialog,1000,700);
     }
 
+    JSONObject buildConfigJson(){
+        JSONObject root=new JSONObject();
+        try{
+            root.put("version",2);
+            root.put("export_time",System.currentTimeMillis());
+            root.put("apps",new JSONArray(prefs.getString(APPS,"[]")));
+            root.put("presets",new JSONArray(prefs.getString(PRESETS,"[]")));
+            root.put("floating_apps",new JSONArray(prefs.getString("floating_apps","[]")));
+            JSONArray keys=new JSONArray();
+            Map<String,?> all=prefs.getAll();
+            for(String k:all.keySet()){
+                if(k.equals(APPS)||k.equals(PRESETS)) continue;
+                Object v=all.get(k);
+                if(v instanceof String || v instanceof Integer || v instanceof Long || v instanceof Float || v instanceof Boolean){
+                    JSONObject item=new JSONObject(); item.put("key",k); item.put("value",v); keys.put(item);
+                }
+            }
+            root.put("settings",keys);
+        }catch(Exception ignored){}
+        return root;
+    }
+
     void exportConfig(){
         try{
             Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
@@ -1767,6 +1789,11 @@ public class MainActivity extends AppCompatActivity {
         showDesignedDialog(dialog,1000,700);redraw[0].run();
     }
 
+    JSONArray loadAutoTasks(){
+        try{return new JSONArray(prefs.getString("auto_start_items","[]"));}
+        catch(Exception e){return new JSONArray();}
+    }
+
     /** 自动启动添加 APP 与“添加APP”共用同一套设计参数。 */
     void showAddAutoTaskDialog(JSONArray[] tasks,Runnable refresh){
         DesignSpec d=loadDesign("添加APP.json");
@@ -1815,6 +1842,13 @@ public class MainActivity extends AppCompatActivity {
         }catch(Exception e){Toast.makeText(this,"保存失败："+e.getMessage(),Toast.LENGTH_LONG).show();}});
         showDesignedDialog(dlg,1000,700);rr[0].run();
     }
+
+    String getAppLabelSafe(String pkg){
+        try{return getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(pkg,0)).toString();}
+        catch(Exception e){return pkg;}
+    }
+
+    interface AppChoice { void onChoose(AppItem item); }
 
     void showAppChoiceDialog(AppChoice callback){
         PackageManager pm=getPackageManager();
