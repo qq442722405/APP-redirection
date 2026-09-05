@@ -8,7 +8,14 @@ import android.util.DisplayMetrics;
 import org.json.*;
 
 public class BootReceiver extends BroadcastReceiver {
+    private static final long AUTO_TASK_COOLDOWN_MS = 3000L;
+    private static volatile long lastAutoTaskRunAt = 0L;
+
     @Override public void onReceive(Context context, Intent intent) {
+        long now = System.currentTimeMillis();
+        if(now-lastAutoTaskRunAt<AUTO_TASK_COOLDOWN_MS) return;
+        lastAutoTaskRunAt=now;
+
         if (!Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) return;
         SharedPreferences p=context.getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE);
         boolean appBoot=p.getBoolean("app_boot_enabled",false);
