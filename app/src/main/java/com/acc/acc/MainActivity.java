@@ -1843,6 +1843,19 @@ public class MainActivity extends AppCompatActivity {
         showDesignedDialog(dlg,1000,700);rr[0].run();
     }
 
+    /** 将悬浮手势内部值转换为界面显示文字。 */
+    String getGestureLabel(String gesture){
+        if(gesture==null) return "无操作";
+        switch(gesture){
+            case "back": return "返回";
+            case "home": return "主页";
+            case "menu": return "菜单";
+            case "close": return "关闭";
+            case "none":
+            default: return "无操作";
+        }
+    }
+
     String getAppLabelSafe(String pkg){
         try{return getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(pkg,0)).toString();}
         catch(Exception e){return pkg;}
