@@ -138,7 +138,8 @@ public class AccessibilityServiceBridge extends AccessibilityService {
 
     private android.graphics.Point getRealScreenSize(){
         try{
-            android.view.Display d=getWindowManager().getDefaultDisplay();
+            android.view.WindowManager wm=(android.view.WindowManager)getSystemService(android.content.Context.WINDOW_SERVICE);
+            android.view.Display d=wm.getDefaultDisplay();
             android.graphics.Point p=new android.graphics.Point();
             d.getRealSize(p);
             return p;
