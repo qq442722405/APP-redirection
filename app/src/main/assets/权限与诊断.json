@@ -1,0 +1,87 @@
+{
+  "globalDpi": 160,
+  "elements": [
+    {
+      "type": "window",
+      "top": 0,
+      "left": 0,
+      "width": 1000,
+      "height": 700,
+      "isLocked": true,
+      "isBottom": true,
+      "zIndex": 1,
+      "name": "窗口 #47"
+    },
+    {
+      "type": "text",
+      "top": 30,
+      "left": 30,
+      "width": 200,
+      "height": 44,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 518,
+      "content": "权限与诊断",
+      "fontSize": 40
+    },
+    {
+      "type": "button",
+      "top": 606,
+      "left": 53,
+      "width": 120,
+      "height": 50,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 519,
+      "text": "悬浮权限",
+      "fontSize": 16
+    },
+    {
+      "type": "button",
+      "top": 606,
+      "left": 193,
+      "width": 120,
+      "height": 50,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 520,
+      "text": "无障碍权限",
+      "fontSize": 16
+    },
+    {
+      "type": "button",
+      "top": 606,
+      "left": 333,
+      "width": 120,
+      "height": 50,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 521,
+      "text": "权限检查",
+      "fontSize": 16
+    },
+    {
+      "type": "button",
+      "top": 606,
+      "left": 473,
+      "width": 120,
+      "height": 50,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 522,
+      "text": "返回",
+      "fontSize": 16
+    },
+    {
+      "type": "window",
+      "top": 92,
+      "left": 53,
+      "width": 857,
+      "height": 496,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 525,
+      "name": "权限信息"
+    }
+  ]
+}

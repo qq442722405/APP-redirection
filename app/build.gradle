@@ -1,0 +1,47 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace "com.acc.acc"
+    compileSdk 35
+
+    signingConfigs {
+        acc {
+            storeFile file("../Acc.jks")
+            storePassword "Acc123456!"
+            keyAlias "Acc"
+            keyPassword "Acc123456!"
+        }
+    }
+
+    compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
+}
+
+defaultConfig {
+        applicationId "com.acc.acc"
+        minSdk 26
+        targetSdk 34
+        versionCode 23
+        versionName '1.0'
+        signingConfig signingConfigs.acc
+    }
+
+    packaging {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+    }
+}
+
+configurations.configureEach {
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.core:core:1.15.0'
+}

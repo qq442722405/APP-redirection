@@ -1,0 +1,15 @@
+本工程已按用户提供的网页设计参数整合。
+运行时从 app/src/main/assets/ 读取以下 JSON：
+主界面.json
+添加APP.json
+手势操作相关界面使用添加APP.json
+悬浮窗口添加按钮使用添加APP.json
+设置.json
+界面选项.json
+自动启动项目.json
+悬浮窗口设置.json
+权限与诊断.json
+新建预设窗口.json
+
+坐标/尺寸按设计稿 px 使用，字号按设计稿 fontSize 使用，并保留程序原有功能逻辑。
+主界面使用主界面.json；添加 APP、手势选择、悬浮窗口添加 APP/按钮共用添加APP.json。
