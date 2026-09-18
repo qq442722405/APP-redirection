@@ -23,7 +23,12 @@ final class PreferenceDraft implements SharedPreferences {
         }
         boolean ok=out.commit(); if(ok){values.clear();removed.clear();} return ok;
     }
-    private Object value(String k,Object fallback){return removed.contains(k)?fallback:values.containsKey(k)?values.get(k):source.getAll().getOrDefault(k,fallback);}
+    private Object value(String k,Object fallback){
+        if(removed.contains(k))return fallback;
+        if(values.containsKey(k))return values.get(k);
+        Map<String,?> stored=source.getAll();
+        return stored.containsKey(k)?stored.get(k):fallback;
+    }
     public Map<String,?> getAll(){Map<String,Object> all=new HashMap<>(source.getAll());for(String k:removed)all.remove(k);all.putAll(values);return all;}
     public String getString(String k,String d){return (String)value(k,d);}
     public Set<String> getStringSet(String k,Set<String>d){Set<String> s=(Set<String>)value(k,d);return s==null?null:new HashSet<>(s);}
