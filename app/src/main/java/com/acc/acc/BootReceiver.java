@@ -10,6 +10,7 @@ public class BootReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context context, Intent intent) {
         if (!Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) return;
         SharedPreferences p=context.getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE);
+        if(p.getBoolean("simo_enabled",false)&&p.getBoolean("simo_boot",false))SimoVoiceService.sync(context);
         boolean appBoot=p.getBoolean("app_boot_enabled",false);
         boolean taskBoot=p.getBoolean("auto_start_enabled",false);
         try{

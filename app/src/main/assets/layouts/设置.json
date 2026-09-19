@@ -181,6 +181,19 @@
       "text": "悬浮窗口设置",
       "fontSize": 16,
       "id": "e13"
+    },
+    {
+      "id": "e14",
+      "type": "button",
+      "left": 300,
+      "top": 528,
+      "width": 260,
+      "height": 41,
+      "isLocked": false,
+      "isBottom": false,
+      "zIndex": 1314,
+      "text": "SIMO 语音启动",
+      "fontSize": 22
     }
   ],
   "fontUnit": "px",

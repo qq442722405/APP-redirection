@@ -215,6 +215,7 @@ final class LauncherDesign {
         p.bind(5,boot);p.bind(7,tasks);
         p.action(8,a::showInterfaceOptionsDialog);p.action(9,a::showAutoStartEditor);p.action(10,a::showScreenDiagnostics);
         p.action(11,a::exportConfig);p.action(12,a::importConfig);overlayGate(p.action(13,a::showFloatingWindowSettingsDialog));
+        p.action(14,()->SimoVoiceSettings.show(a));
         p.action(3,d::dismiss);p.action(4,()->{a.prefs.edit().putBoolean("app_boot_enabled",boot.isChecked()).putBoolean("auto_start_enabled",tasks.isChecked()).apply();d.dismiss();});
         show(d,p);
     }

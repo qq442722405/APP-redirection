@@ -1,6 +1,6 @@
 const fs=require('fs'),path=require('path');
 const directory=path.join(__dirname,'../app/src/main/assets/layouts');
-const pages={'主界面':40,'新建预设窗口':46,'添加APP':26,'设置':14,'界面选项':23,'悬浮窗口设置':35,'自动启动项目':11,'权限与诊断':7,'添加悬浮按钮':26,'单图标操作':9,'手势APP选择':26};
+const pages={'主界面':40,'新建预设窗口':46,'添加APP':26,'设置':15,'界面选项':23,'悬浮窗口设置':35,'自动启动项目':11,'权限与诊断':7,'添加悬浮按钮':26,'单图标操作':9,'手势APP选择':26,'SIMO语音启动':16};
 const removed={'主界面':[2,11],'界面选项':[12,13,18],'手势APP选择':[22,23]};
 for(const [name,count]of Object.entries(pages)){
  const data=JSON.parse(fs.readFileSync(path.join(directory,name+'.json'),'utf8'));

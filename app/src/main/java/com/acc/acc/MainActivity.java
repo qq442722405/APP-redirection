@@ -300,6 +300,18 @@ public class MainActivity extends AppCompatActivity {
         buildUI();
         lastOverlayState=hasOverlayPermission();
         requestRuntimePermissions();
+        SimoVoiceService.sync(this);
+        handleSimoLaunch(getIntent());
+    }
+
+    @Override protected void onNewIntent(Intent intent){
+        super.onNewIntent(intent);setIntent(intent);handleSimoLaunch(intent);
+    }
+    void handleSimoLaunch(Intent intent){
+        if(intent==null)return;
+        VoiceCommands.Command command=SimoVoiceService.takeLaunch(this,intent.getStringExtra(SimoVoiceService.EXTRA_TICKET));
+        intent.removeExtra(SimoVoiceService.EXTRA_TICKET);
+        if(command!=null){apps.clear();presets.clear();loadData();design.refreshMain();design.launchSelection(command.pkg,command.name);}
     }
 
     @Override protected void onResume(){
