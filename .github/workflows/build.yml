@@ -33,7 +33,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          # Debug 使用标准调试签名，不要求发布密钥或签名环境变量。
+          test -f Acc.jks
           test -f app/src/main/java/com/acc/acc/MainActivity.java
           test -f app/src/main/java/com/acc/acc/FloatingService.java
           grep -q 'namespace "com.acc.acc"' app/build.gradle
