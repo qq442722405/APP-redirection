@@ -18,7 +18,7 @@ final class LauncherDesign {
     DesignSurface main;
     View presetList,appList;
     LauncherDesign(MainActivity activity){a=activity;}
-    DesignSurface page(String name){return new DesignSurface(a,name);}
+    DesignSurface page(String name){DesignSurface p=new DesignSurface(a,name);p.fontFactor=a.mainFontScale();return p;}
     void toast(String message){Toast.makeText(a,message,Toast.LENGTH_SHORT).show();}
     Button button(String title){Button b=new Button(a);b.setText(title);return b;}
     void show(AlertDialog dialog,DesignSurface page){
@@ -71,21 +71,33 @@ final class LauncherDesign {
         DesignSurface.PixelScroll scroll=new DesignSurface.PixelScroll(a,items);
         main.place(scroll,DesignSurface.rect(box.left,box.top,box.width(),box.height(),16));return scroll;
     }
+    int[] scrollPosition(View view){
+        if(!(view instanceof DesignSurface.PixelScroll))return new int[]{0,0};
+        DesignSurface.PixelScroll scroll=(DesignSurface.PixelScroll)view;
+        return new int[]{scroll.horizontal.getScrollX(),scroll.getScrollY()};
+    }
+    void restoreScroll(View view,int[] position){
+        DesignSurface.PixelScroll scroll=(DesignSurface.PixelScroll)view;
+        scroll.post(()->{scroll.scrollTo(0,position[1]);scroll.horizontal.scrollTo(position[0],0);});
+    }
     DesignSurface card(float width,float height,String title,String detail,Drawable icon,boolean selected,float font){
         DesignSurface c=new DesignSurface(a,width,height);c.setBackground(selected?DesignSurface.background(true):DesignSurface.buttonBackground());
         if(icon!=null){ImageView iv=new ImageView(a);iv.setImageDrawable(icon);iv.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
             c.place(iv,DesignSurface.rect(width*.24f,12,width*.52f,height*.50f,16));}
         TextView name=c.label(title,8,icon!=null?height*.61f:height*.16f,width-16,height*.32f,font);
-        name.setGravity(Gravity.CENTER);name.setMaxLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        name.setGravity(Gravity.CENTER);name.setMaxLines(height*.32f<font*2.2f?1:2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
         if(detail!=null){TextView d=c.label(detail,7,height*.55f,width-14,height*.35f,font*.60f);d.setGravity(Gravity.CENTER);d.setMaxLines(2);}
         c.setContentDescription(title);return c;
     }
     void refreshMain(){
         if(main==null)return;
         for(int i=0;i<3;i++)main.selected(a.presetCategoryButtons[i],i==a.presetCategoryFilter);
+        int[] presetPosition=scrollPosition(presetList),appPosition=scrollPosition(appList);
         removeList(presetList);removeList(appList);
         int[] presetSlots={7,23,24,25,26,27,28,29};int[] appSlots={9,16,17,18,19,20,21,22};
+        int[] selectorSlots={32,33,34,35,36,37,38,39};
         RectF pb=main.bounds(presetSlots),ab=main.bounds(appSlots);
+        ab.union(main.bounds(selectorSlots));
         ArrayList<Integer> visible=new ArrayList<>();for(int i=0;i<a.presets.size();i++)if(a.presets.get(i).category==a.presetCategoryFilter)visible.add(i);
         float pitch=(float)(main.spec(23).optDouble("left")-main.spec(7).optDouble("left"));
         DesignSurface ps=new DesignSurface(a,Math.max(pb.width(),visible.size()*pitch),pb.height());
@@ -99,6 +111,7 @@ final class LauncherDesign {
         }
         if(visible.isEmpty())ps.label("点击 + 新建窗口预设",0,0,500,pb.height(),30);
         presetList=mountList(ps,pb);
+        restoreScroll(presetList,presetPosition);
         int columns=Math.max(1,a.prefs.getInt("design_app_columns",8));
         int rows=Math.max(1,(a.apps.size()+columns-1)/columns);
         float appPitch=(float)(main.spec(16).optDouble("left")-main.spec(9).optDouble("left"));
@@ -116,14 +129,69 @@ final class LauncherDesign {
             a.setMainItemLongClick(tile,1,index);
             float x=(float)slot.optDouble("left")-ab.left+((n%columns)/appSlots.length)*appSlots.length*appPitch;
             grid.place(tile,DesignSurface.rect(x,(float)slot.optDouble("top")-ab.top+(n/columns)*(ab.height()+20),w,h,35));
+            JSONObject selector=main.spec(selectorSlots[(n%columns)%selectorSlots.length]);
+            Button presetButton=button(item.pkg.startsWith("action:")?"系统操作":appPresetLabel(item.pkg)+" ▾");
+            presetButton.setContentDescription(item.name+"：选择窗口预设");
+            presetButton.setSingleLine(true);presetButton.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            presetButton.setEnabled(!item.pkg.startsWith("action:"));
+            presetButton.setOnClickListener(v->showAppPresetChooser(item.pkg,item.name));
+            float selectorX=(float)selector.optDouble("left")-ab.left+((n%columns)/appSlots.length)*appSlots.length*appPitch;
+            grid.place(presetButton,DesignSurface.rect(selectorX,(float)selector.optDouble("top")-ab.top+(n/columns)*(ab.height()+20),
+                    (float)selector.optDouble("width"),(float)selector.optDouble("height"),(float)selector.optDouble("fontSize",22)));
+            presetButton.setBackground(DesignSurface.background(false));
         }
         if(a.apps.isEmpty())grid.label("点击 + 添加 APP",0,0,500,ab.height(),30);
         appList=mountList(grid,ab);
+        restoreScroll(appList,appPosition);
+    }
+    int appPresetIndex(String pkg){
+        ArrayList<String> ids=new ArrayList<>(),names=new ArrayList<>();
+        for(MainActivity.Preset preset:a.presets){ids.add(preset.id);names.add(preset.name);}
+        String id=a.prefs.getString("design_app_preset_id_"+pkg,"");
+        int index=PresetSelection.resolve(id,a.prefs.getString("design_app_preset_"+pkg,""),ids,names);
+        if(index>=0&&id.isEmpty())saveAppPreset(pkg,index);
+        return index;
+    }
+    void saveAppPreset(String pkg,int index){
+        SharedPreferences.Editor editor=a.prefs.edit();
+        if(index<0)editor.remove("design_app_preset_id_"+pkg).remove("design_app_preset_"+pkg);
+        else {MainActivity.Preset preset=a.presets.get(index);editor.putString("design_app_preset_id_"+pkg,preset.id).putString("design_app_preset_"+pkg,preset.name);}
+        editor.apply();
+    }
+    String appPresetLabel(String pkg){
+        int index=appPresetIndex(pkg);
+        return index>=0?a.presets.get(index).name:index==PresetSelection.MISSING?"预设已删除，请重选":"直接启动";
+    }
+    void showAppPresetChooser(String pkg,String name){
+        a.lastMainAppTapIndex=-1;a.lastMainAppTapTime=0;
+        DesignSurface p=new DesignSurface(a,720,560);p.fontFactor=a.mainFontScale();p.setBackground(DesignSurface.background(false));
+        TextView title=p.label(name+" · 选择窗口预设",28,24,664,48,28);title.setSingleLine(true);title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        AlertDialog d=dialog(p);int selected=appPresetIndex(pkg);
+        DesignSurface choices=new DesignSurface(a,664,Math.max(380,(a.presets.size()+1)*58));
+        ArrayList<MainActivity.Preset> snapshot=new ArrayList<>(a.presets);
+        for(int row=0;row<=snapshot.size();row++){
+            final int index=row-1;MainActivity.Preset preset=index<0?null:snapshot.get(index);
+            String label=preset==null?"直接启动（不指定窗口）":new String[]{"左","中","右"}[preset.category]+" · "+preset.name+"   "+preset.w+" × "+preset.h;
+            Button option=button(label);option.setSingleLine(true);option.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            choices.place(option,DesignSurface.rect(0,row*58,664,50,24));choices.selected(option,index==selected);
+            option.setOnClickListener(v->{
+                int current=preset==null?PresetSelection.DIRECT:a.presets.indexOf(preset);
+                if(preset!=null&&current<0){toast("预设已变化，请重新选择");d.dismiss();return;}
+                saveAppPreset(pkg,current);d.dismiss();refreshMain();
+            });
+        }
+        p.list(choices,new RectF(28,88,692,468));
+        Button cancel=button("取消");cancel.setOnClickListener(v->d.dismiss());p.place(cancel,DesignSurface.rect(28,492,120,44,22));
+        if(a.presets.isEmpty())p.label("暂无预设，可在主界面点 + 新建",170,492,510,44,22);
+        show(d,p);
     }
     void launchSelection(String pkg,String name){
         if(pkg.startsWith("action:")){runAction(pkg.substring(7));return;}
-        String presetName=a.prefs.getString("design_app_preset_"+pkg,"");
-        for(MainActivity.Preset p:a.presets)if(p.name.equals(presetName)){a.launchApp(p);return;}
+        int index=appPresetIndex(pkg);
+        a.selectedPackage=pkg;a.selectedName=name;
+        a.lastMainAppTapIndex=-1;a.lastMainAppTapTime=0;
+        if(index==PresetSelection.MISSING){toast("原窗口预设已删除，请重新选择");showAppPresetChooser(pkg,name);return;}
+        if(index>=0){a.launchApp(a.presets.get(index));return;}
         a.launchAppDirect(pkg,name);
     }
     void runAction(String action){
@@ -157,7 +225,7 @@ final class LauncherDesign {
             if(de<0||de>3600||fs<20||fs>300||us<50||us>300||co<1||co>20){toast("请输入有效数值：延迟 0–3600 秒，字体 20–300%，界面 50–300%，每排 1–20 个");return;}
             a.prefs.edit().putInt("boot_delay_seconds",de).putFloat("design_font_scale",fs/100f).putFloat("design_ui_scale",us/100f)
                 .putInt("design_app_columns",co).putString("design_wallpaper",wallpaper.getText().toString().trim()).apply();
-            d.dismiss();buildMain();toast("设置已保存");
+            d.dismiss();buildMain();a.restartFloatingServiceSafe();toast("设置已保存");
         });show(d,p);
     }
 
@@ -168,8 +236,13 @@ final class LauncherDesign {
         for(MainActivity.Preset item:a.presets)names.add(item.name);
         ArrayAdapter<String> adapter=new ArrayAdapter<String>(a,android.R.layout.simple_spinner_dropdown_item,names){
             @Override public View getView(int position,View old,ViewGroup parent){
-                TextView label=(TextView)super.getView(position,old,parent);label.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX,(float)p.spec(23).optDouble("fontSize",16)*p.scale);
+                TextView label=(TextView)super.getView(position,old,parent);DesignTypography.setPx(label,(float)p.spec(23).optDouble("fontSize",16)*p.scale*p.fontFactor);
                 label.setTextColor(Color.WHITE);label.setPadding(0,0,0,0);label.setSingleLine(true);label.setIncludeFontPadding(false);return label;
+            }
+            @Override public View getDropDownView(int position,View old,ViewGroup parent){
+                TextView label=(TextView)super.getDropDownView(position,old,parent);
+                DesignTypography.setPx(label,(float)p.spec(23).optDouble("fontSize",16)*p.scale*p.fontFactor);
+                label.setTextColor(Color.WHITE);label.setBackgroundColor(0xff1e293b);label.setMinHeight(Math.round(48*p.scale));return label;
             }
         };preset.setAdapter(adapter);p.bind(23,preset);
         final String[] selected={"",""};final int[] category={0};final View[] current={null};final Runnable[] refresh={null};
@@ -212,7 +285,7 @@ final class LauncherDesign {
             if(selected[0].isEmpty()){toast("请先选择 APP 或按钮");return;}
             boolean exists=false;for(MainActivity.AppItem item:a.apps)if(item.pkg.equals(selected[0]))exists=true;
             if(!exists)a.apps.add(new MainActivity.AppItem(selected[0],selected[1]));
-            a.prefs.edit().putString("design_app_preset_"+selected[0],preset.getSelectedItemPosition()==0?"":names.get(preset.getSelectedItemPosition())).apply();
+            saveAppPreset(selected[0],preset.getSelectedItemPosition()-1);
             a.saveApps();a.refresh();d.dismiss();
         });
         p.action(25,()->{selected[0]="";selected[1]="";preset.setSelection(0);refresh[0].run();});

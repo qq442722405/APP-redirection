@@ -21,6 +21,7 @@ import org.json.*;
  * 创建 AlertDialog，避免部分车机 Android 12 ROM 点击“添加 APP”直接崩溃。
  */
 public class FloatingService extends Service {
+    @Override protected void attachBaseContext(Context base){super.attachBaseContext(DesignTypography.fixedFonts(base));}
     WindowManager wm;
     LinearLayout panel;
     WindowManager.LayoutParams lp;
@@ -46,7 +47,7 @@ public class FloatingService extends Service {
 
     float fontScale(){
         try{
-            float saved=getSharedPreferences(MainActivity.PREF,0).getFloat("font_scale",1.0f);
+            float saved=getSharedPreferences(MainActivity.PREF,0).getFloat("design_font_scale",1.0f);
             return Math.max(0.20f,Math.min(3.0f,saved));
         }catch(Exception e){return 1.0f;}
     }
@@ -128,7 +129,7 @@ public class FloatingService extends Service {
         TextView b=new TextView(this);
         b.setText(label);
         b.setTextColor(Color.WHITE);
-        b.setTextSize(12*fontScale());
+        DesignTypography.setPx(b,12*fontScale());
         b.setGravity(Gravity.CENTER);
         b.setSingleLine(true);
         GradientDrawable g=new GradientDrawable();
@@ -142,7 +143,7 @@ public class FloatingService extends Service {
         Button b=new Button(this);
         b.setText(label);
         b.setTextColor(Color.WHITE);
-        b.setTextSize(12*fontScale());
+        DesignTypography.setPx(b,12*fontScale());
         b.setGravity(Gravity.CENTER);
         b.setSingleLine(true);
         b.setAllCaps(false);
@@ -389,7 +390,7 @@ public class FloatingService extends Service {
             final String pkg=floatingPkgs.get(i);
             final String displayName=(i<floatingNames.size()?floatingNames.get(i):pkg);
             TextView b=baseButton(displayName==null||displayName.trim().isEmpty()?"A":displayName.trim().substring(0,1).toUpperCase(Locale.ROOT));
-            b.setTextSize(Math.max(12,Math.min(28,iconSizePx*0.48f))*fontScale());
+            DesignTypography.setPx(b,Math.max(12,Math.min(28,iconSizePx*0.48f))*fontScale());
             b.setGravity(Gravity.CENTER);
             installDraggableItem(b,()->launchFloatingApp(pkg),()->{
                 new android.app.AlertDialog.Builder(this)
@@ -539,7 +540,7 @@ public class FloatingService extends Service {
         title.setGravity(Gravity.CENTER_VERTICAL);
         TextView tv=new TextView(this);
         tv.setText("添加到悬浮窗口");
-        tv.setTextColor(Color.WHITE); tv.setTextSize(22*fontScale());
+        tv.setTextColor(Color.WHITE); DesignTypography.setPx(tv,22*fontScale());
         title.addView(tv,new LinearLayout.LayoutParams(0,dp(48),1));
         ImageButton close=iconButton(android.R.drawable.ic_menu_close_clear_cancel);
         close.setContentDescription("关闭");
@@ -580,8 +581,8 @@ public class FloatingService extends Service {
         row.addView(ib,new LinearLayout.LayoutParams(dp(58),dp(58)));
         LinearLayout textBox=new LinearLayout(this);
         textBox.setOrientation(LinearLayout.VERTICAL);
-        TextView a=new TextView(this); a.setText(title); a.setTextColor(Color.WHITE); a.setTextSize(18*fontScale());
-        TextView b=new TextView(this); b.setText(sub); b.setTextColor(0xFF9E9E9E); b.setTextSize(13*fontScale());
+        TextView a=new TextView(this); a.setText(title); a.setTextColor(Color.WHITE); DesignTypography.setPx(a,18*fontScale());
+        TextView b=new TextView(this); b.setText(sub); b.setTextColor(0xFF9E9E9E); DesignTypography.setPx(b,13*fontScale());
         textBox.addView(a,new LinearLayout.LayoutParams(-1,dp(30)));
         textBox.addView(b,new LinearLayout.LayoutParams(-1,dp(24)));
         row.addView(textBox,new LinearLayout.LayoutParams(0,dp(64),1));
@@ -625,17 +626,17 @@ public class FloatingService extends Service {
         root.addView(box,new FrameLayout.LayoutParams(-1,-1));
 
         LinearLayout titleRow=new LinearLayout(this); titleRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title=new TextView(this); title.setText("添加到悬浮窗口"); title.setTextColor(Color.WHITE); title.setTextSize(18*fontScale());
+        TextView title=new TextView(this); title.setText("添加到悬浮窗口"); title.setTextColor(Color.WHITE); DesignTypography.setPx(title,18*fontScale());
         titleRow.addView(title,new LinearLayout.LayoutParams(0,dp(42),1));
         ImageButton close=iconButton(android.R.drawable.ic_menu_close_clear_cancel);
         close.setOnClickListener(v->{closeOverlay();showPanel();});
         titleRow.addView(close,new LinearLayout.LayoutParams(dp(42),dp(42))); box.addView(titleRow);
 
         // 第一排：窗口预设。选择后，悬浮快捷键启动该 APP 时使用这个预设；不选择就是默认启动。
-        TextView presetLabel=new TextView(this); presetLabel.setText("窗口预设"); presetLabel.setTextColor(0xFFCCCCCC); presetLabel.setTextSize(13*fontScale());
+        TextView presetLabel=new TextView(this); presetLabel.setText("窗口预设"); presetLabel.setTextColor(0xFFCCCCCC); DesignTypography.setPx(presetLabel,13*fontScale());
         presetLabel.setPadding(dp(4),dp(3),dp(4),dp(3)); box.addView(presetLabel,new LinearLayout.LayoutParams(-1,dp(28)));
         LinearLayout presetRow=new LinearLayout(this); presetRow.setOrientation(LinearLayout.HORIZONTAL); presetRow.setGravity(Gravity.CENTER_VERTICAL);
-        Button defaultPreset=button("默认"); defaultPreset.setTextSize(12*fontScale());
+        Button defaultPreset=button("默认"); DesignTypography.setPx(defaultPreset,12*fontScale());
         presetRow.addView(defaultPreset,new LinearLayout.LayoutParams(dp(92),dp(40)));
         ScrollView presetScroll=new ScrollView(this); presetScroll.setHorizontalScrollBarEnabled(false); presetScroll.setFillViewport(false);
         LinearLayout presetInner=new LinearLayout(this); presetInner.setOrientation(LinearLayout.HORIZONTAL); presetScroll.addView(presetInner,new ScrollView.LayoutParams(-2,-1));
@@ -650,7 +651,7 @@ public class FloatingService extends Service {
         defaultPreset.setBackgroundResource(R.drawable.card_selected);
         defaultPreset.setOnClickListener(v->{selectedPreset[0]=-1; defaultPreset.setBackgroundResource(R.drawable.card_selected); for(int i=0;i<presetInner.getChildCount();i++)presetInner.getChildAt(i).setBackgroundResource(R.drawable.button);});
         for(int i=0;i<presetNames.size();i++){
-            final int pi=presetIndexes.get(i); Button b=button(presetNames.get(i)); b.setTextSize(12*fontScale());
+            final int pi=presetIndexes.get(i); Button b=button(presetNames.get(i)); DesignTypography.setPx(b,12*fontScale());
             presetInner.addView(b,new LinearLayout.LayoutParams(dp(110),dp(40)));
             b.setOnClickListener(v->{selectedPreset[0]=pi; defaultPreset.setBackgroundResource(R.drawable.button); for(int j=0;j<presetInner.getChildCount();j++)presetInner.getChildAt(j).setBackgroundResource(presetInner.getChildAt(j)==v?R.drawable.card_selected:R.drawable.button);});
         }
@@ -659,7 +660,7 @@ public class FloatingService extends Service {
         final Runnable[] refreshApps={null};
         LinearLayout tabs=new LinearLayout(this); tabs.setGravity(Gravity.CENTER_VERTICAL);
         String[] cats={"用户","系统","全部"}; final int[] category={0}; Button[] tabButtons=new Button[cats.length];
-        for(int i=0;i<cats.length;i++){final int ci=i; Button b=button(cats[i]); b.setTextSize(12*fontScale()); tabButtons[i]=b; tabs.addView(b,new LinearLayout.LayoutParams(0,dp(42),1)); b.setOnClickListener(v->{category[0]=ci; for(int j=0;j<tabButtons.length;j++)tabButtons[j].setBackgroundResource(j==ci?R.drawable.card_selected:R.drawable.button); refreshApps[0].run();});}
+        for(int i=0;i<cats.length;i++){final int ci=i; Button b=button(cats[i]); DesignTypography.setPx(b,12*fontScale()); tabButtons[i]=b; tabs.addView(b,new LinearLayout.LayoutParams(0,dp(42),1)); b.setOnClickListener(v->{category[0]=ci; for(int j=0;j<tabButtons.length;j++)tabButtons[j].setBackgroundResource(j==ci?R.drawable.card_selected:R.drawable.button); refreshApps[0].run();});}
         tabButtons[0].setBackgroundResource(R.drawable.card_selected); box.addView(tabs,new LinearLayout.LayoutParams(-1,dp(44)));
 
         EditText search=new EditText(this); search.setHint("搜索 APP 名称或包名"); search.setHintTextColor(Color.GRAY); search.setTextColor(Color.WHITE); search.setSingleLine(true); search.setPadding(dp(10),0,dp(10),0);
@@ -678,7 +679,7 @@ public class FloatingService extends Service {
                 if(inRow==0){row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);row.setGravity(Gravity.CENTER);rows.addView(row,new LinearLayout.LayoutParams(-1,dp(104)));}
                 LinearLayout tile=new LinearLayout(this);tile.setOrientation(LinearLayout.VERTICAL);tile.setGravity(Gravity.CENTER);tile.setPadding(dp(4),dp(4),dp(4),dp(4));tile.setBackgroundResource(R.drawable.floating_app_card);
                 ImageView icon=new ImageView(this);icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);try{icon.setImageDrawable(pm.getApplicationIcon(ai));}catch(Exception ignored){}
-                tile.addView(icon,new LinearLayout.LayoutParams(dp(54),dp(54))); TextView nv=new TextView(this);nv.setText(name);nv.setTextColor(Color.WHITE);nv.setTextSize(11*fontScale());nv.setGravity(Gravity.CENTER);nv.setMaxLines(2);nv.setEllipsize(android.text.TextUtils.TruncateAt.END);tile.addView(nv,new LinearLayout.LayoutParams(-1,dp(34)));
+                tile.addView(icon,new LinearLayout.LayoutParams(dp(54),dp(54))); TextView nv=new TextView(this);nv.setText(name);nv.setTextColor(Color.WHITE);DesignTypography.setPx(nv,11*fontScale());nv.setGravity(Gravity.CENTER);nv.setMaxLines(2);nv.setEllipsize(android.text.TextUtils.TruncateAt.END);tile.addView(nv,new LinearLayout.LayoutParams(-1,dp(34)));
                 final String pkg=ai.packageName,nm=name; tile.setOnClickListener(v->{
                     try{
                         int idx=floatingPkgs.indexOf(pkg); if(idx<0){floatingPkgs.add(pkg);floatingNames.add(nm);} 

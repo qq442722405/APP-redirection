@@ -455,5 +455,7 @@
       "fontSize": 16,
       "id": "e34"
     }
-  ]
+  ],
+  "fontUnit": "px",
+  "targetDpi": 160
 }

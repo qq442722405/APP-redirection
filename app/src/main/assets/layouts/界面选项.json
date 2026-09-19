@@ -247,5 +247,7 @@
       "fontSize": 40,
       "id": "e18"
     }
-  ]
+  ],
+  "fontUnit": "px",
+  "targetDpi": 160
 }

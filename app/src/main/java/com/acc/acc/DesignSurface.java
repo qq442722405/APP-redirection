@@ -111,7 +111,7 @@ final class DesignSurface extends FrameLayout {
             View v=item.getKey();JSONObject e=item.getValue();
             int cw=Math.max(1,Math.round((float)e.optDouble("width",1)*scale));
             int ch=Math.max(1,Math.round((float)e.optDouble("height",1)*scale));
-            if(v instanceof TextView)((TextView)v).setTextSize(TypedValue.COMPLEX_UNIT_PX,(float)e.optDouble("fontSize",16)*scale*fontFactor);
+            if(v instanceof TextView)DesignTypography.setPx((TextView)v,(float)e.optDouble("fontSize",16)*scale*fontFactor);
             if(v instanceof Switch&&(!switchScales.containsKey(v)||switchScales.get(v)!=scale)){
                 Switch toggle=(Switch)v;switchScales.put(v,scale);
                 GradientDrawable thumb=new GradientDrawable();thumb.setColor(Color.WHITE);thumb.setCornerRadius(20*scale);thumb.setSize(Math.max(1,Math.round(32*scale)),Math.max(1,Math.round(32*scale)));
@@ -137,9 +137,10 @@ final class DesignSurface extends FrameLayout {
     }
     static final class PixelScroll extends ScrollView {
         final DesignSurface items;
+        final HorizontalScrollView horizontal;
         PixelScroll(Context c,DesignSurface items){
             super(c);this.items=items;items.contentSize=true;
-            HorizontalScrollView horizontal=new HorizontalScrollView(c);
+            horizontal=new HorizontalScrollView(c);
             horizontal.setHorizontalScrollBarEnabled(false);
             horizontal.addView(items,new HorizontalScrollView.LayoutParams(-2,-2));
             addView(horizontal,new ScrollView.LayoutParams(-1,-2));setVerticalScrollBarEnabled(false);

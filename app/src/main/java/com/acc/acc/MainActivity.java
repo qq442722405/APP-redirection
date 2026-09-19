@@ -28,6 +28,8 @@ import android.content.res.AssetFileDescriptor;
 
 public class MainActivity extends AppCompatActivity {
 
+    @Override protected void attachBaseContext(Context base){super.attachBaseContext(DesignTypography.fixedFonts(base));}
+
     /** Keep draggable APP/preset cards above other main-page layers. */
     private void bringMovableItemToFront(android.view.View view) {
         if (view == null) return;
@@ -71,6 +73,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     static class Preset {
+        String id=UUID.randomUUID().toString();
         String name;
         int x,y,w,h,displayId,mode,category;
         Preset(String n,int x,int y,int w,int h){this(n,x,y,w,h,-1,1,0);}
@@ -104,12 +107,12 @@ public class MainActivity extends AppCompatActivity {
     boolean mainUiContext=false;
 
     float mainFontScale(){
-        float saved = prefs==null ? 1.0f : prefs.getFloat("main_font_scale",1.0f);
+        float saved = prefs==null ? 1.0f : prefs.getFloat("design_font_scale",1.0f);
         return Math.max(0.20f, Math.min(3.0f, saved));
     }
 
     float menuFontScale(){
-        float saved = prefs==null ? 1.0f : prefs.getFloat("font_scale",1.0f);
+        float saved = prefs==null ? 1.0f : prefs.getFloat("design_font_scale",1.0f);
         return Math.max(0.20f, Math.min(3.0f, saved));
     }
 
@@ -151,7 +154,7 @@ public class MainActivity extends AppCompatActivity {
 
     TextView text(String s,float size){
         TextView t=new TextView(this);
-        t.setText(s); t.setTextColor(Color.WHITE); t.setTextSize(size*fontScale());
+        t.setText(s); t.setTextColor(Color.WHITE); DesignTypography.setPx(t,size*fontScale());
         t.setGravity(Gravity.CENTER_VERTICAL);
         return t;
     }
@@ -159,7 +162,7 @@ public class MainActivity extends AppCompatActivity {
     // 主界面专用文字：只受“主界面字体大小”控制。
     TextView mainText(String s,float size){
         TextView t=new TextView(this);
-        t.setText(s); t.setTextColor(Color.WHITE); t.setTextSize(size*mainFontScale());
+        t.setText(s); t.setTextColor(Color.WHITE); DesignTypography.setPx(t,size*mainFontScale());
         t.setGravity(Gravity.CENTER_VERTICAL);
         return t;
     }
@@ -193,7 +196,7 @@ public class MainActivity extends AppCompatActivity {
 
     Button button(String s){
         Button b=new Button(this);
-        b.setText(s); b.setTextColor(Color.WHITE); b.setTextSize(14*fontScale());
+        b.setText(s); b.setTextColor(Color.WHITE); DesignTypography.setPx(b,14*fontScale());
         b.setMinHeight(adaptiveBoxHeight(44));
         b.setAllCaps(false); b.setBackgroundResource(R.drawable.button);
         return b;
@@ -209,7 +212,7 @@ public class MainActivity extends AppCompatActivity {
 
     EditText numberField(String label,String value){
         EditText e=new EditText(this);
-        e.setHint(label); e.setText(value); e.setTextColor(Color.WHITE); e.setTextSize(14*fontScale()); e.setTextSize(14*fontScale());
+        e.setHint(label); e.setText(value); e.setTextColor(Color.WHITE); DesignTypography.setPx(e,14*fontScale());
         e.setHintTextColor(Color.GRAY); e.setSingleLine(true);
         e.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_SIGNED);
         return e;
@@ -228,7 +231,7 @@ public class MainActivity extends AppCompatActivity {
         for(int i=0;i<labels.length;i++){
             final int delta=deltas[i];
             Button b=button(labels[i]);
-            b.setTextSize(10*fontScale()); b.setMinWidth(0); b.setPadding(0,0,0,0);
+            DesignTypography.setPx(b,10*fontScale()); b.setMinWidth(0); b.setPadding(0,0,0,0);
             b.setOnClickListener(v->{ if(delta==0) input.setText("0"); else adjustNumber(input,delta); input.setSelection(input.length()); });
             row.addView(b,new LinearLayout.LayoutParams(dp(50),dp(44)));
         }
@@ -257,6 +260,7 @@ public class MainActivity extends AppCompatActivity {
         e.setHint(label); e.setText(value); e.setTextColor(Color.WHITE);
         e.setHintTextColor(Color.GRAY); e.setSingleLine(true);
         e.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
+        DesignTypography.setPx(e,14*fontScale());
         return e;
     }
 
@@ -281,8 +285,7 @@ public class MainActivity extends AppCompatActivity {
         // 新安装默认值：这些值来自用户确认过的配置，但不会读取/加载 JSON 文件。
         // 这样默认值与配置文件完全解耦，避免旧/无效 APP 包名导致启动闪退。
         SharedPreferences.Editor defaults=prefs.edit();
-        if(!prefs.contains("font_scale") || prefs.getFloat("font_scale",1.0f) <= 0.2001f) defaults.putFloat("font_scale",1.20f);
-        if(!prefs.contains("main_font_scale") || prefs.getFloat("main_font_scale",1.0f) <= 0.2001f) defaults.putFloat("main_font_scale",1.00f);
+        if(!prefs.contains("design_font_scale")) defaults.putFloat("design_font_scale",1.00f);
         if(!prefs.contains("ui_scale")) defaults.putFloat("ui_scale",1.30f);
         if(!prefs.contains("main_app_columns")) defaults.putInt("main_app_columns",10);
         if(!prefs.contains("main_top_blank")) defaults.putInt("main_top_blank",80);
@@ -409,16 +412,22 @@ public class MainActivity extends AppCompatActivity {
         }catch(Exception ignored){}
 
         try{
+            boolean idsAdded=false;
             JSONArray a=new JSONArray(prefs.getString(PRESETS,"[]"));
             for(int i=0;i<a.length();i++){
                 JSONObject o=a.getJSONObject(i);
                 String pn=o.optString("name","");
                 int pc=o.has("category") ? o.optInt("category",1) : inferPresetCategory(pn);
-                presets.add(new Preset(
+                Preset preset=new Preset(
                         pn,o.optInt("x",0),o.optInt("y",0),
                         o.optInt("w",0),o.optInt("h",0),o.optInt("displayId",-1),o.optInt("mode",1),pc
-                ));
+                );
+                String savedId=o.optString("id","");
+                if(!savedId.isEmpty())preset.id=savedId;else idsAdded=true;
+                presets.add(preset);
             }
+            // Persist IDs only after the complete legacy array has parsed successfully.
+            if(idsAdded)savePresets();
         }catch(Exception ignored){}
     }
 
@@ -433,7 +442,7 @@ public class MainActivity extends AppCompatActivity {
         try{
             for(Preset p:presets){
                 JSONObject o=new JSONObject();
-                o.put("name",p.name); o.put("x",p.x); o.put("y",p.y);
+                o.put("id",p.id); o.put("name",p.name); o.put("x",p.x); o.put("y",p.y);
                 o.put("w",p.w); o.put("h",p.h); o.put("displayId",p.displayId); o.put("mode",p.mode); o.put("category",p.category);
                 a.put(o);
             }
@@ -506,6 +515,7 @@ public class MainActivity extends AppCompatActivity {
                                 selectedPackage=null; selectedName=null;
                                 prefs.edit().remove("selected_control_package").apply();
                             }
+                            prefs.edit().remove("design_app_preset_"+removed.pkg).remove("design_app_preset_id_"+removed.pkg).apply();
                             saveApps(); refresh();
                         }
                     }).show();
@@ -628,7 +638,7 @@ public class MainActivity extends AppCompatActivity {
                 if(b==null) continue;
                 b.setAllCaps(false);
                 b.setTextColor(Color.WHITE);
-                b.setTextSize(14*fontScale());
+                DesignTypography.setPx(b,14*fontScale());
                 b.setBackgroundResource(R.drawable.button);
                 b.setMinHeight(dp(50));
                 b.setMinWidth(dp(100));
@@ -718,7 +728,7 @@ public class MainActivity extends AppCompatActivity {
 
         TextView floatingAdd=plusButton();
         floatingAdd.setText("+");
-        floatingAdd.setTextSize(30);
+        DesignTypography.setPx(floatingAdd,30);
         floatingAdd.setContentDescription("添加到悬浮窗口");
         floatingAddRow.addView(floatingAdd,new LinearLayout.LayoutParams(dp(58),dp(58)));
         floatingAdd.setOnClickListener(v->showFloatingAppChooser());
@@ -734,7 +744,7 @@ public class MainActivity extends AppCompatActivity {
                     JSONObject o=a.optJSONObject(i); if(o==null)continue;
                     final String pkg=o.optString("pkg",""); if(pkg.isEmpty())continue;
                     String name=o.optString("name",getAppLabelSafe(pkg));
-                    Button chip=button(name); chip.setTextSize(10);
+                    Button chip=button(name); DesignTypography.setPx(chip,10);
                     currentRow.addView(chip,new LinearLayout.LayoutParams(dp(100),dp(48)));
                     chip.setOnLongClickListener(v->{
                         try{
@@ -894,7 +904,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void addCurrentButtonChip(LinearLayout row,String label,Runnable deleteAction){
-        Button chip=button(label); chip.setTextSize(10);
+        Button chip=button(label); DesignTypography.setPx(chip,10);
         row.addView(chip,new LinearLayout.LayoutParams(dp(90),dp(48)));
         chip.setOnLongClickListener(v->{
             new AlertDialog.Builder(this).setTitle("删除悬浮窗按钮").setMessage("是否删除“"+label+"”按钮？")
@@ -947,7 +957,7 @@ public class MainActivity extends AppCompatActivity {
         for(int i=0;i<presets.size();i++){
             final int pi=i;
             Button pb=button(presets.get(i).name);
-            pb.setTextSize(11);
+            DesignTypography.setPx(pb,11);
             presetButtons.add(pb);
             presetRow.addView(pb,new LinearLayout.LayoutParams(dp(150),dp(44)));
             pb.setOnClickListener(v->{
@@ -969,7 +979,7 @@ public class MainActivity extends AppCompatActivity {
         for(int ci=0;ci<4;ci++){
             final int cc=ci;
             Button cb=button(categories[ci]);
-            cb.setTextSize(12);
+            DesignTypography.setPx(cb,12);
             categoryButtons[ci]=cb;
             if(ci==0)cb.setBackgroundResource(R.drawable.card_selected);
             cb.setOnClickListener(v->{
@@ -1438,7 +1448,7 @@ public class MainActivity extends AppCompatActivity {
         for(int c=0;c<3;c++){
             final int cc=c;
             Button cb=button(categoryNames[c]);
-            cb.setTextSize(12*fontScale());
+            DesignTypography.setPx(cb,12*fontScale());
             categoryButtons[c]=cb;
             if(categoryHolder[0]==c) cb.setBackgroundResource(R.drawable.card_selected);
             cb.setOnClickListener(v->{
@@ -1460,7 +1470,7 @@ public class MainActivity extends AppCompatActivity {
         for(int m=1;m<=6;m++){
             final int mm=m;
             Button mb=button(m==6?"全屏模式":"模式"+m);
-            mb.setTextSize(11*fontScale());
+            DesignTypography.setPx(mb,11*fontScale());
             modeButtons[m-1]=mb;
             if(old.mode==mm) mb.setBackgroundResource(R.drawable.card_selected);
             mb.setOnClickListener(v->{
@@ -1509,7 +1519,7 @@ public class MainActivity extends AppCompatActivity {
                     Math.max(0,number(width,old.w)),
                     Math.max(0,number(height,old.h)),
                     -1,modeHolder[0],categoryHolder[0]);
-            if(index<0) presets.add(p); else presets.set(index,p);
+            if(index<0) presets.add(p); else {p.id=old.id;presets.set(index,p);}
             savePresets(); refresh(); dialog.dismiss();
         });
 
@@ -1619,7 +1629,7 @@ public class MainActivity extends AppCompatActivity {
         DesignSurface layout=design.page("权限与诊断");
         overlayButton.setText("悬浮权限");accessibilityButton.setText("无障碍权限");
         layout.bind(2,overlayButton);layout.bind(3,accessibilityButton);layout.bind(4,checkButton);layout.bind(5,back);
-        layout.bind(6,scroll);msg.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX,22);
+        layout.bind(6,scroll);DesignTypography.setPx(msg,22);
         design.show(dialog,layout);
     }
 
@@ -1717,7 +1727,12 @@ public class MainActivity extends AppCompatActivity {
                 JSONArray floatingJson=root.optJSONArray("floating_apps");
                 SharedPreferences.Editor ed=prefs.edit();
                 if(appsJson!=null) ed.putString(APPS,appsJson.toString());
-                if(presetsJson!=null) ed.putString(PRESETS,presetsJson.toString());
+                if(presetsJson!=null){
+                    ed.putString(PRESETS,presetsJson.toString());
+                    // A complete preset import replaces IDs. Restore only associations
+                    // supplied by that import, including legacy name-only bindings below.
+                    for(String key:prefs.getAll().keySet())if(key.startsWith("design_app_preset_"))ed.remove(key);
+                }
                 if(floatingJson!=null) ed.putString("floating_apps",floatingJson.toString());
 
                 JSONArray settings=root.optJSONArray("settings");
@@ -1823,7 +1838,7 @@ public class MainActivity extends AppCompatActivity {
         for(int i=0;i<presets.size();i++){
             final int pi=i;
             Button pb=button(presets.get(i).name);
-            pb.setTextSize(11);
+            DesignTypography.setPx(pb,11);
             presetButtons.add(pb);
             presetChooserRow.addView(pb,new LinearLayout.LayoutParams(dp(150),dp(44)));
             pb.setOnClickListener(v->{
@@ -1842,7 +1857,7 @@ public class MainActivity extends AppCompatActivity {
         for(int ci=0;ci<categories.length;ci++){
             final int cc=ci;
             Button cb=button(categories[ci]);
-            cb.setTextSize(12);
+            DesignTypography.setPx(cb,12);
             categoryButtons[ci]=cb;
             if(ci==0)cb.setBackgroundResource(R.drawable.card_selected);
             categoryRow.addView(cb,new LinearLayout.LayoutParams(0,dp(44),1));

@@ -1,6 +1,6 @@
 const fs=require('fs'),path=require('path');
 const directory=path.join(__dirname,'../app/src/main/assets/layouts');
-const pages={'主界面':32,'新建预设窗口':46,'添加APP':26,'设置':14,'界面选项':19,'悬浮窗口设置':35,'自动启动项目':11,'权限与诊断':7};
+const pages={'主界面':40,'新建预设窗口':46,'添加APP':26,'设置':14,'界面选项':19,'悬浮窗口设置':35,'自动启动项目':11,'权限与诊断':7};
 for(const [name,count]of Object.entries(pages)){
  const data=JSON.parse(fs.readFileSync(path.join(directory,name+'.json'),'utf8'));
  const map=new Map(data.elements.map(e=>[e.id,e]));
