@@ -21,6 +21,16 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: 检查布局、字号和预设关联
+        shell: bash
+        run: |
+          set -e
+          node tools/validate-layouts.cjs
+          node tools/tests/check-design.cjs
+          mkdir -p build/preset-tests
+          javac -encoding UTF-8 -d build/preset-tests app/src/main/java/com/acc/acc/PresetSelection.java tools/tests/PresetSelectionTest.java
+          java -cp build/preset-tests com.acc.acc.PresetSelectionTest
+
       - name: 清理旧包名源码
         shell: bash
         run: |
