@@ -30,6 +30,8 @@ jobs:
           mkdir -p build/preset-tests
           javac -encoding UTF-8 -d build/preset-tests app/src/main/java/com/acc/acc/PresetSelection.java tools/tests/PresetSelectionTest.java
           java -cp build/preset-tests com.acc.acc.PresetSelectionTest
+          javac -encoding UTF-8 -d build/preset-tests app/src/main/java/com/acc/acc/VoiceCommands.java tools/tests/VoiceCommandsTest.java
+          java -cp build/preset-tests com.acc.acc.VoiceCommandsTest
 
       - name: 清理旧包名源码
         shell: bash
