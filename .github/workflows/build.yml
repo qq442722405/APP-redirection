@@ -32,8 +32,8 @@ jobs:
           java -cp build/preset-tests com.acc.acc.PresetSelectionTest
           javac -encoding UTF-8 -d build/preset-tests app/src/main/java/com/acc/acc/VoiceCommands.java tools/tests/VoiceCommandsTest.java
           java -cp build/preset-tests com.acc.acc.VoiceCommandsTest
-          javac -encoding UTF-8 -d build/preset-tests app/src/main/java/com/acc/acc/LabBounds.java tools/tests/LabBoundsTest.java
-          java -cp build/preset-tests com.acc.acc.LabBoundsTest
+          javac -encoding UTF-8 -d build/preset-tests app/src/main/java/com/acc/acc/AppGrid.java app/src/main/java/com/acc/acc/CloseGeometry.java app/src/main/java/com/acc/acc/VehicleData.java tools/tests/FormalFeaturesTest.java
+          java -cp build/preset-tests com.acc.acc.FormalFeaturesTest
 
       - name: 清理旧包名源码
         shell: bash
